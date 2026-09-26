@@ -1,3 +1,4 @@
 .DS_Store
 node_modules/
 apps-script/.clasp.json
+CLAUDE.md
