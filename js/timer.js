@@ -40,7 +40,7 @@ export function stopTimer() {
     date: formatDateISO(new Date(current.startedAt)),
     start: new Date(current.startedAt).toISOString(),
     end: new Date(endedAt).toISOString(),
-    minutes: Math.max(1, Math.round(elapsedMs / 60000)),
+    minutes: elapsedMs / 60000,
     source: 'timer',
     note: '',
   });
