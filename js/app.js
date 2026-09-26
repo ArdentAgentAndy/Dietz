@@ -3,4 +3,4 @@ import { initRouter } from './router.js';
 import { initSync } from './sync.js';
 
 initRouter();
-initSync(document.getElementById('sync-status'));
+initSync(document.getElementById('sync-status'), document.getElementById('sync-btn'));

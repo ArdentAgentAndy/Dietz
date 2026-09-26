@@ -52,7 +52,7 @@ export function unmount() {
 function categoryLabel(cat) {
   if (cat.group === 'homework') return 'Homework';
   if (cat.group === 'piano') return 'Piano';
-  if (cat.group === 'project') return `Project: ${cat.name}`;
+  if (cat.group === 'project') return `[P] ${cat.name}`;
   if (cat.group === 'research') return `Research: ${cat.name}`;
   return cat.name; // revision cards show the course code
 }

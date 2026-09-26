@@ -57,10 +57,42 @@ a {
   white-space: nowrap;
 }
 
+.topnav-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .topnav-right {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.sync-btn {
+  padding: 4px 7px;
+  font-size: 13px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+}
+
+.sync-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sync-btn.is-syncing {
+  animation: sync-spin 0.8s linear infinite;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+@keyframes sync-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tabs {

@@ -8,6 +8,7 @@ const PERIODIC_MS = 3 * 60 * 1000;
 const DEBOUNCE_MS = 1000;
 
 let statusEl = null;
+let buttonEl = null;
 let retryDelay = RETRY_BASE_MS;
 let retryTimer = null;
 let debounceTimer = null;
@@ -29,6 +30,7 @@ const STATUS_LABELS = {
 };
 
 function setStatus(status, pending = 0) {
+  buttonEl?.classList.toggle('is-syncing', status === 'syncing');
   if (!statusEl) return;
   statusEl.dataset.status = status;
   let text = STATUS_LABELS[status] ?? '';
@@ -138,10 +140,12 @@ export function requestSync() {
   flushOutbox();
 }
 
-export function initSync(el) {
+export function initSync(el, syncButtonEl) {
   statusEl = el;
+  buttonEl = syncButtonEl;
   setStatus(getConfig() ? 'syncing' : 'unconfigured', store.data.outbox.length);
 
+  buttonEl?.addEventListener('click', requestSync);
   flushOutbox();
 
   window.addEventListener('dietz:store-changed', scheduleSync);
