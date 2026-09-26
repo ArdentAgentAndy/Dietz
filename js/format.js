@@ -23,24 +23,15 @@ export function formatDuration(minutes) {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-// Minutes (float ok) -> "1h 30m" / "45m" / "2h". For read-only display.
-export function formatDurationLong(minutes) {
-  const total = Math.round(minutes);
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
-
-// Seconds -> "m:ss" or "h:mm:ss"
-export function formatClock(seconds) {
-  const total = Math.floor(seconds);
+// Seconds (float ok) -> "h:mm:ss", always all three units. For read-only
+// display (session totals, header total, card totals, the live-ticking
+// timer) — everywhere except the manual-entry input field above.
+export function formatHMS(totalSeconds) {
+  const total = Math.round(totalSeconds);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 // "1:30" -> 90, "45" -> 45

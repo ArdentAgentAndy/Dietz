@@ -14,8 +14,7 @@ import {
   formatDisplayDate,
   formatShortDate,
   formatDuration,
-  formatDurationLong,
-  formatClock,
+  formatHMS,
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
@@ -76,7 +75,7 @@ function timerCardHtml(cat, timer, todayISO) {
         <span class="mono timer-elapsed" data-elapsed="${cat.id}"></span>
       </div>
       <div class="timer-card-foot">
-        <span class="muted" data-card-total="${cat.id}">Today: ${formatDurationLong(todayMinutes)}</span>
+        <span class="muted" data-card-total="${cat.id}">Today: ${formatHMS(todayMinutes * 60)}</span>
         <button data-action="toggle-timer" data-category-id="${cat.id}">${isRunning ? 'Stop' : 'Start'}</button>
       </div>
     </div>
@@ -91,7 +90,7 @@ function sessionItemHtml(session) {
     <li class="session-item" data-session-id="${session.id}">
       <div>
         <span class="mono">${escapeHtml(label)}</span>
-        <span class="muted">${session.date} &middot; ${formatDurationLong(session.minutes)}${note}</span>
+        <span class="muted">${session.date} &middot; ${formatHMS(session.minutes * 60)}${note}</span>
       </div>
       <div class="session-actions">
         <button data-action="edit-session" data-session-id="${session.id}">Edit</button>
@@ -119,7 +118,7 @@ function rebuild() {
   container.innerHTML = `
     <section class="card">
       <h1 class="mono">${formatDisplayDate()}</h1>
-      <p class="muted">Today total: <span class="mono" data-header-total>${formatDurationLong(headerMinutes)}</span></p>
+      <p class="muted">Today total: <span class="mono" data-header-total>${formatHMS(headerMinutes * 60)}</span></p>
     </section>
 
     <section class="card">
@@ -264,15 +263,15 @@ function updateLiveDisplays() {
   if (!container) return;
   const timer = timerState.current;
   const todayISO = formatDateISO(new Date());
-  const liveMinutes = timer ? (Date.now() - timer.startedAt) / 60000 : 0;
+  const liveSeconds = timer ? (Date.now() - timer.startedAt) / 1000 : 0;
 
   const headerEl = container.querySelector('[data-header-total]');
-  if (headerEl) headerEl.textContent = formatDurationLong(totalMinutesForDay(todayISO) + liveMinutes);
+  if (headerEl) headerEl.textContent = formatHMS(totalMinutesForDay(todayISO) * 60 + liveSeconds);
 
   container.querySelectorAll('[data-elapsed]').forEach((el) => {
     const catId = el.dataset.elapsed;
     if (timer && timer.categoryId === catId) {
-      el.textContent = formatClock((Date.now() - timer.startedAt) / 1000);
+      el.textContent = formatHMS((Date.now() - timer.startedAt) / 1000);
     } else {
       el.textContent = '';
     }
@@ -280,9 +279,9 @@ function updateLiveDisplays() {
 
   container.querySelectorAll('[data-card-total]').forEach((el) => {
     const catId = el.dataset.cardTotal;
-    let minutes = totalMinutesForCategory(catId, todayISO);
-    if (timer && timer.categoryId === catId) minutes += liveMinutes;
-    el.textContent = `Today: ${formatDurationLong(minutes)}`;
+    let seconds = totalMinutesForCategory(catId, todayISO) * 60;
+    if (timer && timer.categoryId === catId) seconds += liveSeconds;
+    el.textContent = `Today: ${formatHMS(seconds)}`;
   });
 }
 
