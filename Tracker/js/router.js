@@ -1,0 +1,48 @@
+const routes = [
+  { pattern: /^\/$/, load: () => import('./views/home.js') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js'), params: ['id'] },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js') },
+];
+
+function currentPath() {
+  const hash = location.hash.slice(1);
+  return hash.startsWith('/') ? hash : '/' + hash;
+}
+
+function updateActiveTab(path) {
+  const top = '/' + (path.split('/')[1] || '');
+  document.querySelectorAll('.tabs a').forEach((a) => {
+    a.classList.toggle('active', a.dataset.route === top);
+  });
+}
+
+let activeModule = null;
+
+async function render() {
+  const path = currentPath();
+  const app = document.getElementById('app');
+  updateActiveTab(path);
+
+  if (activeModule?.unmount) activeModule.unmount();
+  activeModule = null;
+
+  for (const route of routes) {
+    const match = path.match(route.pattern);
+    if (!match) continue;
+    const mod = await route.load();
+    const params = {};
+    (route.params || []).forEach((name, i) => (params[name] = match[i + 1]));
+    app.innerHTML = '';
+    mod.render(app, params);
+    activeModule = mod;
+    return;
+  }
+
+  app.innerHTML = '<p class="muted">Page not found.</p>';
+}
+
+export function initRouter() {
+  window.addEventListener('hashchange', render);
+  render();
+}
