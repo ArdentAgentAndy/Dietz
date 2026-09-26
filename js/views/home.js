@@ -14,6 +14,7 @@ import {
   formatDisplayDate,
   formatShortDate,
   formatDuration,
+  formatDurationLong,
   formatClock,
   parseDurationToMinutes,
   escapeHtml,
@@ -75,7 +76,7 @@ function timerCardHtml(cat, timer, todayISO) {
         <span class="mono timer-elapsed" data-elapsed="${cat.id}"></span>
       </div>
       <div class="timer-card-foot">
-        <span class="muted" data-card-total="${cat.id}">Today: ${formatDuration(todayMinutes)}</span>
+        <span class="muted" data-card-total="${cat.id}">Today: ${formatDurationLong(todayMinutes)}</span>
         <button data-action="toggle-timer" data-category-id="${cat.id}">${isRunning ? 'Stop' : 'Start'}</button>
       </div>
     </div>
@@ -90,7 +91,7 @@ function sessionItemHtml(session) {
     <li class="session-item" data-session-id="${session.id}">
       <div>
         <span class="mono">${escapeHtml(label)}</span>
-        <span class="muted">${session.date} &middot; ${formatDuration(session.minutes)}${note}</span>
+        <span class="muted">${session.date} &middot; ${formatDurationLong(session.minutes)}${note}</span>
       </div>
       <div class="session-actions">
         <button data-action="edit-session" data-session-id="${session.id}">Edit</button>
@@ -118,7 +119,7 @@ function rebuild() {
   container.innerHTML = `
     <section class="card">
       <h1 class="mono">${formatDisplayDate()}</h1>
-      <p class="muted">Today total: <span class="mono" data-header-total>${formatDuration(headerMinutes)}</span></p>
+      <p class="muted">Today total: <span class="mono" data-header-total>${formatDurationLong(headerMinutes)}</span></p>
     </section>
 
     <section class="card">
@@ -266,7 +267,7 @@ function updateLiveDisplays() {
   const liveMinutes = timer ? (Date.now() - timer.startedAt) / 60000 : 0;
 
   const headerEl = container.querySelector('[data-header-total]');
-  if (headerEl) headerEl.textContent = formatDuration(totalMinutesForDay(todayISO) + liveMinutes);
+  if (headerEl) headerEl.textContent = formatDurationLong(totalMinutesForDay(todayISO) + liveMinutes);
 
   container.querySelectorAll('[data-elapsed]').forEach((el) => {
     const catId = el.dataset.elapsed;
@@ -281,7 +282,7 @@ function updateLiveDisplays() {
     const catId = el.dataset.cardTotal;
     let minutes = totalMinutesForCategory(catId, todayISO);
     if (timer && timer.categoryId === catId) minutes += liveMinutes;
-    el.textContent = `Today: ${formatDuration(minutes)}`;
+    el.textContent = `Today: ${formatDurationLong(minutes)}`;
   });
 }
 

@@ -20,23 +20,30 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// Sheets auto-parses strings that look like dates unless the column is
-// forced to plain text first — that would silently mangle date/dueDate/
-// start/end values on write, so lock those columns down when the tab is created.
 function getSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(name);
   if (sheet) return sheet;
 
   sheet = ss.insertSheet(name);
-  var columns = TABLES[name].columns;
-  sheet.appendRow(columns);
-  columns.forEach(function (col, i) {
-    if (/date|start|end/i.test(col)) {
-      sheet.getRange(1, i + 1, 1000, 1).setNumberFormat('@');
-    }
-  });
+  sheet.appendRow(TABLES[name].columns);
   return sheet;
+}
+
+// Sheets auto-parses strings that look like dates into real Date values on
+// write — a pre-set plain-text column format is not reliable enough to stop
+// it. Prefixing with an apostrophe is Sheets' own documented way to force
+// literal text; the apostrophe itself never appears when reading the value
+// back, so no read-side unwrapping is needed.
+function isDateLikeColumn_(col) {
+  return /date|start|end/i.test(col);
+}
+
+function forSheetValue_(col, value) {
+  if (isDateLikeColumn_(col) && value !== '' && value !== undefined && value !== null) {
+    return "'" + value;
+  }
+  return value;
 }
 
 function readTable_(name) {
@@ -70,7 +77,7 @@ function upsertRow_(tableName, row) {
   var sheet = getSheet_(tableName);
   var headers = config.columns;
   var keyValues = config.key.map(function (k) { return row[k]; });
-  var rowArray = headers.map(function (h) { return row[h] !== undefined ? row[h] : ''; });
+  var rowArray = headers.map(function (h) { return forSheetValue_(h, row[h] !== undefined ? row[h] : ''); });
 
   var foundRow = findRow_(sheet, headers, config.key, keyValues);
   if (foundRow > 0) {

@@ -14,12 +14,23 @@ export function formatShortDate(iso) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-// Minutes (float ok) -> "h:mm"
+// Minutes (float ok) -> "h:mm". Used for the manual-entry duration field,
+// which must stay in a format parseDurationToMinutes can read back.
 export function formatDuration(minutes) {
   const total = Math.round(minutes);
   const h = Math.floor(total / 60);
   const m = total % 60;
   return `${h}:${String(m).padStart(2, '0')}`;
+}
+
+// Minutes (float ok) -> "1h 30m" / "45m" / "2h". For read-only display.
+export function formatDurationLong(minutes) {
+  const total = Math.round(minutes);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 // Seconds -> "m:ss" or "h:mm:ss"
