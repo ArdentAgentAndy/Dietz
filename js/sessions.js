@@ -39,9 +39,21 @@ export function totalMinutesForDay(dateISO) {
 }
 
 export function recentSessions(limit = 10) {
-  return [...store.table('Sessions')]
+  return store
+    .table('Sessions')
+    .filter((s) => s.source !== 'compacted')
     .sort((a, b) => (b.start || b.date).localeCompare(a.start || a.date))
     .slice(0, limit);
+}
+
+// The daily-total rows compaction.js rolls old sessions into — kept out of
+// recentSessions() and shown in their own (collapsed-by-default) section
+// instead, since they're history, not something you're about to edit.
+export function compactedSessions() {
+  return store
+    .table('Sessions')
+    .filter((s) => s.source === 'compacted')
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function earliestSessionDate() {
