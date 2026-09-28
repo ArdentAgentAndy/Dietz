@@ -22,7 +22,7 @@ import {
 import { computeGrade } from '../grading.js';
 import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js';
 import { getCourseState } from '../courseState.js';
-import { archiveCourseById, deleteCourseById } from './courses.js';
+import { archiveCourseById, unarchiveCourseById, deleteCourseById } from './courses.js';
 
 let container = null;
 let tickIntervalId = null;
@@ -60,6 +60,40 @@ function categoryLabel(cat) {
 
 function allLiveCategories() {
   return GRAPH_SERIES.flatMap((s) => liveCategoriesByGroup(s.group));
+}
+
+function groupColor(group) {
+  return GRAPH_SERIES.find((s) => s.group === group)?.color || '#888888';
+}
+
+// Cards you can see but not time: an archived course (still exists, just
+// hidden from the timer/GPA lists) or an archived Homework/Piano/project/
+// research category. The synthetic "compacted-<group>" buckets compaction.js
+// creates are archived too, but they're an internal total, not a real card.
+function archivedCards() {
+  const categories = store.table('Categories');
+  const items = [];
+
+  for (const course of store.table('Courses').filter((c) => c.status === 'archived')) {
+    const cat = categories.find((c) => c.group === 'revision' && c.courseId === course.id);
+    if (cat) items.push({ cat, group: 'revision', label: course.code });
+  }
+
+  for (const cat of categories.filter((c) => c.archived && c.group !== 'revision' && !c.id.startsWith('compacted-'))) {
+    items.push({ cat, group: cat.group, label: categoryLabel(cat) });
+  }
+
+  return items;
+}
+
+function archivedCardHtml({ cat, group, label }) {
+  const color = groupColor(group);
+  return `
+    <div class="archived-card" style="background:${hexToRgba(color, 0.14)};border-color:${hexToRgba(color, 0.4)};">
+      <span class="mono">${escapeHtml(label)}</span>
+      <button data-action="unarchive-category" data-category-id="${cat.id}" data-group="${group}">Unarchive</button>
+    </div>
+  `;
 }
 
 function timerCardHtml(cat, timer, todayISO) {
@@ -114,6 +148,7 @@ function rebuild() {
     .join('');
   const sessions = recentSessions(10).map(sessionItemHtml).join('');
   const headerMinutes = totalMinutesForDay(todayISO);
+  const archived = archivedCards();
 
   container.innerHTML = `
     <section class="card">
@@ -135,6 +170,13 @@ function rebuild() {
         <button data-action="add-category" data-group="project">+ Add project</button>
         <button data-action="add-category" data-group="research">+ Add research</button>
       </div>
+    </section>
+
+    <section class="card">
+      <details class="archived-details">
+        <summary><h2 class="mono">Archived${archived.length ? ` (${archived.length})` : ''}</h2></summary>
+        <div class="archived-grid">${archived.length ? archived.map(archivedCardHtml).join('') : '<p class="muted">Nothing archived.</p>'}</div>
+      </details>
     </section>
 
     <section class="card">
@@ -235,6 +277,16 @@ function attachEvents() {
         courseId: '',
         archived: false,
       });
+      rebuild();
+    });
+  });
+
+  container.querySelectorAll('[data-action="unarchive-category"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cat = store.table('Categories').find((c) => c.id === btn.dataset.categoryId);
+      if (!cat) return;
+      if (btn.dataset.group === 'revision') unarchiveCourseById(cat.courseId);
+      else store.upsert('Categories', { id: cat.id, archived: false });
       rebuild();
     });
   });

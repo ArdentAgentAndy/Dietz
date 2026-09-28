@@ -474,6 +474,59 @@ dialog#modal-dialog::backdrop {
   background: rgba(255, 107, 107, 0.08);
 }
 
+.archived-details summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--text);
+}
+
+.archived-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.archived-details summary h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.archived-details summary h2::before {
+  content: '\25B8';
+  display: inline-block;
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.archived-details[open] summary h2::before {
+  transform: rotate(90deg);
+}
+
+.archived-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.archived-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.archived-card button {
+  padding: 4px 10px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 .final-letter-field {
   display: flex;
   flex-direction: column;
