@@ -437,6 +437,43 @@ dialog#modal-dialog::backdrop {
   color: var(--accent);
 }
 
+.btn-danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.btn-danger:hover {
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.danger-zone .modal-actions {
+  margin-top: 0;
+}
+
+.confirm-warning {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.confirm-warning.is-danger {
+  color: var(--red);
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.08);
+}
+
 .final-letter-field {
   display: flex;
   flex-direction: column;

@@ -22,6 +22,7 @@ import {
 import { computeGrade } from '../grading.js';
 import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js';
 import { getCourseState } from '../courseState.js';
+import { archiveCourseById, deleteCourseById } from './courses.js';
 
 let container = null;
 let tickIntervalId = null;
@@ -53,7 +54,7 @@ function categoryLabel(cat) {
   if (cat.group === 'homework') return 'Homework';
   if (cat.group === 'piano') return 'Piano';
   if (cat.group === 'project') return `[P] ${cat.name}`;
-  if (cat.group === 'research') return `Research: ${cat.name}`;
+  if (cat.group === 'research') return `[R] ${cat.name}`;
   return cat.name; // revision cards show the course code
 }
 
@@ -64,13 +65,12 @@ function allLiveCategories() {
 function timerCardHtml(cat, timer, todayISO) {
   const isRunning = timer?.categoryId === cat.id;
   const todayMinutes = totalMinutesForCategory(cat.id, todayISO);
-  const editable = cat.group === 'project' || cat.group === 'research';
   return `
     <div class="timer-card${isRunning ? ' is-running' : ''}">
       <div class="timer-card-head">
         <span class="timer-card-title">
           <span class="mono timer-card-name">${escapeHtml(categoryLabel(cat))}</span>
-          ${editable ? `<button class="card-edit-btn" data-action="edit-category" data-category-id="${cat.id}" title="Edit">&#9998;</button>` : ''}
+          <button class="card-edit-btn" data-action="manage-category" data-category-id="${cat.id}" title="Manage">&#9998;</button>
         </span>
         <span class="mono timer-elapsed" data-elapsed="${cat.id}"></span>
       </div>
@@ -128,8 +128,10 @@ function rebuild() {
 
     <section class="card">
       <h2 class="mono">Other</h2>
-      <div class="timer-grid">${otherCards}</div>
+      <div class="timer-grid">${otherCards || '<p class="muted">No cards yet — add one below.</p>'}</div>
       <div class="add-row">
+        ${liveCategoriesByGroup('homework').length === 0 ? '<button data-action="add-default-category" data-group="homework">+ Add homework</button>' : ''}
+        ${liveCategoriesByGroup('piano').length === 0 ? '<button data-action="add-default-category" data-group="piano">+ Add piano</button>' : ''}
         <button data-action="add-category" data-group="project">+ Add project</button>
         <button data-action="add-category" data-group="research">+ Add research</button>
       </div>
@@ -224,11 +226,24 @@ function attachEvents() {
     btn.addEventListener('click', () => openAddCategoryDialog(btn.dataset.group));
   });
 
-  container.querySelectorAll('[data-action="edit-category"]').forEach((btn) => {
+  container.querySelectorAll('[data-action="add-default-category"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      store.upsert('Categories', {
+        group,
+        name: group === 'homework' ? 'Homework' : 'Piano',
+        courseId: '',
+        archived: false,
+      });
+      rebuild();
+    });
+  });
+
+  container.querySelectorAll('[data-action="manage-category"]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const cat = store.table('Categories').find((c) => c.id === btn.dataset.categoryId);
-      if (cat) openEditCategoryDialog(cat);
+      if (cat) openManageCategoryDialog(cat);
     });
   });
 
@@ -437,41 +452,103 @@ function openSessionDialog(existing = null) {
   dialog.showModal();
 }
 
-function openEditCategoryDialog(cat) {
+// Archive keeps everything (course grades / logged time) and just hides the
+// card. Delete is the harder action: for a course it matches the Courses
+// page (grades gone, session history kept); for the plain "Other" cards
+// (which have no grades attached) it purges their still-live sessions too —
+// anything already rolled into a daily total by compaction.js is a group
+// total, not tied to this specific card, so it's untouched either way.
+function openManageCategoryDialog(cat) {
   const dialog = container.querySelector('#modal-dialog');
-  const groupLabel = cat.group === 'project' ? 'project' : 'research';
+  const isRevision = cat.group === 'revision';
+  const isNamed = cat.group === 'project' || cat.group === 'research';
+  const course = isRevision ? store.table('Courses').find((c) => c.id === cat.courseId) : null;
+  const title = isRevision ? course?.code || cat.name : categoryLabel(cat);
 
-  dialog.innerHTML = `
-    <form method="dialog" class="modal-form">
-      <h2 class="mono">Edit ${groupLabel}</h2>
-      <label>Name
-        <input type="text" name="name" value="${escapeHtml(cat.name)}" required>
-      </label>
-      <div class="modal-actions">
-        <button type="button" data-action="archive">Archive</button>
-        <button type="button" data-action="cancel">Cancel</button>
-        <button type="submit" class="btn-primary">Save</button>
+  function renderMain() {
+    dialog.innerHTML = `
+      <form method="dialog" class="modal-form">
+        <h2 class="mono">Manage ${escapeHtml(title)}</h2>
+        ${isNamed ? `<label>Name<input type="text" name="name" value="${escapeHtml(cat.name)}" required></label>` : ''}
+        <div class="danger-zone">
+          <span class="muted">Danger zone</span>
+          <div class="modal-actions">
+            <button type="button" class="btn-danger" data-action="delete">Delete</button>
+            <button type="button" data-action="archive">Archive</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" data-action="cancel">Cancel</button>
+          ${isNamed ? '<button type="submit" class="btn-primary">Save</button>' : ''}
+        </div>
+      </form>
+    `;
+    const form = dialog.querySelector('form');
+    form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+    form.querySelector('[data-action="archive"]').addEventListener('click', () => renderConfirm('archive'));
+    form.querySelector('[data-action="delete"]').addEventListener('click', () => renderConfirm('delete'));
+    if (isNamed) {
+      form.addEventListener('submit', () => {
+        const data = new FormData(form);
+        store.upsert('Categories', { id: cat.id, name: data.get('name') });
+        rebuild();
+      });
+    }
+  }
+
+  function archiveMessage() {
+    if (isRevision) {
+      return `Archiving ${escapeHtml(title)} hides its timer card and drops it from the Courses/GPA lists. All grades and logged time are kept — unarchive it later from the Courses page.`;
+    }
+    return `Archiving "${escapeHtml(categoryLabel(cat))}" hides this card from the home page. All logged time is kept.`;
+  }
+
+  function deleteMessage() {
+    if (isRevision) {
+      return `Deleting ${escapeHtml(title)} removes all its graded items and drops it from GPA. Logged study time is kept. This cannot be undone.`;
+    }
+    return `Deleting "${escapeHtml(categoryLabel(cat))}" permanently removes this card AND any of its logged time that hasn't already rolled into a daily total. This cannot be undone.`;
+  }
+
+  function renderConfirm(action) {
+    const isDelete = action === 'delete';
+    dialog.innerHTML = `
+      <div class="modal-form">
+        <h2 class="mono">${isDelete ? 'Delete' : 'Archive'} ${escapeHtml(title)}?</h2>
+        <p class="confirm-warning${isDelete ? ' is-danger' : ''}">${isDelete ? deleteMessage() : archiveMessage()}</p>
+        <div class="modal-actions">
+          <button type="button" data-action="back">Go back</button>
+          <button type="button" class="${isDelete ? 'btn-danger' : 'btn-primary'}" data-action="confirm">${isDelete ? 'Delete' : 'Archive'}</button>
+        </div>
       </div>
-    </form>
-  `;
+    `;
+    dialog.querySelector('[data-action="back"]').addEventListener('click', renderMain);
+    dialog.querySelector('[data-action="confirm"]').addEventListener('click', () => {
+      if (timerState.current?.categoryId === cat.id) stopTimer();
+      if (action === 'archive') doArchive();
+      else doDelete();
+      dialog.close();
+      rebuild();
+    });
+  }
 
-  const form = dialog.querySelector('form');
-  form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+  function doArchive() {
+    if (isRevision) archiveCourseById(cat.courseId);
+    else store.upsert('Categories', { id: cat.id, archived: true });
+  }
 
-  form.querySelector('[data-action="archive"]').addEventListener('click', () => {
-    if (!confirm(`Archive "${cat.name}"? Past sessions are kept, but it drops off the timer list.`)) return;
-    if (timerState.current?.categoryId === cat.id) stopTimer();
-    store.upsert('Categories', { id: cat.id, archived: true });
-    dialog.close();
-    rebuild();
-  });
+  function doDelete() {
+    if (isRevision) {
+      deleteCourseById(cat.courseId);
+      return;
+    }
+    for (const s of store.table('Sessions').filter((sess) => sess.categoryId === cat.id)) {
+      store.remove('Sessions', s.id);
+    }
+    store.remove('Categories', cat.id);
+  }
 
-  form.addEventListener('submit', () => {
-    const data = new FormData(form);
-    store.upsert('Categories', { id: cat.id, name: data.get('name') });
-    rebuild();
-  });
-
+  renderMain();
   dialog.showModal();
 }
 

@@ -77,7 +77,21 @@ function deleteCourse(courseId) {
   const course = store.table('Courses').find((c) => c.id === courseId);
   if (!course) return;
   if (!confirm(`Delete ${course.code}? This removes all its graded items. Session history is kept.`)) return;
+  deleteCourseById(courseId);
+  rebuild();
+}
 
+// Shared with the home page's per-card manage dialog — keeps the "what
+// actually happens on delete" logic in one place.
+export function archiveCourseById(courseId) {
+  store.upsert('Courses', { id: courseId, status: 'archived' });
+}
+
+export function unarchiveCourseById(courseId) {
+  store.upsert('Courses', { id: courseId, status: 'active' });
+}
+
+export function deleteCourseById(courseId) {
   for (const item of store.table('Items').filter((i) => i.courseId === courseId)) {
     store.remove('Items', item.id);
   }
@@ -87,7 +101,6 @@ function deleteCourse(courseId) {
   if (revisionCategory) store.upsert('Categories', { id: revisionCategory.id, archived: true });
 
   store.remove('Courses', courseId);
-  rebuild();
 }
 
 function componentRowsHtml(type) {

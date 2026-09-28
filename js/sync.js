@@ -1,4 +1,5 @@
 import { store } from './store.js';
+import { compactOldSessions } from './compaction.js';
 
 const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
@@ -85,6 +86,9 @@ async function pullBootstrap(config) {
     store.data[table] = data[table] || [];
   }
   store.persist();
+  // Freshly-pulled data can include old sessions this device hasn't seen
+  // yet (e.g. entered from elsewhere) — sweep them into daily totals too.
+  compactOldSessions();
 }
 
 async function flushOutbox() {
