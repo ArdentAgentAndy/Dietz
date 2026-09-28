@@ -6,7 +6,7 @@ export const GRAPH_SERIES = [
   { key: 'revision', label: 'Revision', group: 'revision', color: '#3fb87f', goalHours: 6 },
   { key: 'homework', label: 'Homework', group: 'homework', color: '#e8c547', goalHours: null },
   { key: 'project', label: 'Project work', group: 'project', color: '#3987e5', goalHours: 2 },
-  { key: 'research', label: 'Research', group: 'research', color: '#c59ecb', goalHours: 4 },
+  { key: 'research', label: 'Research', group: 'research', color: '#9b59b6', goalHours: 4 },
   { key: 'piano', label: 'Piano', group: 'piano', color: '#ffffff', goalHours: 1 },
 ];
 
