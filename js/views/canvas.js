@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=16';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=16';
-import { hexForCourse } from '../notionColors.js?v=16';
-import { escapeHtml, hexToRgba } from '../format.js?v=16';
-import { store } from '../store.js?v=16';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=17';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=17';
+import { hexForCourse } from '../notionColors.js?v=17';
+import { escapeHtml, hexToRgba } from '../format.js?v=17';
+import { store } from '../store.js?v=17';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -171,6 +171,11 @@ function handleKeyNav(dir) {
 
 function onKeyDown(e) {
   if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    // Checked ahead of isTypingTarget() below so Escape still works while
+    // the search box itself has focus — just hands focus back, leaving
+    // whatever was typed in place (mirrors the Enter/F flow, which is why
+    // this isn't gated the same way plain letter keybinds are).
+    if (document.activeElement?.dataset?.action === 'search') { document.activeElement.blur(); return; }
     if (unlinkMode) { unlinkMode = false; rebuild(); return; }
     if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); rebuild(); return; }
     return;

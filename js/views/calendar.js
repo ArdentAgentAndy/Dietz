@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=16';
-import { hexForNotionColor } from '../notionColors.js?v=16';
-import { escapeHtml, hexToRgba } from '../format.js?v=16';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=16';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=17';
+import { hexForNotionColor } from '../notionColors.js?v=17';
+import { escapeHtml, hexToRgba } from '../format.js?v=17';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=17';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
@@ -257,6 +257,10 @@ function onKeyDown(e) {
   // the dialog (e.g. mid-typing a task name) and isn't gated behind the
   // dialog-open guard below.
   if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    // Hands focus back from the search box specifically (mirrors the
+    // Enter/F flow, which is why this isn't gated like plain letter
+    // keybinds below) — leaves whatever was typed in place.
+    if (document.activeElement?.dataset?.action === 'search') { document.activeElement.blur(); return; }
     const dialog = container?.querySelector('#modal-dialog');
     if (dialog?.open) { dialog.close(); return; }
     if (schedulingItem) { schedulingItem = null; rebuild(); return; }
