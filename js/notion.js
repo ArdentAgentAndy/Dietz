@@ -1,4 +1,4 @@
-import { store } from './store.js?v=2';
+import { store } from './store.js?v=14';
 
 const CACHE_KEY = 'dietz:notionCache';
 
@@ -27,6 +27,27 @@ function setCachedNotionTasks(tasks) {
   } catch (e) {
     // ignore (private mode, quota, etc.) — cache is a convenience only
   }
+}
+
+// Patch the cache in place right after a successful write, instead of
+// waiting on the next page's fresh fetch to pick up the change — that
+// second round-trip (on top of the one that already happened) is exactly
+// the extra delay users notice when a mutation is immediately followed by
+// a navigation to a page that reads from this same cache (e.g. Canvas).
+export function patchCachedNotionTask(id, patch) {
+  const tasks = getCachedNotionTasks();
+  const idx = tasks.findIndex((t) => t.id === id);
+  if (idx === -1) return;
+  tasks[idx] = { ...tasks[idx], ...patch };
+  setCachedNotionTasks(tasks);
+}
+
+export function removeCachedNotionTask(id) {
+  setCachedNotionTasks(getCachedNotionTasks().filter((t) => t.id !== id));
+}
+
+export function addCachedNotionTask(task) {
+  setCachedNotionTasks([...getCachedNotionTasks(), task]);
 }
 
 export async function fetchNotionTasks() {

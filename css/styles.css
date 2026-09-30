@@ -363,18 +363,102 @@ h1, h2, h3 {
 }
 
 .cal-chip.is-highlightable,
-.cal-chip.is-editable {
+.cal-chip.is-editable,
+.cal-chip.is-link-target {
   cursor: pointer;
 }
 
-.cal-chip.is-highlightable:hover,
 .cal-chip.is-editable:hover {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
+/* Marching-ants hover border for mode-active cards — dashes travel around
+   the edge continuously instead of flashing. A real element (not ::before/
+   ::after, both already used on .cal-chip) so it never conflicts with the
+   center line or the purple "linked" ribbon. Color defaults to the active
+   mode's color (--mode-color, set on #app); is-link-target overrides it
+   to purple regardless of any other mode. */
+.cal-chip-ants {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 6;
+  background-image:
+    linear-gradient(90deg, var(--march-color, var(--accent)) 50%, transparent 50%),
+    linear-gradient(90deg, var(--march-color, var(--accent)) 50%, transparent 50%),
+    linear-gradient(0deg, var(--march-color, var(--accent)) 50%, transparent 50%),
+    linear-gradient(0deg, var(--march-color, var(--accent)) 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+}
+
+.cal-chip.is-highlightable:hover .cal-chip-ants {
+  opacity: 1;
+  animation: marching-ants 0.5s linear infinite;
+}
+
+.cal-chip.is-link-target:hover .cal-chip-ants {
+  opacity: 1;
+  --march-color: #9b59b6;
+  animation: marching-ants 0.5s linear infinite;
+}
+
+@keyframes marching-ants {
+  to {
+    background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px;
+  }
+}
+
+/* Static (non-animated) dotted border on cards already selected for the
+   current highlight batch — outside the existing border, same idea as the
+   urgent white outline, so it doesn't overlap it. Distinct from the
+   marching-ants hover effect, which is transient/hover-only. */
+.cal-chip.is-pending-selected {
+  outline: 2px dotted var(--mode-color, var(--accent));
+  outline-offset: 2px;
+}
+
+/* WASD keyboard-navigation focus — a persistent blue ring, separate from
+   the mouse-hover outline (.is-editable:hover etc. above) and from the
+   mode-selection dotted border. Uses box-shadow instead of outline so it
+   never fights either of those for the same CSS property. */
+.cal-chip.is-keynav-focus {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 12px 1px rgba(195, 222, 232, 0.55);
+  z-index: 5;
+}
+
+/* Tint matching whichever mode is active (--mode-color/--mode-tint are set
+   on #app, but inherit down) — applied to the grid's own card and each
+   day column/cell, not the whole page. */
+#app.has-mode-tint .cal-grid-card,
+#app.has-mode-tint .cal-day-col,
+#app.has-mode-tint .cal-month-cell {
+  background-color: var(--mode-tint, transparent);
+}
+
 .cal-chip.is-dragging {
   opacity: 0.4;
+}
+
+/* Big red X covering a card marked for mass delete — deliberately large
+   and high z-index so it's unmistakable, not a subtle corner badge. */
+.cal-chip-delete-mark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  font-weight: 900;
+  line-height: 1;
+  color: #ff6b6b;
+  background: rgba(20, 0, 0, 0.55);
+  z-index: 10;
+  pointer-events: none;
+  border-radius: var(--radius-sm);
 }
 
 .cal-day-col.is-drop-target,
@@ -403,11 +487,19 @@ h1, h2, h3 {
   z-index: 0;
 }
 
-/* When a deadline/link row is also present, it sits above the bottom row
-   and the line moves up to stay just above the line (see taskChipHtml) —
-   higher specificity (two classes) than the rule above, so it wins. */
-.cal-chip.has-line.has-deadline::before {
-  bottom: 54px;
+/* Purple corner ribbon marking a Canvas-linked task, independent of the
+   has-line decoration (shows even when done/urgent/filtered). */
+.cal-chip.has-deadline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 18px 18px 0;
+  border-color: transparent #9b59b6 transparent transparent;
+  z-index: 2;
 }
 
 /* Category-shaped emblem, a real element at the start of the bottom row
@@ -464,9 +556,6 @@ h1, h2, h3 {
   font-size: 12px;
 }
 
-/* Wraps the deadline/link row + the bottom row together so the pair gets
-   pushed to the card's bottom as one unit — avoids fighting over which
-   element "owns" margin-top:auto when the deadline row isn't present. */
 .cal-chip-bottom-stack {
   margin-top: auto;
   display: flex;
@@ -474,18 +563,29 @@ h1, h2, h3 {
   gap: 6px;
 }
 
+/* Positioned absolutely at a fixed spot (independent of the bottom row's
+   own flex flow) so it lines up the same way on every linked card, and
+   the center line above stays at the same height on every card regardless
+   of whether this row is present. */
 .cal-chip-deadline-row {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 36px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 14px;
   font-size: 10px;
   color: var(--muted);
+  z-index: 1;
 }
 
 .cal-chip-link {
   cursor: pointer;
-  color: var(--accent);
+  font-size: 20px;
+  line-height: 1;
+  opacity: 1;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
 }
 
 .cal-chip-bottom-row {
@@ -576,6 +676,14 @@ button, .btn {
 button:hover, .btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Generic "on" state for toggle buttons outside .range-toggle (Mark
+   completed, Highlight urgent, Hide completed, ...) — same accent look. */
+button.active, .btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
 }
 
 .row-between {
@@ -897,46 +1005,35 @@ dialog#modal-dialog::backdrop {
   gap: 10px;
 }
 
-.canvas-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+/* Gray corner ribbon in the top-left of every Canvas card — same
+   border-triangle trick as .has-deadline's purple top-right "linked"
+   ribbon (mirrored left/right), just always-on and a different
+   pseudo-element (::before, not ::after) so the two never collide even on
+   a linked card that shows both. */
+.canvas-chip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 18px 18px;
+  border-color: transparent transparent transparent #9b9a97;
+  z-index: 2;
 }
 
-.canvas-card {
-  border: 2px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+.canvas-chip-clickable {
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 74px;
 }
 
-.canvas-card:hover {
+.canvas-chip-clickable:hover {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-.canvas-card-name {
-  font-size: 13px;
-  line-height: 1.3;
-}
-
-.canvas-card-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
-  font-size: 11px;
-}
-
-.canvas-card-date {
-  color: var(--muted);
-}
-
-.canvas-card.is-highlighted {
+.canvas-chip.is-highlighted,
+.cal-chip.is-highlight-flash {
   animation: canvas-flash 0.5s ease-in-out 3;
 }
 

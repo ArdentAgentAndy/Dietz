@@ -171,25 +171,33 @@ function canvasEvents_() {
   var calendarId = PropertiesService.getScriptProperties().getProperty('CANVAS_CALENDAR_ID');
   if (!calendarId) return { error: 'canvas calendar not configured', events: [] };
 
-  var calendar = CalendarApp.getCalendarById(calendarId);
-  if (!calendar) return { error: 'canvas calendar not found', events: [] };
+  // An uncaught exception here (e.g. Calendar access not yet authorized)
+  // makes Apps Script return an error page without CORS headers, which the
+  // browser reports as an opaque "Failed to fetch" instead of a readable
+  // error — catch it so the frontend gets a normal JSON error instead.
+  try {
+    var calendar = CalendarApp.getCalendarById(calendarId);
+    if (!calendar) return { error: 'canvas calendar not found (check CANVAS_CALENDAR_ID)', events: [] };
 
-  var start = new Date();
-  start.setDate(start.getDate() - 30);
-  var end = new Date();
-  end.setDate(end.getDate() + 180);
+    var start = new Date();
+    start.setDate(start.getDate() - 30);
+    var end = new Date();
+    end.setDate(end.getDate() + 180);
 
-  var events = calendar.getEvents(start, end).map(function (e) {
-    var title = e.getTitle();
-    return {
-      id: e.getId(),
-      name: canvasStripTitle_(title),
-      course: canvasParseCourse_(title),
-      deadline: canvasEventDeadline_(e),
-    };
-  });
+    var events = calendar.getEvents(start, end).map(function (e) {
+      var title = e.getTitle();
+      return {
+        id: e.getId(),
+        name: canvasStripTitle_(title),
+        course: canvasParseCourse_(title),
+        deadline: canvasEventDeadline_(e),
+      };
+    });
 
-  return { events: events };
+    return { events: events };
+  } catch (err) {
+    return { error: 'canvas calendar error: ' + err.message, events: [] };
+  }
 }
 
 // --- Notion proxy -----------------------------------------------------

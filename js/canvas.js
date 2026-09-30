@@ -1,4 +1,4 @@
-import { store } from './store.js?v=2';
+import { store } from './store.js?v=14';
 
 const CACHE_KEY = 'dietz:canvasCache';
 
@@ -42,6 +42,7 @@ export async function fetchCanvasEvents() {
 // module instance to pass a "pending" item across that boundary.
 let pendingSchedule = null; // { name, course, deadline } | null
 let pendingHighlightName = null; // string | null — Canvas item to flash on return
+let pendingCalendarHighlightName = null; // string | null — task to flash on the Calendar tab
 
 export function setPendingSchedule(item) {
   pendingSchedule = item;
@@ -60,5 +61,18 @@ export function setPendingHighlight(name) {
 export function takePendingHighlight() {
   const name = pendingHighlightName;
   pendingHighlightName = null;
+  return name;
+}
+
+// Clicking an already-linked Canvas card jumps to its existing Calendar
+// task instead of letting you create a duplicate — see canvas.js's click
+// handler and calendar.js's applyPendingCalendarHighlight.
+export function setPendingCalendarHighlight(name) {
+  pendingCalendarHighlightName = name;
+}
+
+export function takePendingCalendarHighlight() {
+  const name = pendingCalendarHighlightName;
+  pendingCalendarHighlightName = null;
   return name;
 }

@@ -1,8 +1,31 @@
-import './store.js?v=2';
-import { initRouter } from './router.js?v=2';
-import { initSync } from './sync.js?v=2';
-import { compactOldSessions } from './compaction.js?v=2';
+import './store.js?v=14';
+import { initRouter } from './router.js?v=14';
+import { initSync } from './sync.js?v=14';
+import { compactOldSessions } from './compaction.js?v=14';
 
 compactOldSessions();
 initRouter();
 initSync(document.getElementById('sync-status'), document.getElementById('sync-btn'));
+
+// Global tab-switch shortcuts, matching the nav order in index.html.
+const TAB_ROUTES = ['/', '/courses', '/classes', '/canvas', '/calendar', '/settings'];
+
+window.addEventListener('keydown', (e) => {
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const current = location.hash.replace(/^#/, '') || '/';
+    const currentIndex = TAB_ROUTES.indexOf(current);
+    const base = currentIndex === -1 ? 0 : currentIndex;
+    const step = e.key === 'ArrowLeft' ? -1 : 1;
+    const next = (base + step + TAB_ROUTES.length) % TAB_ROUTES.length;
+    location.hash = `#${TAB_ROUTES[next]}`;
+    return;
+  }
+
+  const index = Number(e.key) - 1;
+  if (!Number.isInteger(index) || index < 0 || index >= TAB_ROUTES.length) return;
+  location.hash = `#${TAB_ROUTES[index]}`;
+});

@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=2';
-import { escapeHtml } from '../format.js?v=2';
-import { requestSync } from '../sync.js?v=2';
+import { store } from '../store.js?v=14';
+import { escapeHtml } from '../format.js?v=14';
+import { requestSync } from '../sync.js?v=14';
 
 const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings'];
 
