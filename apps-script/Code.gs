@@ -159,6 +159,15 @@ function propStatus_(prop) {
   return (prop && prop.status) ? prop.status.name : '';
 }
 
+// name+color together, for the properties the frontend colors chips by.
+function propSelectColor_(prop) {
+  return { name: (prop && prop.select) ? prop.select.name : '', color: (prop && prop.select) ? prop.select.color : '' };
+}
+
+function propStatusColor_(prop) {
+  return { name: (prop && prop.status) ? prop.status.name : '', color: (prop && prop.status) ? prop.status.color : '' };
+}
+
 function propCheckbox_(prop) {
   return Boolean(prop && prop.checkbox);
 }
@@ -174,14 +183,24 @@ function propDate_(prop) {
 
 function notionTaskFromPage_(page) {
   var p = page.properties;
+  var category = propStatusColor_(p.Category);
+  var course = propSelectColor_(p.Course);
+  var project = propSelectColor_(p.Project);
+  var lead = propSelectColor_(p.Lead);
+
   return {
     id: page.id,
     url: page.url,
     name: propTitle_(p.Name),
-    category: propStatus_(p.Category),
-    course: propSelect_(p.Course),
+    category: category.name,
+    categoryColor: category.color,
+    course: course.name,
+    courseColor: course.color,
     class: propSelect_(p.Class),
-    project: propSelect_(p.Project),
+    project: project.name,
+    projectColor: project.color,
+    lead: lead.name,
+    leadColor: lead.color,
     type: propSelect_(p.Type),
     task: propSelect_(p.Task),
     select: propSelect_(p.Select),
@@ -193,7 +212,98 @@ function notionTaskFromPage_(page) {
     score: propRichText_(p.Score),
     display: propCheckbox_(p.Display),
     mark: propCheckbox_(p['?']),
+    urgent: propCheckbox_(p.Urgent),
   };
+}
+
+// Phase 2 (write, narrow slice): flip a checkbox property on specific pages.
+// Still gated by the frontend's own TOKEN (checked by the caller) — this
+// uses NOTION_TOKEN to talk to Notion, same as the read path. Property name
+// is whitelisted rather than trusted verbatim from the request body.
+var WRITABLE_CHECKBOX_PROPS_ = { Urgent: true, '?': true };
+
+function notionUpdateCheckbox_(property, updates) {
+  if (!WRITABLE_CHECKBOX_PROPS_[property]) return { error: 'property not writable: ' + property };
+
+  var notionToken = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
+  if (!notionToken) return { error: 'notion not configured' };
+
+  var results = (updates || []).map(function (u) {
+    var properties = {};
+    properties[property] = { checkbox: Boolean(u.value) };
+    var response = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + u.pageId, {
+      method: 'patch',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + notionToken, 'Notion-Version': '2022-06-28' },
+      payload: JSON.stringify({ properties: properties }),
+      muteHttpExceptions: true,
+    });
+    var ok = response.getResponseCode() === 200;
+    return { pageId: u.pageId, ok: ok, error: ok ? null : response.getContentText() };
+  });
+
+  return { ok: results.every(function (r) { return r.ok; }), results: results };
+}
+
+// Phase 3 (add/edit): build a Notion "properties" payload from the flat
+// field names the frontend uses (matching notionTaskFromPage_'s output).
+// A field is only touched if the caller included it — omitted fields are
+// left alone, letting a category-change edit set just the one sub-value
+// (course/project/lead) that applies without clobbering the others.
+function notionFieldsToProperties_(fields) {
+  var properties = {};
+  if ('name' in fields) properties.Name = { title: fields.name ? [{ text: { content: fields.name } }] : [] };
+  if ('category' in fields) properties.Category = { status: fields.category ? { name: fields.category } : null };
+  if ('course' in fields) properties.Course = { select: fields.course ? { name: fields.course } : null };
+  if ('project' in fields) properties.Project = { select: fields.project ? { name: fields.project } : null };
+  if ('lead' in fields) properties.Lead = { select: fields.lead ? { name: fields.lead } : null };
+  if ('duration' in fields) properties.Duration = { number: (fields.duration === '' || fields.duration == null) ? null : Number(fields.duration) };
+  if ('date' in fields) {
+    if (!fields.date) {
+      properties.Date = { date: null };
+    } else {
+      var dateValue = { start: fields.date };
+      if (fields.dateEnd) dateValue.end = fields.dateEnd;
+      properties.Date = { date: dateValue };
+    }
+  }
+  if ('mark' in fields) properties['?'] = { checkbox: Boolean(fields.mark) };
+  if ('urgent' in fields) properties.Urgent = { checkbox: Boolean(fields.urgent) };
+  return properties;
+}
+
+function notionCreateTask_(fields) {
+  var props = PropertiesService.getScriptProperties();
+  var notionToken = props.getProperty('NOTION_TOKEN');
+  var databaseId = props.getProperty('NOTION_DATABASE_ID');
+  if (!notionToken || !databaseId) return { error: 'notion not configured' };
+
+  var response = UrlFetchApp.fetch('https://api.notion.com/v1/pages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + notionToken, 'Notion-Version': '2022-06-28' },
+    payload: JSON.stringify({ parent: { database_id: databaseId }, properties: notionFieldsToProperties_(fields || {}) }),
+    muteHttpExceptions: true,
+  });
+
+  if (response.getResponseCode() !== 200) return { error: 'notion api error: ' + response.getContentText() };
+  return { ok: true, task: notionTaskFromPage_(JSON.parse(response.getContentText())) };
+}
+
+function notionUpdateTask_(pageId, fields) {
+  var notionToken = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
+  if (!notionToken) return { error: 'notion not configured' };
+
+  var response = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
+    method: 'patch',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + notionToken, 'Notion-Version': '2022-06-28' },
+    payload: JSON.stringify({ properties: notionFieldsToProperties_(fields || {}) }),
+    muteHttpExceptions: true,
+  });
+
+  if (response.getResponseCode() !== 200) return { error: 'notion api error: ' + response.getContentText() };
+  return { ok: true, task: notionTaskFromPage_(JSON.parse(response.getContentText())) };
 }
 
 function notionQueryTasks_() {
@@ -247,6 +357,18 @@ function doPost(e) {
   }
 
   if (!checkToken_(body.token)) return jsonOut_({ error: 'unauthorized' });
+
+  if (body.action === 'notion-update-checkbox') {
+    return jsonOut_(notionUpdateCheckbox_(body.property, body.updates));
+  }
+
+  if (body.action === 'notion-create-task') {
+    return jsonOut_(notionCreateTask_(body.fields));
+  }
+
+  if (body.action === 'notion-update-task') {
+    return jsonOut_(notionUpdateTask_(body.pageId, body.fields));
+  }
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);

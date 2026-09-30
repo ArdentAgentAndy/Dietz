@@ -1,0 +1,82 @@
+import { store } from './store.js';
+
+const CACHE_KEY = 'dietz:notionCache';
+
+function getConfig() {
+  const settings = store.table('Settings');
+  const url = settings.find((s) => s.key === 'appsScriptUrl')?.value;
+  const token = settings.find((s) => s.key === 'appsScriptToken')?.value;
+  return url && token ? { url, token } : null;
+}
+
+// Last-fetched tasks, read synchronously so a page mount can render
+// immediately instead of showing "Loading…" on every tab switch/reload —
+// fetchNotionTasks() below then refreshes it in the background.
+export function getCachedNotionTasks() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setCachedNotionTasks(tasks) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(tasks));
+  } catch (e) {
+    // ignore (private mode, quota, etc.) — cache is a convenience only
+  }
+}
+
+export async function fetchNotionTasks() {
+  const config = getConfig();
+  if (!config) return { tasks: [], error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(`${config.url}?action=notion-tasks&token=${encodeURIComponent(config.token)}`);
+  const data = await res.json();
+  if (data.error) return { tasks: [], error: data.error };
+  setCachedNotionTasks(data.tasks || []);
+  return { tasks: data.tasks || [], error: null };
+}
+
+// property: 'Urgent' | '?' (whitelisted server-side too — see Code.gs).
+// updates: [{ pageId, value: bool }, ...]
+export async function pushCheckboxUpdates(property, updates) {
+  const config = getConfig();
+  if (!config) return { ok: false, error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ token: config.token, action: 'notion-update-checkbox', property, updates }),
+  });
+  return res.json();
+}
+
+// fields: flat field names matching a task's own shape (name, category,
+// course/project/lead, date, duration, mark, urgent) — only included fields
+// are written; see notionFieldsToProperties_ in Code.gs.
+export async function createTask(fields) {
+  const config = getConfig();
+  if (!config) return { ok: false, error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ token: config.token, action: 'notion-create-task', fields }),
+  });
+  return res.json();
+}
+
+export async function updateTask(pageId, fields) {
+  const config = getConfig();
+  if (!config) return { ok: false, error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ token: config.token, action: 'notion-update-task', pageId, fields }),
+  });
+  return res.json();
+}
