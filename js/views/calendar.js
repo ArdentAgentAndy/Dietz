@@ -1,4 +1,4 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask } from '../notion.js';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask } from '../notion.js';
 import { hexForNotionColor } from '../notionColors.js';
 import { escapeHtml, hexToRgba } from '../format.js';
 
@@ -41,6 +41,18 @@ const SHAPE_BY_CATEGORY = {
   Research: 'x',
 };
 
+// Notion's own color for Research is "default" (a muted slate-gray), which
+// reads too close to Project's gray and isn't very legible on the dark
+// background. Override with something in the same neutral family as
+// Project's gray, just lighter — distinguishable and legible.
+const CATEGORY_COLOR_OVERRIDES = {
+  Research: '#4a4844',
+};
+
+function categoryColorForTask(task) {
+  return CATEGORY_COLOR_OVERRIDES[task.category] || hexForNotionColor(task.categoryColor);
+}
+
 let container = null;
 let allTasks = [];
 let loadError = null;
@@ -64,6 +76,8 @@ let activeHighlight = null; // null | 'urgent' | 'completed'
 let pending = new Set();
 let saving = false;
 let saveError = null;
+
+let draggedTaskId = null;
 
 function isFieldActive(task, kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
@@ -140,6 +154,37 @@ async function load() {
   rebuild();
 }
 
+// Dropping a card onto a day changes only the date part of its Date
+// property, preserving the original time-of-day if it had one.
+async function moveTaskToDate(taskId, newDay) {
+  const task = allTasks.find((t) => t.id === taskId);
+  if (!task || !newDay) return;
+
+  const oldStart = task.date?.start;
+  if (oldStart && oldStart.slice(0, 10) === newDay) return; // dropped on the same day, no-op
+
+  let newStart;
+  if (oldStart && oldStart.length > 10) {
+    const oldD = new Date(oldStart);
+    const hh = String(oldD.getHours()).padStart(2, '0');
+    const mm = String(oldD.getMinutes()).padStart(2, '0');
+    newStart = new Date(`${newDay}T${hh}:${mm}:00`).toISOString();
+  } else {
+    newStart = newDay;
+  }
+
+  const prevDate = task.date;
+  task.date = { start: newStart, end: task.date?.end || null };
+  rebuild();
+
+  const result = await updateTask(taskId, { date: newStart });
+  if (!result.ok) {
+    task.date = prevDate;
+    saveError = result.error || 'Failed to move task';
+    rebuild();
+  }
+}
+
 async function saveHighlight(kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
   const changed = allTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
@@ -179,6 +224,7 @@ function groupedAvailableCategories() {
 }
 
 function categoryColorHex(category) {
+  if (CATEGORY_COLOR_OVERRIDES[category]) return CATEGORY_COLOR_OVERRIDES[category];
   const task = allTasks.find((t) => t.category === category);
   return task ? hexForNotionColor(task.categoryColor) : null;
 }
@@ -223,7 +269,7 @@ function visibleTasks() {
 // row, drawn via ::before using the --chip-line-color var set here).
 function chipStyle(task) {
   const config = SUB_FILTER_BY_CATEGORY[task.category];
-  const catColor = hexForNotionColor(task.categoryColor);
+  const catColor = categoryColorForTask(task);
   const hasSub = Boolean(config && task[config.prop]);
   const subColor = hasSub ? hexForNotionColor(task[config.colorProp]) : null;
   const borderAlpha = hasSub ? 0.6 : 0.3;
@@ -261,7 +307,7 @@ function taskChipHtml(task) {
   const config = SUB_FILTER_BY_CATEGORY[task.category];
   const subValue = config ? task[config.prop] : '';
   const subColor = subValue ? hexForNotionColor(task[config.colorProp]) : null;
-  const catColor = hexForNotionColor(task.categoryColor);
+  const catColor = categoryColorForTask(task);
   const time = task.date?.start?.length > 10
     ? new Date(task.date.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
     : '';
@@ -279,8 +325,10 @@ function taskChipHtml(task) {
 
   // The meta span is always rendered, even empty — it reserves its line's
   // height so a duration-less task's title can't grow into that space.
+  // Draggable only outside a highlight mode — dragging a card onto a
+  // different day/cell reschedules it (see attachEvents' drop handler).
   return `
-    <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}">
+    <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}" draggable="${activeHighlight ? 'false' : 'true'}">
       <span class="cal-chip-name">${escapeHtml(task.name || 'Untitled')}</span>
       <div class="cal-chip-bottom-row">
         ${showDecoration ? shapeEmblemHtml(task, catColor) : ''}
@@ -310,7 +358,7 @@ function weekViewHtml(tasks) {
         const key = isoDay(d);
         const items = byDay[key] || [];
         return `
-          <div class="cal-day-col">
+          <div class="cal-day-col" data-date="${key}">
             <div class="cal-day-head mono">${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></div>
             <div class="cal-day-items">${items.map(taskChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
           </div>
@@ -346,7 +394,7 @@ function monthViewHtml(tasks) {
         const shown = items.slice(0, MAX_PER_CELL);
         const extra = items.length - shown.length;
         return `
-          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}">
+          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}" data-date="${key}">
             <div class="cal-month-daynum mono">${d.getDate()}</div>
             ${shown.map(taskChipHtml).join('')}
             ${extra > 0 ? `<p class="muted cal-more">+${extra} more</p>` : ''}
@@ -447,6 +495,7 @@ function openTaskDialog(existing) {
       </div>
       <p class="muted" data-form-error style="color:var(--red); display:none;"></p>
       <div class="modal-actions">
+        ${existing ? '<button type="button" class="btn-danger" data-action="delete">Delete</button>' : ''}
         <button type="button" data-action="cancel">Cancel</button>
         <button type="submit" class="btn-primary">${existing ? 'Save' : 'Add'}</button>
       </div>
@@ -458,6 +507,26 @@ function openTaskDialog(existing) {
   const form = dialog.querySelector('form');
   form.querySelector('[name="category"]').addEventListener('change', (e) => renderSubField(e.target.value));
   form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+
+  form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
+    if (!confirm(`Delete "${existing.name || 'this task'}"? It'll be moved to Notion's trash, recoverable there.`)) return;
+
+    const deleteBtn = form.querySelector('[data-action="delete"]');
+    const errorEl = form.querySelector('[data-form-error]');
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = 'Deleting…';
+
+    const result = await deleteTask(existing.id);
+    if (result.ok) {
+      dialog.close();
+      await load();
+    } else {
+      errorEl.textContent = result.error || 'Something went wrong talking to Notion.';
+      errorEl.style.display = 'block';
+      deleteBtn.disabled = false;
+      deleteBtn.textContent = 'Delete';
+    }
+  });
 
   form.addEventListener('submit', async (e) => {
     // Unlike the app's other (synchronous) dialogs, this one awaits a
@@ -643,6 +712,31 @@ function attachEvents() {
       });
     });
   }
+
+  container.querySelectorAll('.cal-chip[draggable="true"]').forEach((el) => {
+    el.addEventListener('dragstart', () => {
+      draggedTaskId = el.dataset.taskId;
+      el.classList.add('is-dragging');
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('is-dragging');
+      draggedTaskId = null;
+    });
+  });
+
+  container.querySelectorAll('[data-date]').forEach((el) => {
+    el.addEventListener('dragover', (e) => {
+      if (!draggedTaskId) return;
+      e.preventDefault();
+      el.classList.add('is-drop-target');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('is-drop-target'));
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      el.classList.remove('is-drop-target');
+      if (draggedTaskId) moveTaskToDate(draggedTaskId, el.dataset.date);
+    });
+  });
 
   container.querySelectorAll('[data-category]').forEach((btn) => {
     btn.addEventListener('click', () => {

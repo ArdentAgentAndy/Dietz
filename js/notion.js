@@ -80,3 +80,16 @@ export async function updateTask(pageId, fields) {
   });
   return res.json();
 }
+
+// "Delete" archives the page in Notion (its own trash, recoverable there).
+export async function deleteTask(pageId) {
+  const config = getConfig();
+  if (!config) return { ok: false, error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ token: config.token, action: 'notion-delete-task', pageId }),
+  });
+  return res.json();
+}

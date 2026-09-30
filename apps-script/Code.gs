@@ -306,6 +306,25 @@ function notionUpdateTask_(pageId, fields) {
   return { ok: true, task: notionTaskFromPage_(JSON.parse(response.getContentText())) };
 }
 
+// "Delete" = archive (Notion's own trash, recoverable there) — the REST API
+// doesn't offer a permanent-delete action, and archived:true is exactly
+// what clicking Delete in the Notion UI does.
+function notionDeleteTask_(pageId) {
+  var notionToken = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
+  if (!notionToken) return { error: 'notion not configured' };
+
+  var response = UrlFetchApp.fetch('https://api.notion.com/v1/pages/' + pageId, {
+    method: 'patch',
+    contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + notionToken, 'Notion-Version': '2022-06-28' },
+    payload: JSON.stringify({ archived: true }),
+    muteHttpExceptions: true,
+  });
+
+  if (response.getResponseCode() !== 200) return { error: 'notion api error: ' + response.getContentText() };
+  return { ok: true };
+}
+
 function notionQueryTasks_() {
   var props = PropertiesService.getScriptProperties();
   var notionToken = props.getProperty('NOTION_TOKEN');
@@ -368,6 +387,10 @@ function doPost(e) {
 
   if (body.action === 'notion-update-task') {
     return jsonOut_(notionUpdateTask_(body.pageId, body.fields));
+  }
+
+  if (body.action === 'notion-delete-task') {
+    return jsonOut_(notionDeleteTask_(body.pageId));
   }
 
   var lock = LockService.getScriptLock();
