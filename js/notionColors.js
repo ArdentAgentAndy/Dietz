@@ -18,3 +18,25 @@ const NOTION_COLOR_HEX = {
 export function hexForNotionColor(color) {
   return NOTION_COLOR_HEX[color] || NOTION_COLOR_HEX.default;
 }
+
+// Course -> Notion color name, matching the Course select property's actual
+// colors in the Main database — kept in sync manually since Canvas events
+// (unlike Notion tasks) carry no color of their own, and the Canvas tab
+// should still look consistent with the Notion-backed Calendar tab.
+const COURSE_COLOR_NAME = {
+  'MATH 241': 'green',
+  'CS 124': 'purple',
+  'ENG 100': 'yellow',
+  'AE 100': 'gray',
+  'TE 200': 'orange',
+  'CLCV 115': 'red',
+  'AFST 112': 'brown',
+  'MATH 231': 'pink',
+  'CS 101': 'purple',
+  'PHYS 211': 'blue',
+  'AE 140': 'default',
+};
+
+export function hexForCourse(course) {
+  return hexForNotionColor(COURSE_COLOR_NAME[course]);
+}

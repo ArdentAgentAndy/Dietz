@@ -134,7 +134,62 @@ function doGet(e) {
     return jsonOut_(notionQueryTasks_());
   }
 
+  if (e.parameter.action === 'canvas-events') {
+    return jsonOut_(canvasEvents_());
+  }
+
   return jsonOut_({ error: 'unknown action' });
+}
+
+// --- Canvas (Google Calendar) proxy ------------------------------------
+// Separate from Notion entirely. Apps Script has built-in access to
+// Google Calendar for whichever account owns this script — no OAuth/token
+// setup needed, unlike Notion. CANVAS_CALENDAR_ID is a Script Property
+// (not secret, just keeps the personal calendar ID out of the public repo).
+
+// Canvas titles end in "[subject_number_term_assignmentid]" — strip it for
+// a clean task name, and separately parse "subject number" as the course.
+function canvasStripTitle_(title) {
+  return title.replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+}
+
+function canvasParseCourse_(title) {
+  var m = title.match(/\[([a-zA-Z]+)_([a-zA-Z0-9]+)_/);
+  if (!m) return '';
+  return m[1].toUpperCase() + ' ' + m[2].toUpperCase();
+}
+
+// Canvas represents a due date as a zero-duration event at that moment.
+function canvasEventDeadline_(event) {
+  if (event.isAllDayEvent()) {
+    return Utilities.formatDate(event.getAllDayStartDate(), 'UTC', 'yyyy-MM-dd');
+  }
+  return event.getStartTime().toISOString();
+}
+
+function canvasEvents_() {
+  var calendarId = PropertiesService.getScriptProperties().getProperty('CANVAS_CALENDAR_ID');
+  if (!calendarId) return { error: 'canvas calendar not configured', events: [] };
+
+  var calendar = CalendarApp.getCalendarById(calendarId);
+  if (!calendar) return { error: 'canvas calendar not found', events: [] };
+
+  var start = new Date();
+  start.setDate(start.getDate() - 30);
+  var end = new Date();
+  end.setDate(end.getDate() + 180);
+
+  var events = calendar.getEvents(start, end).map(function (e) {
+    var title = e.getTitle();
+    return {
+      id: e.getId(),
+      name: canvasStripTitle_(title),
+      course: canvasParseCourse_(title),
+      deadline: canvasEventDeadline_(e),
+    };
+  });
+
+  return { events: events };
 }
 
 // --- Notion proxy -----------------------------------------------------
@@ -205,6 +260,7 @@ function notionTaskFromPage_(page) {
     task: propSelect_(p.Task),
     select: propSelect_(p.Select),
     date: propDate_(p.Date),
+    deadline: propDate_(p.Deadline),
     duration: propNumber_(p.Duration),
     location: propRichText_(p.Location),
     room: propRichText_(p.Room),
@@ -266,6 +322,9 @@ function notionFieldsToProperties_(fields) {
       if (fields.dateEnd) dateValue.end = fields.dateEnd;
       properties.Date = { date: dateValue };
     }
+  }
+  if ('deadline' in fields) {
+    properties.Deadline = fields.deadline ? { date: { start: fields.deadline } } : { date: null };
   }
   if ('mark' in fields) properties['?'] = { checkbox: Boolean(fields.mark) };
   if ('urgent' in fields) properties.Urgent = { checkbox: Boolean(fields.urgent) };

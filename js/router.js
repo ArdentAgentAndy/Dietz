@@ -1,10 +1,11 @@
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/home.js?v=1') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=1') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=1'), params: ['id'] },
-  { pattern: /^\/classes$/, load: () => import('./views/classes.js?v=1') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=1') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=1') },
+  { pattern: /^\/$/, load: () => import('./views/home.js?v=2') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=2') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=2'), params: ['id'] },
+  { pattern: /^\/classes$/, load: () => import('./views/classes.js?v=2') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=2') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=2') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=2') },
 ];
 
 function currentPath() {

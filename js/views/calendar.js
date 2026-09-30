@@ -1,6 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask } from '../notion.js?v=1';
-import { hexForNotionColor } from '../notionColors.js?v=1';
-import { escapeHtml, hexToRgba } from '../format.js?v=1';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask } from '../notion.js?v=2';
+import { hexForNotionColor } from '../notionColors.js?v=2';
+import { escapeHtml, hexToRgba } from '../format.js?v=2';
+import { takePendingSchedule, setPendingHighlight } from '../canvas.js?v=2';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
@@ -79,6 +80,12 @@ let saveError = null;
 
 let draggedTaskId = null;
 
+// Set on mount if we arrived here from a Canvas card click (see render()
+// below) — while non-null, day columns/cells become click targets that
+// create a linked Homework task instead of their normal behavior.
+let schedulingItem = null;
+let schedulingError = null;
+
 function isFieldActive(task, kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
   return activeHighlight === kind ? pending.has(task.id) : Boolean(task[cfg.field]);
@@ -123,6 +130,8 @@ function taskDay(task) {
 export function render(rootEl) {
   container = rootEl;
   container.closest('#app')?.classList.add('app-wide');
+  schedulingItem = takePendingSchedule();
+  schedulingError = null;
 
   // Cache-first: render whatever we already have instantly (no "Loading…"
   // flash on every tab switch/reload), then silently refresh in the background.
@@ -152,6 +161,29 @@ async function load() {
   allTasks = tasks.filter((t) => t.category !== 'Lesson');
   loadError = error;
   rebuild();
+}
+
+// Commits the pending Canvas item as a new Homework task: Date = the day
+// clicked, Deadline = Canvas's own due date (kept separate — see the
+// deadline/link row in taskChipHtml). Returns to the Canvas tab on success.
+async function scheduleCanvasTask(day) {
+  if (!schedulingItem || !day) return;
+
+  const item = schedulingItem;
+  const result = await createTask({
+    name: item.name,
+    category: 'Homework',
+    course: item.course || '',
+    date: day,
+    deadline: item.deadline || '',
+  });
+
+  if (result.ok) {
+    location.hash = '/canvas';
+  } else {
+    schedulingError = result.error || 'Failed to add task';
+    rebuild();
+  }
 }
 
 // Dropping a card onto a day changes only the date part of its Date
@@ -303,6 +335,11 @@ function shapeEmblemHtml(task, catColor) {
   return `<span class="cal-chip-shape shape-${shape}" style="background:${catColor};"></span>`;
 }
 
+function shortDate(dateStr) {
+  const d = dateStr.length > 10 ? new Date(dateStr) : new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function taskChipHtml(task) {
   const config = SUB_FILTER_BY_CATEGORY[task.category];
   const subValue = config ? task[config.prop] : '';
@@ -315,25 +352,38 @@ function taskChipHtml(task) {
   const done = isFieldActive(task, 'completed');
   const urgent = isFieldActive(task, 'urgent');
   const showDecoration = !done && !urgent && !categoryFilter;
+  const hasDeadline = Boolean(task.deadline?.start);
   const classes = [
     'cal-chip',
     done ? 'is-done' : '',
     activeHighlight ? 'is-highlightable' : 'is-editable',
     urgent && !done ? 'is-urgent' : '',
     showDecoration ? 'has-line' : '',
+    hasDeadline ? 'has-deadline' : '',
   ].filter(Boolean).join(' ');
 
   // The meta span is always rendered, even empty — it reserves its line's
   // height so a duration-less task's title can't grow into that space.
   // Draggable only outside a highlight mode — dragging a card onto a
   // different day/cell reschedules it (see attachEvents' drop handler).
+  // The deadline/link row (from a Canvas-linked task — see scheduleCanvasTask)
+  // sits just above the center line; clicking the link glyph jumps back to
+  // the Canvas tab and flashes the matching card there.
   return `
     <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}" draggable="${activeHighlight ? 'false' : 'true'}">
       <span class="cal-chip-name">${escapeHtml(task.name || 'Untitled')}</span>
-      <div class="cal-chip-bottom-row">
-        ${showDecoration ? shapeEmblemHtml(task, catColor) : ''}
-        ${subValue ? `<span class="cal-chip-sub-badge" style="border-color:${hexToRgba(subColor, 0.6)}; background:${hexToRgba(subColor, 0.18)}; color:${subColor};">${escapeHtml(subValue)}</span>` : ''}
-        <span class="cal-chip-meta mono">${escapeHtml(meta)}</span>
+      <div class="cal-chip-bottom-stack">
+        ${hasDeadline ? `
+          <div class="cal-chip-deadline-row mono">
+            <span>${escapeHtml(shortDate(task.deadline.start))}</span>
+            <span class="cal-chip-link" data-link-name="${escapeHtml(task.name)}" title="Back to Canvas">&#8599;</span>
+          </div>
+        ` : ''}
+        <div class="cal-chip-bottom-row">
+          ${showDecoration ? shapeEmblemHtml(task, catColor) : ''}
+          ${subValue ? `<span class="cal-chip-sub-badge" style="border-color:${hexToRgba(subColor, 0.6)}; background:${hexToRgba(subColor, 0.18)}; color:${subColor};">${escapeHtml(subValue)}</span>` : ''}
+          <span class="cal-chip-meta mono">${escapeHtml(meta)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -609,6 +659,13 @@ function rebuild() {
         </div>
       </div>
       ${saveError ? `<p class="muted" style="color:var(--red); margin-top:8px;">Couldn't save: ${escapeHtml(saveError)}</p>` : ''}
+      ${schedulingItem ? `
+        <div class="row-between" style="margin-top:8px; padding:8px 10px; background:var(--accent-dim); border-radius:var(--radius-sm);">
+          <span class="mono">Pick a day for: ${escapeHtml(schedulingItem.name)}</span>
+          <button data-action="cancel-schedule">Cancel</button>
+        </div>
+      ` : ''}
+      ${schedulingError ? `<p class="muted" style="color:var(--red); margin-top:8px;">Couldn't add task: ${escapeHtml(schedulingError)}</p>` : ''}
 
       <div class="row-between" style="margin-top:12px;">
         <div class="range-toggle">
@@ -713,6 +770,14 @@ function attachEvents() {
     });
   }
 
+  container.querySelectorAll('.cal-chip-link').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation(); // don't also trigger the card's own click-to-edit
+      setPendingHighlight(el.dataset.linkName);
+      location.hash = '/canvas';
+    });
+  });
+
   container.querySelectorAll('.cal-chip[draggable="true"]').forEach((el) => {
     el.addEventListener('dragstart', () => {
       draggedTaskId = el.dataset.taskId;
@@ -736,6 +801,18 @@ function attachEvents() {
       el.classList.remove('is-drop-target');
       if (draggedTaskId) moveTaskToDate(draggedTaskId, el.dataset.date);
     });
+
+    if (schedulingItem) {
+      el.classList.add('is-schedulable');
+      el.addEventListener('mouseenter', () => el.classList.add('is-drop-target'));
+      el.addEventListener('mouseleave', () => el.classList.remove('is-drop-target'));
+      el.addEventListener('click', () => scheduleCanvasTask(el.dataset.date));
+    }
+  });
+
+  container.querySelector('[data-action="cancel-schedule"]')?.addEventListener('click', () => {
+    schedulingItem = null;
+    rebuild();
   });
 
   container.querySelectorAll('[data-category]').forEach((btn) => {

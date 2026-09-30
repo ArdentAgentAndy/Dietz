@@ -1,7 +1,7 @@
-import './store.js?v=1';
-import { initRouter } from './router.js?v=1';
-import { initSync } from './sync.js?v=1';
-import { compactOldSessions } from './compaction.js?v=1';
+import './store.js?v=2';
+import { initRouter } from './router.js?v=2';
+import { initSync } from './sync.js?v=2';
+import { compactOldSessions } from './compaction.js?v=2';
 
 compactOldSessions();
 initRouter();
