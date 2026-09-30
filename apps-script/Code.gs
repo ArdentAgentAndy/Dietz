@@ -35,28 +35,41 @@ function getSheet_(name) {
 // it. Prefixing with an apostrophe is Sheets' own documented way to force
 // literal text; the apostrophe itself never appears when reading the value
 // back, so no read-side unwrapping is needed.
-function isDateLikeColumn_(col) {
-  return /date|start|end/i.test(col);
+function isDateLikeColumn_(tableName, col) {
+  // Settings' single 'value' column holds arbitrary strings (URLs, tokens,
+  // dates) — Sheets will just as happily auto-parse "2026-08-25" there as
+  // anywhere else, so it always needs the literal-text guard too.
+  return tableName === 'Settings' || /date|start|end/i.test(col);
 }
 
-function forSheetValue_(col, value) {
-  if (isDateLikeColumn_(col) && value !== '' && value !== undefined && value !== null) {
+function forSheetValue_(tableName, col, value) {
+  if (isDateLikeColumn_(tableName, col) && value !== '' && value !== undefined && value !== null) {
     return "'" + value;
   }
   return value;
 }
 
+// Tables keyed by something other than 'id' (Settings: 'key'; CourseState:
+// 'courseId'+'key') don't have an id column in the Sheet at all — the
+// frontend synthesizes one (see setSetting/rowId) so its generic
+// store.upsert(match-by-id) works. That synthetic id must be rebuilt here
+// on every read, or it's lost after the first bootstrap pull and the next
+// edit silently creates a duplicate row instead of updating the existing one.
 function readTable_(name) {
   var sheet = getSheet_(name);
   var values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
   var headers = values[0];
+  var keyCols = TABLES[name].key;
 
   return values.slice(1)
     .filter(function (row) { return row.some(function (v) { return v !== ''; }); })
     .map(function (row) {
       var obj = {};
       headers.forEach(function (h, i) { obj[h] = row[i]; });
+      if (!('id' in obj)) {
+        obj.id = keyCols.map(function (k) { return obj[k]; }).join(':');
+      }
       return obj;
     });
 }
@@ -77,7 +90,7 @@ function upsertRow_(tableName, row) {
   var sheet = getSheet_(tableName);
   var headers = config.columns;
   var keyValues = config.key.map(function (k) { return row[k]; });
-  var rowArray = headers.map(function (h) { return forSheetValue_(h, row[h] !== undefined ? row[h] : ''); });
+  var rowArray = headers.map(function (h) { return forSheetValue_(tableName, h, row[h] !== undefined ? row[h] : ''); });
 
   var foundRow = findRow_(sheet, headers, config.key, keyValues);
   if (foundRow > 0) {
@@ -117,7 +130,112 @@ function doGet(e) {
     return jsonOut_(data);
   }
 
+  if (e.parameter.action === 'notion-tasks') {
+    return jsonOut_(notionQueryTasks_());
+  }
+
   return jsonOut_({ error: 'unknown action' });
+}
+
+// --- Notion proxy -----------------------------------------------------
+// Phase 1 (view only): the frontend calls this same Apps Script backend
+// (already gated by the TOKEN above) to read tasks from a Notion database.
+// The Notion integration secret lives only in Script Properties as
+// NOTION_TOKEN — it never reaches the frontend or localStorage.
+
+function propTitle_(prop) {
+  return ((prop && prop.title) || []).map(function (t) { return t.plain_text; }).join('');
+}
+
+function propRichText_(prop) {
+  return ((prop && prop.rich_text) || []).map(function (t) { return t.plain_text; }).join('');
+}
+
+function propSelect_(prop) {
+  return (prop && prop.select) ? prop.select.name : '';
+}
+
+function propStatus_(prop) {
+  return (prop && prop.status) ? prop.status.name : '';
+}
+
+function propCheckbox_(prop) {
+  return Boolean(prop && prop.checkbox);
+}
+
+function propNumber_(prop) {
+  return (prop && prop.number != null) ? prop.number : null;
+}
+
+function propDate_(prop) {
+  if (!prop || !prop.date) return null;
+  return { start: prop.date.start, end: prop.date.end || null };
+}
+
+function notionTaskFromPage_(page) {
+  var p = page.properties;
+  return {
+    id: page.id,
+    url: page.url,
+    name: propTitle_(p.Name),
+    category: propStatus_(p.Category),
+    course: propSelect_(p.Course),
+    class: propSelect_(p.Class),
+    project: propSelect_(p.Project),
+    type: propSelect_(p.Type),
+    task: propSelect_(p.Task),
+    select: propSelect_(p.Select),
+    date: propDate_(p.Date),
+    duration: propNumber_(p.Duration),
+    location: propRichText_(p.Location),
+    room: propRichText_(p.Room),
+    credit: propRichText_(p.Credit),
+    score: propRichText_(p.Score),
+    display: propCheckbox_(p.Display),
+    mark: propCheckbox_(p['?']),
+  };
+}
+
+function notionQueryTasks_() {
+  var props = PropertiesService.getScriptProperties();
+  var notionToken = props.getProperty('NOTION_TOKEN');
+  var databaseId = props.getProperty('NOTION_DATABASE_ID');
+  if (!notionToken || !databaseId) {
+    return { error: 'notion not configured', tasks: [] };
+  }
+
+  var tasks = [];
+  var cursor = null;
+  var maxPages = 10; // 10 * 100 rows = 1000 rows ceiling, plenty for this database
+
+  for (var i = 0; i < maxPages; i++) {
+    var payload = { page_size: 100 };
+    if (cursor) payload.start_cursor = cursor;
+
+    var response = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + databaseId + '/query', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: 'Bearer ' + notionToken,
+        'Notion-Version': '2022-06-28',
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+
+    var code = response.getResponseCode();
+    if (code !== 200) {
+      return { error: 'notion api error ' + code + ': ' + response.getContentText(), tasks: tasks };
+    }
+
+    var body = JSON.parse(response.getContentText());
+    tasks = tasks.concat(body.results.map(notionTaskFromPage_));
+
+    if (!body.has_more) break;
+    cursor = body.next_cursor;
+  }
+
+  return { tasks: tasks };
 }
 
 function doPost(e) {

@@ -19,6 +19,13 @@ function getSetting(key) {
   return store.table('Settings').find((s) => s.key === key)?.value ?? '';
 }
 
+// <input type="date"> only accepts an exact YYYY-MM-DD value — a stale row
+// written before the backend's literal-text guard existed can still hold a
+// full datetime string, which the input would otherwise silently blank out.
+function getDateSetting(key) {
+  return getSetting(key).slice(0, 10);
+}
+
 function setSetting(key, value) {
   store.upsert('Settings', { id: key, key, value });
 }
@@ -63,8 +70,8 @@ function rebuild() {
       <h2 class="mono">Semester</h2>
       <p class="muted">Used for the "Semester" range on the hours graph.</p>
       <div class="field-row">
-        <label>Start date <input type="date" data-setting="semesterStart" value="${getSetting('semesterStart')}"></label>
-        <label>End date <input type="date" data-setting="semesterEnd" value="${getSetting('semesterEnd')}"></label>
+        <label>Start date <input type="date" data-setting="semesterStart" value="${getDateSetting('semesterStart')}"></label>
+        <label>End date <input type="date" data-setting="semesterEnd" value="${getDateSetting('semesterEnd')}"></label>
       </div>
     </section>
 

@@ -156,13 +156,6 @@ function rebuild() {
     </section>
 
     <section class="card">
-      <details class="archived-details">
-        <summary><h2 class="mono">Archived${archived.length ? ` (${archived.length})` : ''}</h2></summary>
-        <div class="archived-grid">${archived.length ? archived.map(archivedSessionRowHtml).join('') : '<p class="muted">Nothing archived yet.</p>'}</div>
-      </details>
-    </section>
-
-    <section class="card">
       <div class="row-between">
         <h2 class="mono">Recent sessions</h2>
         <button data-action="manual-entry">+ Manual entry</button>
@@ -181,6 +174,13 @@ function rebuild() {
     </section>
 
     ${coursesAndGpaHtml()}
+
+    <section class="card">
+      <details class="archived-details">
+        <summary><h2 class="mono">Archived${archived.length ? ` (${archived.length})` : ''}</h2></summary>
+        <div class="archived-grid">${archived.length ? archived.map(archivedSessionRowHtml).join('') : '<p class="muted">Nothing archived yet.</p>'}</div>
+      </details>
+    </section>
 
     <dialog id="modal-dialog"></dialog>
   `;
