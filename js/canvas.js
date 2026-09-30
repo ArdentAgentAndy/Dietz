@@ -40,9 +40,9 @@ export async function fetchCanvasEvents() {
 // Cross-page handoff, since navigating between #/canvas and #/calendar
 // unmounts one view's module state entirely. Both views import this same
 // module instance to pass a "pending" item across that boundary.
-let pendingSchedule = null; // { name, course, deadline } | null
-let pendingHighlightName = null; // string | null — Canvas item to flash on return
-let pendingCalendarHighlightName = null; // string | null — task to flash on the Calendar tab
+let pendingSchedule = null; // { id, name, course, deadline } | null — id is the Canvas event's own id
+let pendingHighlightEventId = null; // string | null — Canvas event id to flash on return
+let pendingCalendarHighlightTaskId = null; // string | null — Notion task id to flash on the Calendar tab
 
 export function setPendingSchedule(item) {
   pendingSchedule = item;
@@ -54,25 +54,25 @@ export function takePendingSchedule() {
   return item;
 }
 
-export function setPendingHighlight(name) {
-  pendingHighlightName = name;
+export function setPendingHighlight(eventId) {
+  pendingHighlightEventId = eventId;
 }
 
 export function takePendingHighlight() {
-  const name = pendingHighlightName;
-  pendingHighlightName = null;
-  return name;
+  const eventId = pendingHighlightEventId;
+  pendingHighlightEventId = null;
+  return eventId;
 }
 
 // Clicking an already-linked Canvas card jumps to its existing Calendar
 // task instead of letting you create a duplicate — see canvas.js's click
 // handler and calendar.js's applyPendingCalendarHighlight.
-export function setPendingCalendarHighlight(name) {
-  pendingCalendarHighlightName = name;
+export function setPendingCalendarHighlight(taskId) {
+  pendingCalendarHighlightTaskId = taskId;
 }
 
 export function takePendingCalendarHighlight() {
-  const name = pendingCalendarHighlightName;
-  pendingCalendarHighlightName = null;
-  return name;
+  const taskId = pendingCalendarHighlightTaskId;
+  pendingCalendarHighlightTaskId = null;
+  return taskId;
 }

@@ -8,7 +8,7 @@ const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 let container = null;
 let allEvents = [];
-let taskByName = new Map(); // event name -> matching Notion task, only for linked events (deadline set)
+let taskByCanvasId = new Map(); // canvas event id -> matching Notion task, only for linked events (deadline set)
 let loadError = null;
 
 let viewMode = 'week'; // 'week' | 'month'
@@ -206,7 +206,7 @@ export function render(rootEl) {
   const cachedTasks = getCachedNotionTasks();
   if (cachedEvents.length) {
     allEvents = cachedEvents;
-    taskByName = computeTaskByName(cachedTasks);
+    taskByCanvasId = computeTaskByCanvasId(cachedTasks);
     loadError = null;
     rebuild();
   } else {
@@ -229,9 +229,9 @@ export function unmount() {
   keyNavFocusId = null;
 }
 
-function computeTaskByName(tasks) {
+function computeTaskByCanvasId(tasks) {
   const map = new Map();
-  for (const t of tasks) if (t.deadline?.start) map.set(t.name, t);
+  for (const t of tasks) if (t.canvasId && t.deadline?.start) map.set(t.canvasId, t);
   return map;
 }
 
@@ -240,7 +240,7 @@ async function load() {
   if (!container) return;
   if (eventsResult.error && getCachedCanvasEvents().length) return; // keep showing cached data
   allEvents = eventsResult.events;
-  taskByName = computeTaskByName(tasksResult.tasks.length ? tasksResult.tasks : getCachedNotionTasks());
+  taskByCanvasId = computeTaskByCanvasId(tasksResult.tasks.length ? tasksResult.tasks : getCachedNotionTasks());
   loadError = eventsResult.error;
   rebuild();
 }
@@ -264,7 +264,7 @@ function availableCourseGroups() {
 function visibleEvents() {
   return allEvents.filter((e) => {
     if (courseFilter && e.course !== courseFilter) return false;
-    if (hideCompleted && taskByName.get(e.name)?.mark) return false;
+    if (hideCompleted && taskByCanvasId.get(e.id)?.mark) return false;
     return true;
   });
 }
@@ -296,8 +296,12 @@ function eventChipStyle(color, task) {
 
 function eventChipHtml(event) {
   const color = hexForCourse(event.course);
-  const task = taskByName.get(event.name);
+  const task = taskByCanvasId.get(event.id);
   const isLinked = Boolean(task);
+  // Once linked, show the Calendar task's own name instead of Canvas's raw
+  // scraped title — neither side's actual Name is ever touched by linking
+  // (see linkCanvasTaskToExisting), so this is purely a display preference.
+  const displayName = task?.name || event.name;
   const done = isFieldActive(task, 'completed');
   const time = event.deadline?.length > 10
     ? new Date(event.deadline).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -325,9 +329,9 @@ function eventChipHtml(event) {
   const isPendingSelected = activeHighlight && task && pending.has(task.id) && touchedThisSession.has(task.id);
 
   return `
-    <div class="cal-chip ${interactionClass}${done ? ' is-done' : ''}${isLinked ? ' has-deadline' : ''}${isPendingSelected ? ' is-pending-selected' : ''}" style="${eventChipStyle(color, task)}" title="${escapeHtml(title)}" data-name="${escapeHtml(event.name)}" data-course="${escapeHtml(event.course)}" data-deadline="${escapeHtml(event.deadline || '')}" data-task-id="${escapeHtml(task?.id || '')}">
+    <div class="cal-chip ${interactionClass}${done ? ' is-done' : ''}${isLinked ? ' has-deadline' : ''}${isPendingSelected ? ' is-pending-selected' : ''}" style="${eventChipStyle(color, task)}" title="${escapeHtml(title)}" data-name="${escapeHtml(event.name)}" data-event-id="${escapeHtml(event.id)}" data-course="${escapeHtml(event.course)}" data-deadline="${escapeHtml(event.deadline || '')}" data-task-id="${escapeHtml(task?.id || '')}">
       <span class="cal-chip-ants"></span>
-      <span class="cal-chip-name">${escapeHtml(event.name)}</span>
+      <span class="cal-chip-name">${escapeHtml(displayName)}</span>
       <div class="cal-chip-bottom-stack">
         <div class="cal-chip-bottom-row">
           <span class="cal-chip-sub-badge" style="border-color:${hexToRgba(color, 0.6)}; background:${hexToRgba(color, 0.18)}; color:${color};">${escapeHtml(event.course || '—')}</span>
@@ -435,7 +439,7 @@ function toggleHighlight(kind) {
   if (activeHighlight !== kind) {
     activeHighlight = kind;
     const field = HIGHLIGHT_KINDS[kind].field;
-    pending = new Set([...taskByName.values()].filter((t) => t[field]).map((t) => t.id));
+    pending = new Set([...taskByCanvasId.values()].filter((t) => t[field]).map((t) => t.id));
     touchedThisSession = new Set();
     rebuild();
   } else {
@@ -445,7 +449,7 @@ function toggleHighlight(kind) {
 
 async function saveHighlight(kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
-  const linkedTasks = [...taskByName.values()];
+  const linkedTasks = [...taskByCanvasId.values()];
   const changed = linkedTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
 
   if (!changed.length) {
@@ -486,25 +490,30 @@ function toggleUnlinkMode() {
   rebuild();
 }
 
-// Immediate (optimistic) unlink — clears the task's Deadline. No confirm
-// step; relinking from the Canvas card again is just as easy.
+// Immediate (optimistic) unlink — clears the task's Deadline and CanvasId
+// (the latter is what taskByCanvasId matches on; leaving it behind would
+// make this task look linked again the moment a new deadline was set). No
+// confirm step; relinking from the Canvas card again is just as easy.
 async function unlinkTask(taskId) {
   if (!taskId || unlinking) return;
-  const task = [...taskByName.values()].find((t) => t.id === taskId);
+  const task = [...taskByCanvasId.values()].find((t) => t.id === taskId);
   if (!task) return;
 
   const prevDeadline = task.deadline;
+  const prevCanvasId = task.canvasId;
   task.deadline = null;
+  task.canvasId = '';
   unlinking = true;
   rebuild();
 
-  const result = await updateTask(taskId, { deadline: '' });
+  const result = await updateTask(taskId, { deadline: '', canvasId: '' });
 
   if (result.ok) {
-    patchCachedNotionTask(taskId, { deadline: null });
+    patchCachedNotionTask(taskId, { deadline: null, canvasId: '' });
     saveError = null;
   } else {
     task.deadline = prevDeadline;
+    task.canvasId = prevCanvasId;
     saveError = result.error || 'Failed to unlink task';
   }
 
@@ -665,12 +674,14 @@ function attachEvents() {
       el.addEventListener('click', () => {
         // Already linked — jump to the existing Calendar task instead of
         // letting another click create a duplicate.
-        if (taskByName.has(el.dataset.name)) {
-          setPendingCalendarHighlight(el.dataset.name);
+        const linkedTask = taskByCanvasId.get(el.dataset.eventId);
+        if (linkedTask) {
+          setPendingCalendarHighlight(linkedTask.id);
           location.hash = '/calendar';
           return;
         }
         setPendingSchedule({
+          id: el.dataset.eventId,
           name: el.dataset.name,
           course: el.dataset.course,
           deadline: el.dataset.deadline,
@@ -685,9 +696,9 @@ function attachEvents() {
 // on a Calendar card (see calendar.js) — flashes a dashed outline on the
 // matching card so it's easy to spot again.
 function applyPendingHighlight() {
-  const name = takePendingHighlight();
-  if (!name || !container) return;
-  const match = [...container.querySelectorAll('.cal-chip')].find((el) => el.dataset.name === name);
+  const eventId = takePendingHighlight();
+  if (!eventId || !container) return;
+  const match = [...container.querySelectorAll('.cal-chip')].find((el) => el.dataset.eventId === eventId);
   if (!match) return;
   match.classList.add('is-highlighted');
   match.scrollIntoView({ behavior: 'smooth', block: 'center' });

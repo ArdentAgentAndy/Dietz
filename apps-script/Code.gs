@@ -269,6 +269,11 @@ function notionTaskFromPage_(page) {
     select: propSelect_(p.Select),
     date: propDate_(p.Date),
     deadline: propDate_(p.Deadline),
+    // Canvas's own stable event id (Google Calendar event id), stamped on a
+    // task when it's linked from the Canvas tab — the match Canvas uses to
+    // find its way back to this task, independent of either side's Name
+    // (see notionFieldsToProperties_ below and canvas.js's taskByCanvasId).
+    canvasId: propRichText_(p.CanvasId),
     duration: propNumber_(p.Duration),
     location: propRichText_(p.Location),
     room: propRichText_(p.Room),
@@ -333,6 +338,9 @@ function notionFieldsToProperties_(fields) {
   }
   if ('deadline' in fields) {
     properties.Deadline = fields.deadline ? { date: { start: fields.deadline } } : { date: null };
+  }
+  if ('canvasId' in fields) {
+    properties.CanvasId = { rich_text: fields.canvasId ? [{ text: { content: fields.canvasId } }] : [] };
   }
   if ('mark' in fields) properties['?'] = { checkbox: Boolean(fields.mark) };
   if ('urgent' in fields) properties.Urgent = { checkbox: Boolean(fields.urgent) };

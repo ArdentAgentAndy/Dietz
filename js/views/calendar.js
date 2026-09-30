@@ -384,6 +384,7 @@ async function scheduleCanvasTask(day) {
     course: item.course || '',
     date: day,
     deadline: item.deadline || '',
+    canvasId: item.id,
   });
 
   if (result.ok) {
@@ -397,12 +398,11 @@ async function scheduleCanvasTask(day) {
 }
 
 // Linking to an existing task instead of creating a new one — sets that
-// task's Deadline to the Canvas item's due date. Also renames the task to
-// match the Canvas item's name: Canvas's own page matches an event to its
-// linked task purely by exact name (see taskByName in canvas.js), so a task
-// left under its old name would never show as linked back on Canvas — no
-// corner marker, "hide completed" blind to it, and the link glyph unable to
-// find it to jump back to.
+// task's Deadline to the Canvas item's due date and stamps its CanvasId so
+// Canvas can find its way back (see taskByCanvasId in canvas.js). Deliberately
+// never touches either side's Name — a task you already gave its own name
+// keeps it, and Canvas will display that name instead of its own scraped
+// title once linked (see eventChipHtml's displayName).
 async function linkCanvasTaskToExisting(taskId) {
   if (!schedulingItem || schedulingBusy) return;
 
@@ -410,7 +410,7 @@ async function linkCanvasTaskToExisting(taskId) {
   rebuild();
 
   const item = schedulingItem;
-  const result = await updateTask(taskId, { name: item.name, deadline: item.deadline || '' });
+  const result = await updateTask(taskId, { canvasId: item.id, deadline: item.deadline || '' });
 
   if (result.ok) {
     if (result.task) patchCachedNotionTask(taskId, result.task);
@@ -642,7 +642,7 @@ function taskChipHtml(task) {
             <span>${escapeHtml(shortDate(task.deadline.start))}</span>
             ${shortTime(task.deadline.start) ? `<span>${escapeHtml(shortTime(task.deadline.start))}</span>` : ''}
           </span>
-          <span class="cal-chip-link" data-link-name="${escapeHtml(task.name)}" title="Back to Canvas">&#128279;</span>
+          ${task.canvasId ? `<span class="cal-chip-link" data-link-canvas-id="${escapeHtml(task.canvasId)}" title="Back to Canvas">&#128279;</span>` : ''}
         </div>
       ` : ''}
       <div class="cal-chip-bottom-stack">
@@ -1082,16 +1082,16 @@ function rebuild() {
 // anchor to that task's date (guaranteeing it's actually rendered, since
 // it could be far outside the currently displayed week/month) and flash it.
 function applyPendingCalendarHighlight() {
-  const name = takePendingCalendarHighlight();
-  if (!name) return;
-  const task = allTasks.find((t) => t.name === name);
+  const taskId = takePendingCalendarHighlight();
+  if (!taskId) return;
+  const task = allTasks.find((t) => t.id === taskId);
   if (!task) return;
 
   if (task.date?.start) {
     const start = task.date.start.length > 10 ? task.date.start : `${task.date.start}T00:00:00`;
     anchor = startOfDay(new Date(start));
     // Re-render at the corrected date. Its own end-of-rebuild call to this
-    // function no-ops (the pending name is already consumed above), so
+    // function no-ops (the pending id is already consumed above), so
     // finding/flashing the chip continues right after, against fresh DOM.
     rebuild();
   }
@@ -1173,7 +1173,7 @@ function attachEvents() {
   container.querySelectorAll('.cal-chip-link').forEach((el) => {
     el.addEventListener('click', (e) => {
       e.stopPropagation(); // don't also trigger the card's own click-to-edit
-      setPendingHighlight(el.dataset.linkName);
+      setPendingHighlight(el.dataset.linkCanvasId);
       location.hash = '/canvas';
     });
   });
