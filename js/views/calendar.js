@@ -300,6 +300,14 @@ export function render(rootEl) {
   container.closest('#app')?.classList.add('app-wide');
   schedulingItem = takePendingSchedule();
   schedulingError = null;
+  // schedulingBusy is module-level state that outlives this mount (a
+  // successful link/schedule navigates away via location.hash without ever
+  // clearing it — see linkCanvasTaskToExisting/scheduleCanvasTask) — reset
+  // it here so a second linking attempt doesn't inherit "stuck saving" from
+  // the first and silently disable both the day-click and purple
+  // link-target handlers (see canLinkTarget / the schedulingItem hover
+  // block in attachEvents).
+  schedulingBusy = false;
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('mousemove', trackMouse);
 
