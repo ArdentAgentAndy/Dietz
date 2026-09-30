@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=14';
-import { hexForNotionColor } from '../notionColors.js?v=14';
-import { escapeHtml, hexToRgba } from '../format.js?v=14';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=14';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=15';
+import { hexForNotionColor } from '../notionColors.js?v=15';
+import { escapeHtml, hexToRgba } from '../format.js?v=15';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=15';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
@@ -63,6 +63,7 @@ let anchor = startOfDay(new Date());
 let categoryFilter = '';
 let subFilter = '';
 let hideCompleted = false;
+let searchQuery = '';
 
 // Highlight-and-save write-back: press "Highlight urgent"/"Mark completed"
 // to start marking cards (click toggles membership in `pending`, a local
@@ -159,6 +160,14 @@ function taskDay(task) {
 function isTypingTarget() {
   const tag = document.activeElement?.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+// 'F' keybind — jumps focus into the search box and selects any existing
+// text, so typing immediately replaces it (same idea as '/' search in a lot
+// of other apps).
+function focusSearch() {
+  const el = container?.querySelector('[data-action="search"]');
+  if (el) { el.focus(); el.select(); }
 }
 
 function trackMouse(e) {
@@ -279,6 +288,7 @@ function onKeyDown(e) {
 
   switch (e.key) {
     case '+': case '=': openTaskDialog(null, hoveredDate || undefined); break;
+    case 'f': case 'F': focusSearch(); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
@@ -534,6 +544,7 @@ function subValueColorHex(category, value) {
 }
 
 function visibleTasks() {
+  const q = searchQuery.trim().toLowerCase();
   return allTasks.filter((t) => {
     if (hideCompleted && t.mark) return false;
     if (categoryFilter && t.category !== categoryFilter) return false;
@@ -541,6 +552,7 @@ function visibleTasks() {
       const config = SUB_FILTER_BY_CATEGORY[categoryFilter];
       if (config && t[config.prop] !== subFilter) return false;
     }
+    if (q && !(t.name || '').toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -1020,6 +1032,13 @@ function rebuild() {
   const subLabel = SUB_FILTER_BY_CATEGORY[categoryFilter]?.label;
   const tasks = visibleTasks();
 
+  // rebuild() replaces the whole DOM tree, including the search input
+  // itself, on every keystroke — capture focus/cursor beforehand so typing
+  // doesn't kick focus out of the box after each character.
+  const searchEl = container.querySelector('[data-action="search"]');
+  const searchWasFocused = document.activeElement === searchEl;
+  const searchSelection = searchWasFocused ? [searchEl.selectionStart, searchEl.selectionEnd] : null;
+
   container.innerHTML = `
     <section class="card">
       <div class="row-between">
@@ -1053,6 +1072,10 @@ function rebuild() {
         </div>
       </div>
 
+      <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
+        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[F] Search tasks…" value="${escapeHtml(searchQuery)}">
+      </div>
+
       <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">
         <button data-category="" class="${categoryFilter === '' ? 'active' : ''}">All</button>
         <span class="filter-gap"></span>
@@ -1084,6 +1107,14 @@ function rebuild() {
   applyPendingCalendarHighlight();
   applyModeVisuals();
   applyKeyNavFocus();
+
+  if (searchWasFocused) {
+    const newSearchEl = container.querySelector('[data-action="search"]');
+    if (newSearchEl) {
+      newSearchEl.focus();
+      newSearchEl.setSelectionRange(...searchSelection);
+    }
+  }
 }
 
 // Arrived here from clicking an already-linked Canvas card — jump the
@@ -1112,6 +1143,11 @@ function applyPendingCalendarHighlight() {
 }
 
 function attachEvents() {
+  container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rebuild();
+  });
+
   container.querySelectorAll('[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => {
       viewMode = btn.dataset.view;

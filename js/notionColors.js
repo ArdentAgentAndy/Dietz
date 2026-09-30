@@ -31,6 +31,9 @@ const COURSE_COLOR_NAME = {
   'TE 200': 'orange',
   'CLCV 115': 'red',
   'AFST 112': 'brown',
+  // Canvas cross-lists this course under HIST 112 instead of AFST 112 (the
+  // code the Home page/Notion use) — same course, same color.
+  'HIST 112': 'brown',
   'MATH 231': 'pink',
   'CS 101': 'purple',
   'PHYS 211': 'blue',

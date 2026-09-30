@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=14';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=14';
-import { hexForCourse } from '../notionColors.js?v=14';
-import { escapeHtml, hexToRgba } from '../format.js?v=14';
-import { store } from '../store.js?v=14';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=15';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=15';
+import { hexForCourse } from '../notionColors.js?v=15';
+import { escapeHtml, hexToRgba } from '../format.js?v=15';
+import { store } from '../store.js?v=15';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -15,6 +15,7 @@ let viewMode = 'week'; // 'week' | 'month'
 let anchor = startOfDay(new Date());
 let courseFilter = '';
 let hideCompleted = false;
+let searchQuery = '';
 
 // Same highlight-and-save pattern as the Calendar tab, but only meaningful
 // for already-linked events (unlinked ones have no backing Notion task to
@@ -85,6 +86,14 @@ function isoDay(d) {
 function isTypingTarget() {
   const tag = document.activeElement?.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+// 'F' keybind — jumps focus into the search box and selects any existing
+// text, so typing immediately replaces it (same idea as '/' search in a lot
+// of other apps).
+function focusSearch() {
+  const el = container?.querySelector('[data-action="search"]');
+  if (el) { el.focus(); el.select(); }
 }
 
 function trackMouse(e) {
@@ -180,6 +189,7 @@ function onKeyDown(e) {
   }
 
   switch (e.key) {
+    case 'f': case 'F': focusSearch(); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
@@ -245,26 +255,48 @@ async function load() {
   rebuild();
 }
 
-// Courses currently active on the Home page come first; everything else
-// (including CITL/VCSTUD, campus workshops/services Canvas still tags with a
+// Canvas cross-lists some courses under a different code than the Home
+// page/Notion use for the same course (e.g. AFST 112 shows up in Canvas as
+// HIST 112) — mapped here so the course filter still recognizes it as the
+// same active Home course instead of stranding it in "Other".
+const CANVAS_COURSE_ALIASES = { 'HIST 112': 'AFST 112' };
+function homeCourseCode(canvasCode) {
+  return CANVAS_COURSE_ALIASES[canvasCode] || canvasCode;
+}
+
+// Courses currently active on the Home page come first, in the same order
+// as the Home page (Courses table's sortOrder); everything else (including
+// CITL/VCSTUD, campus workshops/services Canvas still tags with a
 // course-shaped code) is a second, hidden-by-default group revealed by the
-// "Other" button. Archiving/reorganizing that second group is deferred.
-function homeActiveCourseCodes() {
-  return new Set(store.table('Courses').filter((c) => c.status === 'active').map((c) => c.code));
+// "Other" button, alphabetical. Archiving/reorganizing that second group is
+// deferred.
+function homeActiveCourses() {
+  return store.table('Courses').filter((c) => c.status === 'active');
 }
 
 function availableCourseGroups() {
   const courses = [...new Set(allEvents.map((e) => e.course).filter(Boolean))];
-  const activeCodes = homeActiveCourseCodes();
-  const primary = courses.filter((c) => activeCodes.has(c)).sort();
-  const other = courses.filter((c) => !activeCodes.has(c)).sort();
+  const activeCourses = homeActiveCourses();
+  const sortOrderByCode = new Map(activeCourses.map((c) => [c.code, c.sortOrder]));
+  const isActive = (c) => sortOrderByCode.has(homeCourseCode(c));
+
+  const primary = courses.filter(isActive)
+    .sort((a, b) => sortOrderByCode.get(homeCourseCode(a)) - sortOrderByCode.get(homeCourseCode(b)));
+  const other = courses.filter((c) => !isActive(c)).sort();
   return { primary, other };
 }
 
 function visibleEvents() {
+  const q = searchQuery.trim().toLowerCase();
   return allEvents.filter((e) => {
     if (courseFilter && e.course !== courseFilter) return false;
     if (hideCompleted && taskByCanvasId.get(e.id)?.mark) return false;
+    if (q) {
+      // Search against whatever name is actually shown — the linked
+      // Calendar task's name once linked, same as eventChipHtml.
+      const displayName = taskByCanvasId.get(e.id)?.name || e.name;
+      if (!displayName.toLowerCase().includes(q)) return false;
+    }
     return true;
   });
 }
@@ -556,6 +588,13 @@ function rebuild() {
   const { primary, other } = availableCourseGroups();
   const events = visibleEvents();
 
+  // rebuild() replaces the whole DOM tree, including the search input
+  // itself, on every keystroke — capture focus/cursor beforehand so typing
+  // doesn't kick focus out of the box after each character.
+  const searchEl = container.querySelector('[data-action="search"]');
+  const searchWasFocused = document.activeElement === searchEl;
+  const searchSelection = searchWasFocused ? [searchEl.selectionStart, searchEl.selectionEnd] : null;
+
   function courseButtonHtml(c) {
     const isActive = courseFilter === c;
     const color = hexForCourse(c);
@@ -589,6 +628,10 @@ function rebuild() {
         </div>
       </div>
 
+      <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
+        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[F] Search assignments…" value="${escapeHtml(searchQuery)}">
+      </div>
+
       <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">
         <button data-course="" class="${courseFilter === '' ? 'active' : ''}">All</button>
         ${primary.map(courseButtonHtml).join('')}
@@ -609,9 +652,22 @@ function rebuild() {
   applyPendingHighlight();
   applyModeVisuals();
   applyKeyNavFocus();
+
+  if (searchWasFocused) {
+    const newSearchEl = container.querySelector('[data-action="search"]');
+    if (newSearchEl) {
+      newSearchEl.focus();
+      newSearchEl.setSelectionRange(...searchSelection);
+    }
+  }
 }
 
 function attachEvents() {
+  container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rebuild();
+  });
+
   container.querySelectorAll('[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => {
       viewMode = btn.dataset.view;

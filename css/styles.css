@@ -310,6 +310,26 @@ h1, h2, h3 {
   text-align: center;
 }
 
+.cal-search-input {
+  width: 220px;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.cal-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.cal-search-input::placeholder {
+  color: var(--muted);
+}
+
 .cal-week-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
