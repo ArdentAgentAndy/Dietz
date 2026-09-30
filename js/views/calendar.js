@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=15';
-import { hexForNotionColor } from '../notionColors.js?v=15';
-import { escapeHtml, hexToRgba } from '../format.js?v=15';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=15';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=16';
+import { hexForNotionColor } from '../notionColors.js?v=16';
+import { escapeHtml, hexToRgba } from '../format.js?v=16';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=16';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
@@ -288,7 +288,7 @@ function onKeyDown(e) {
 
   switch (e.key) {
     case '+': case '=': openTaskDialog(null, hoveredDate || undefined); break;
-    case 'f': case 'F': focusSearch(); break;
+    case 'f': case 'F': e.preventDefault(); focusSearch(); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;

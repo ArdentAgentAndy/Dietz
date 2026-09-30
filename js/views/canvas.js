@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=15';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=15';
-import { hexForCourse } from '../notionColors.js?v=15';
-import { escapeHtml, hexToRgba } from '../format.js?v=15';
-import { store } from '../store.js?v=15';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=16';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=16';
+import { hexForCourse } from '../notionColors.js?v=16';
+import { escapeHtml, hexToRgba } from '../format.js?v=16';
+import { store } from '../store.js?v=16';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -189,7 +189,7 @@ function onKeyDown(e) {
   }
 
   switch (e.key) {
-    case 'f': case 'F': focusSearch(); break;
+    case 'f': case 'F': e.preventDefault(); focusSearch(); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
