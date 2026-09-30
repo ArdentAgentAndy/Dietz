@@ -331,6 +331,27 @@ h1, h2, h3 {
   font-size: 12px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Hidden until the day column/cell is hovered — revealed next to the day
+   label instead of living in the page toolbar, so "add a task" always
+   starts from the day it'll land on. */
+.cal-day-plus {
+  opacity: 0;
+  pointer-events: none;
+  padding: 0 6px;
+  line-height: 16px;
+  font-size: 12px;
+  transition: opacity 0.15s ease;
+}
+
+.cal-day-col:hover .cal-day-plus,
+.cal-month-cell:hover .cal-day-plus {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .cal-day-items {
@@ -580,6 +601,12 @@ h1, h2, h3 {
   z-index: 1;
 }
 
+.cal-chip-deadline-datetime {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .cal-chip-link {
   cursor: pointer;
   font-size: 20px;
@@ -643,6 +670,9 @@ h1, h2, h3 {
 .cal-month-daynum {
   font-size: 11px;
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .cal-more {

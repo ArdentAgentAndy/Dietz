@@ -93,6 +93,11 @@ let mousePos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 
 let draggedTaskId = null;
 
+// ISO date of whichever day cell the mouse is currently over — tracked so
+// the "+" keybind knows which day to add a task on (mirroring the hover-
+// revealed "+" button in that day's header/daynum).
+let hoveredDate = null;
+
 // Set on mount if we arrived here from a Canvas card click (see render()
 // below) — while non-null, day columns/cells become click targets that
 // create a linked Homework task, and existing task cards become click
@@ -273,7 +278,7 @@ function onKeyDown(e) {
   }
 
   switch (e.key) {
-    case '=': openTaskDialog(null); break;
+    case '+': case '=': openTaskDialog(null, hoveredDate || undefined); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
@@ -323,6 +328,7 @@ export function unmount() {
   app?.style.removeProperty('--mode-tint');
   container = null;
   keyNavFocusId = null;
+  hoveredDate = null;
 }
 
 // Tints the grid card + day columns/cells and colors the card-hover
@@ -391,7 +397,12 @@ async function scheduleCanvasTask(day) {
 }
 
 // Linking to an existing task instead of creating a new one — sets that
-// task's Deadline to the Canvas item's due date, nothing else.
+// task's Deadline to the Canvas item's due date. Also renames the task to
+// match the Canvas item's name: Canvas's own page matches an event to its
+// linked task purely by exact name (see taskByName in canvas.js), so a task
+// left under its old name would never show as linked back on Canvas — no
+// corner marker, "hide completed" blind to it, and the link glyph unable to
+// find it to jump back to.
 async function linkCanvasTaskToExisting(taskId) {
   if (!schedulingItem || schedulingBusy) return;
 
@@ -399,7 +410,7 @@ async function linkCanvasTaskToExisting(taskId) {
   rebuild();
 
   const item = schedulingItem;
-  const result = await updateTask(taskId, { deadline: item.deadline || '' });
+  const result = await updateTask(taskId, { name: item.name, deadline: item.deadline || '' });
 
   if (result.ok) {
     if (result.task) patchCachedNotionTask(taskId, result.task);
@@ -573,6 +584,14 @@ function shortDate(dateStr) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Only Canvas deadlines with an actual time component (length > 10, i.e. not
+// just a bare date) carry one — most don't, so this is '' far more often
+// than not.
+function shortTime(dateStr) {
+  if (dateStr.length <= 10) return '';
+  return new Date(dateStr).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 function taskChipHtml(task) {
   const config = SUB_FILTER_BY_CATEGORY[task.category];
   const subValue = config ? task[config.prop] : '';
@@ -619,7 +638,10 @@ function taskChipHtml(task) {
       <span class="cal-chip-name">${escapeHtml(task.name || 'Untitled')}</span>
       ${hasDeadline ? `
         <div class="cal-chip-deadline-row mono">
-          <span>${escapeHtml(shortDate(task.deadline.start))}</span>
+          <span class="cal-chip-deadline-datetime">
+            <span>${escapeHtml(shortDate(task.deadline.start))}</span>
+            ${shortTime(task.deadline.start) ? `<span>${escapeHtml(shortTime(task.deadline.start))}</span>` : ''}
+          </span>
           <span class="cal-chip-link" data-link-name="${escapeHtml(task.name)}" title="Back to Canvas">&#128279;</span>
         </div>
       ` : ''}
@@ -632,6 +654,13 @@ function taskChipHtml(task) {
       </div>
     </div>
   `;
+}
+
+// Hover-revealed "+" — hidden until the day column/cell it sits in is
+// hovered (see .cal-day-plus in styles.css), and also the target of the
+// '+' keybind (see onKeyDown, which reads hoveredDate instead of clicking).
+function dayPlusButtonHtml(dateKey) {
+  return `<button type="button" class="cal-day-plus" data-add-date="${dateKey}" title="[+] Add task on this day">+</button>`;
 }
 
 function weekViewHtml(tasks) {
@@ -654,7 +683,10 @@ function weekViewHtml(tasks) {
         const items = byDay[key] || [];
         return `
           <div class="cal-day-col" data-date="${key}">
-            <div class="cal-day-head mono">${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></div>
+            <div class="cal-day-head mono">
+              <span>${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></span>
+              ${dayPlusButtonHtml(key)}
+            </div>
             <div class="cal-day-items">${items.map(taskChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
           </div>
         `;
@@ -690,7 +722,10 @@ function monthViewHtml(tasks) {
         const extra = items.length - shown.length;
         return `
           <div class="cal-month-cell${inMonth ? '' : ' is-outside'}" data-date="${key}">
-            <div class="cal-month-daynum mono">${d.getDate()}</div>
+            <div class="cal-month-daynum mono">
+              <span>${d.getDate()}</span>
+              ${dayPlusButtonHtml(key)}
+            </div>
             ${shown.map(taskChipHtml).join('')}
             ${extra > 0 ? `<p class="muted cal-more">+${extra} more</p>` : ''}
           </div>
@@ -813,9 +848,14 @@ function datalistFor(category) {
   return uniqueValues(prop);
 }
 
-function openTaskDialog(existing) {
+// defaultDate (ISO 'YYYY-MM-DD'): prefills the date field on a new task —
+// set when opened from a day's hover "+" button (or the '+' keybind while
+// hovering a day), so adding a task for a specific day doesn't require also
+// picking that date by hand.
+function openTaskDialog(existing, defaultDate) {
   const dialog = container.querySelector('#modal-dialog');
-  const { date, time } = splitDateTime(existing?.date);
+  const { date: parsedDate, time } = splitDateTime(existing?.date);
+  const date = !existing && defaultDate ? defaultDate : parsedDate;
   const initialCategory = existing?.category || CATEGORY_ORDER[0];
 
   function renderSubField(category) {
@@ -977,7 +1017,6 @@ function rebuild() {
       <div class="row-between">
         <h1 class="mono">Calendar</h1>
         <div style="display:flex; gap:8px;">
-          <button data-action="add-task">[=] + Add task</button>
           <button data-action="hide-completed" class="${hideCompleted ? 'active' : ''}">[H] ${hideCompleted ? 'Showing active only' : 'Hide completed'}</button>
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
@@ -1090,7 +1129,12 @@ function attachEvents() {
     rebuild();
   });
 
-  container.querySelector('[data-action="add-task"]')?.addEventListener('click', () => openTaskDialog(null));
+  container.querySelectorAll('.cal-day-plus').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); // don't also trigger the day cell's own click (e.g. Canvas scheduling)
+      openTaskDialog(null, btn.dataset.addDate);
+    });
+  });
 
   container.querySelectorAll('[data-highlight]').forEach((btn) => {
     btn.addEventListener('click', () => toggleHighlight(btn.dataset.highlight));
@@ -1146,6 +1190,9 @@ function attachEvents() {
   });
 
   container.querySelectorAll('[data-date]').forEach((el) => {
+    el.addEventListener('mouseenter', () => { hoveredDate = el.dataset.date; });
+    el.addEventListener('mouseleave', () => { if (hoveredDate === el.dataset.date) hoveredDate = null; });
+
     el.addEventListener('dragover', (e) => {
       if (!draggedTaskId) return;
       e.preventDefault();
