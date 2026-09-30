@@ -1,10 +1,10 @@
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/home.js') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js'), params: ['id'] },
-  { pattern: /^\/classes$/, load: () => import('./views/classes.js') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js') },
+  { pattern: /^\/$/, load: () => import('./views/home.js?v=1') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=1') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=1'), params: ['id'] },
+  { pattern: /^\/classes$/, load: () => import('./views/classes.js?v=1') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=1') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=1') },
 ];
 
 function currentPath() {

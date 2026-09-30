@@ -1,6 +1,6 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask } from '../notion.js';
-import { hexForNotionColor } from '../notionColors.js';
-import { escapeHtml, hexToRgba } from '../format.js';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask } from '../notion.js?v=1';
+import { hexForNotionColor } from '../notionColors.js?v=1';
+import { escapeHtml, hexToRgba } from '../format.js?v=1';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in

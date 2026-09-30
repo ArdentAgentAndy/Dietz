@@ -1,4 +1,4 @@
-import { store } from './store.js';
+import { store } from './store.js?v=1';
 
 const CACHE_KEY = 'dietz:notionCache';
 

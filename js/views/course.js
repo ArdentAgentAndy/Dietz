@@ -1,7 +1,7 @@
-import { store } from '../store.js';
-import { computeGrade, itemStatus } from '../grading.js';
-import { getCourseState, setCourseState } from '../courseState.js';
-import { escapeHtml } from '../format.js';
+import { store } from '../store.js?v=1';
+import { computeGrade, itemStatus } from '../grading.js?v=1';
+import { getCourseState, setCourseState } from '../courseState.js?v=1';
+import { escapeHtml } from '../format.js?v=1';
 
 let container = null;
 let courseId = null;
