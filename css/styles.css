@@ -1006,28 +1006,37 @@ dialog#modal-dialog::backdrop {
   transform: rotate(90deg);
 }
 
-.archived-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+.archived-list {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-top: 12px;
 }
 
-.archived-card {
+/* One horizontal line per day — the date and every category for that day
+   sit in the same row as a chip, instead of stacking as separate rows. */
+.archived-day-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
 }
 
-.archived-card button {
-  padding: 4px 10px;
+.archived-day-date {
   font-size: 11px;
+  color: var(--muted);
   flex-shrink: 0;
+  min-width: 48px;
+}
+
+.archived-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--cell-color, transparent);
+  font-size: 13px;
 }
 
 .final-letter-field {

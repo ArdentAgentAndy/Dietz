@@ -1,5 +1,5 @@
-import { store } from '../store.js?v=19';
-import { timerState, startTimer, stopTimer } from '../timer.js?v=19';
+import { store } from '../store.js?v=21';
+import { timerState, startTimer, stopTimer } from '../timer.js?v=21';
 import {
   GRAPH_SERIES,
   liveCategoriesByGroup,
@@ -9,7 +9,7 @@ import {
   compactedSessions,
   datesForRange,
   minutesByGroupForDates,
-} from '../sessions.js?v=19';
+} from '../sessions.js?v=21';
 import {
   formatDateISO,
   formatDisplayDate,
@@ -19,20 +19,29 @@ import {
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
-} from '../format.js?v=19';
-import { computeGrade } from '../grading.js?v=19';
-import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=19';
-import { getCourseState } from '../courseState.js?v=19';
-import { archiveCourseById, deleteCourseById } from './courses.js?v=19';
+} from '../format.js?v=21';
+import { computeGrade } from '../grading.js?v=21';
+import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=21';
+import { getCourseState } from '../courseState.js?v=21';
+import { archiveCourseById, deleteCourseById } from './courses.js?v=21';
 
 let container = null;
 let tickIntervalId = null;
 let chart = null;
 let range = '7';
+let archiveRange = '7';
+let archivedOpen = false;
 
 const RANGES = [
   { key: '7', label: '7d' },
   { key: '30', label: '30d' },
+  { key: 'semester', label: 'Semester' },
+  { key: 'all', label: 'All' },
+];
+
+const ARCHIVE_RANGES = [
+  { key: '7', label: '7d' },
+  { key: '30', label: '1M' },
   { key: 'semester', label: 'Semester' },
   { key: 'all', label: 'All' },
 ];
@@ -67,16 +76,53 @@ function groupColor(group) {
   return GRAPH_SERIES.find((s) => s.group === group)?.color || '#888888';
 }
 
-function archivedSessionRowHtml(session) {
-  const cat = store.table('Categories').find((c) => c.id === session.categoryId);
-  const color = groupColor(cat?.group);
-  const label = cat ? categoryLabel(cat) : 'Unknown';
+const GROUP_SORT_ORDER = GRAPH_SERIES.map((s) => s.group);
+
+function groupDisplayLabel(group) {
+  return group ? group.charAt(0).toUpperCase() + group.slice(1) : 'Unknown';
+}
+
+function archivedChipHtml(group, minutes) {
+  const color = groupColor(group);
+  const bg = hexToRgba(color, 0.1);
   return `
-    <div class="archived-card" style="background:${hexToRgba(color, 0.14)};border-color:${hexToRgba(color, 0.4)};">
-      <span class="mono">${escapeHtml(label)}</span>
-      <span class="muted">${session.date} &middot; ${formatHMS(session.minutes * 60)}</span>
+    <span class="archived-chip" style="background:${bg}; --cell-color:${color};">
+      <span class="mono">${escapeHtml(groupDisplayLabel(group))}</span>
+      <span class="muted">${formatHMS(minutes * 60)}</span>
+    </span>
+  `;
+}
+
+// Sums minutes per group so duplicate underlying session rows for the same
+// (date, group) — e.g. left over from a sync merge — collapse into a single
+// chip instead of showing twice.
+function archivedDayBlockHtml(date, sessions) {
+  const categories = store.table('Categories');
+  const groupOf = (s) => categories.find((c) => c.id === s.categoryId)?.group;
+  const minutesByGroup = new Map();
+  for (const s of sessions) {
+    const group = groupOf(s);
+    minutesByGroup.set(group, (minutesByGroup.get(group) || 0) + s.minutes);
+  }
+  const chips = [...minutesByGroup.entries()]
+    .sort((a, b) => GROUP_SORT_ORDER.indexOf(a[0]) - GROUP_SORT_ORDER.indexOf(b[0]))
+    .map(([group, minutes]) => archivedChipHtml(group, minutes))
+    .join('');
+  return `
+    <div class="archived-day-row">
+      <span class="archived-day-date mono">${formatShortDate(date)}</span>
+      ${chips}
     </div>
   `;
+}
+
+function groupArchivedByDate(sessions) {
+  const map = new Map();
+  for (const s of sessions) {
+    if (!map.has(s.date)) map.set(s.date, []);
+    map.get(s.date).push(s);
+  }
+  return map;
 }
 
 function timerCardHtml(cat, timer, todayISO) {
@@ -132,6 +178,11 @@ function rebuild() {
   const sessions = recentSessions(10).map(sessionItemHtml).join('');
   const headerMinutes = totalMinutesForDay(todayISO);
   const archived = compactedSessions();
+  const archiveDateSet = new Set(datesForRange(archiveRange));
+  const archivedFiltered = archived.filter((s) => archiveDateSet.has(s.date));
+  const archivedByDate = groupArchivedByDate(archivedFiltered);
+  const archivedDaysHtml = [...archivedByDate.entries()].map(([date, sess]) => archivedDayBlockHtml(date, sess)).join('');
+  const archivedEmptyMessage = archived.length ? 'Nothing archived in this range.' : 'Nothing archived yet.';
 
   container.innerHTML = `
     <section class="card">
@@ -176,9 +227,16 @@ function rebuild() {
     ${coursesAndGpaHtml()}
 
     <section class="card">
-      <details class="archived-details">
-        <summary><h2 class="mono">Archived${archived.length ? ` (${archived.length})` : ''}</h2></summary>
-        <div class="archived-grid">${archived.length ? archived.map(archivedSessionRowHtml).join('') : '<p class="muted">Nothing archived yet.</p>'}</div>
+      <details class="archived-details" ${archivedOpen ? 'open' : ''}>
+        <summary>
+          <div class="row-between">
+            <h2 class="mono">Archived${archivedByDate.size ? ` (${archivedByDate.size})` : ''}</h2>
+            <div class="range-toggle">
+              ${ARCHIVE_RANGES.map((r) => `<button data-archive-range="${r.key}" class="${r.key === archiveRange ? 'active' : ''}">${r.label}</button>`).join('')}
+            </div>
+          </div>
+        </summary>
+        ${archivedDaysHtml ? `<div class="archived-list">${archivedDaysHtml}</div>` : `<p class="muted">${archivedEmptyMessage}</p>`}
       </details>
     </section>
 
@@ -295,6 +353,19 @@ function attachEvents() {
       range = btn.dataset.range;
       container.querySelectorAll('[data-range]').forEach((b) => b.classList.toggle('active', b === btn));
       drawChart();
+    });
+  });
+
+  container.querySelector('.archived-details')?.addEventListener('toggle', (e) => {
+    archivedOpen = e.target.open;
+  });
+
+  container.querySelectorAll('[data-archive-range]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      archiveRange = btn.dataset.archiveRange;
+      rebuild();
     });
   });
 }

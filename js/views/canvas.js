@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, setLocalCanvasFlag } from '../canvas.js?v=19';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=19';
-import { hexForCourse } from '../notionColors.js?v=19';
-import { escapeHtml, hexToRgba } from '../format.js?v=19';
-import { store } from '../store.js?v=19';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, setLocalCanvasFlag } from '../canvas.js?v=21';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=21';
+import { hexForCourse } from '../notionColors.js?v=21';
+import { escapeHtml, hexToRgba } from '../format.js?v=21';
+import { store } from '../store.js?v=21';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
