@@ -92,6 +92,12 @@ function rebuild() {
     </section>
 
     <section class="card">
+      <h2 class="mono">App</h2>
+      <p class="muted">If the installed app (desktop or phone) is showing an old version after a fix was pushed, use this — it clears the offline cache and service worker, then reloads.</p>
+      <button data-action="force-refresh">Force refresh</button>
+    </section>
+
+    <section class="card">
       <h2 class="mono">Backup</h2>
       <button data-action="export">Export JSON backup</button>
     </section>
@@ -128,6 +134,24 @@ function attachEvents() {
   });
 
   container.querySelector('[data-action="export"]')?.addEventListener('click', exportBackup);
+
+  container.querySelector('[data-action="force-refresh"]')?.addEventListener('click', forceRefresh);
+}
+
+// Unregister the service worker and clear its Cache Storage, then reload
+// with a cache-busting query param (not just location.reload()) so the
+// browser's own HTTP cache for index.html can't hand back a stale copy
+// either — see sw.js for why a SW is registered at all.
+async function forceRefresh() {
+  if ('serviceWorker' in navigator) {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((r) => r.unregister()));
+  }
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  }
+  location.href = `${location.pathname}?t=${Date.now()}${location.hash}`;
 }
 
 function openTermDialog(existing = null) {
