@@ -3,6 +3,13 @@ import { initRouter } from './router.js?v=17';
 import { initSync } from './sync.js?v=17';
 import { compactOldSessions } from './compaction.js?v=17';
 
+// Registers relative to this page's own path, so the SW's scope is correct
+// whether this is served from a domain root or a GitHub Pages project
+// subpath — see sw.js for why it exists (installability + offline shell).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
 compactOldSessions();
 initRouter();
 initSync(document.getElementById('sync-status'), document.getElementById('sync-btn'));
