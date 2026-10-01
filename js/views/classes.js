@@ -39,6 +39,18 @@ function timeLabel(dateStr, isDatetime) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+// Minutes since midnight, local time — used to sort within a weekday group
+// by time-of-day only. Sorting by the raw date.start string instead (as
+// before) compared full dates first, so two sessions that happen to fall on
+// different calendar dates (but the same weekday label) sorted by date, not
+// by what time of day each one is at — e.g. an earlier-dated 14:00 class
+// would sort ahead of a later-dated 11:00 one.
+function timeOfDayMinutes(dateStr) {
+  if (!dateStr) return -1;
+  const d = new Date(dateStr);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
 function classRowHtml(task) {
   const color = hexForNotionColor(task.courseColor);
   const time = timeLabel(task.date?.start, true);
@@ -65,7 +77,7 @@ function renderLessons(tasks) {
     (byDay[day] = byDay[day] || []).push(task);
   }
   for (const day of Object.keys(byDay)) {
-    byDay[day].sort((a, b) => (a.date?.start || '').localeCompare(b.date?.start || ''));
+    byDay[day].sort((a, b) => timeOfDayMinutes(a.date?.start) - timeOfDayMinutes(b.date?.start));
   }
 
   const days = Object.keys(byDay).sort((a, b) => {
