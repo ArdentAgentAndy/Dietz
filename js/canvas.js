@@ -1,4 +1,4 @@
-import { store } from './store.js?v=17';
+import { store } from './store.js?v=18';
 
 const CACHE_KEY = 'dietz:canvasCache';
 
@@ -35,6 +35,43 @@ export async function fetchCanvasEvents() {
   if (data.error) return { events: [], error: data.error };
   setCachedCanvasEvents(data.events || []);
   return { events: data.events || [], error: null };
+}
+
+// Complete/urgent flags for Canvas events the user has marked WITHOUT
+// linking them to a Notion task. Kept purely client-side (this device only,
+// never pushed to Notion/Calendar) since there's no backing task to store
+// them on — see js/views/canvas.js's click handler, which uses these
+// instead of autoLinkAndMark when the clicked card isn't linked.
+const LOCAL_FLAGS_KEY = 'dietz:canvasLocalFlags';
+
+function getAllLocalCanvasFlags() {
+  try {
+    const raw = localStorage.getItem(LOCAL_FLAGS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function setAllLocalCanvasFlags(flags) {
+  try {
+    localStorage.setItem(LOCAL_FLAGS_KEY, JSON.stringify(flags));
+  } catch (e) {
+    // ignore — local-only flags are a convenience, not critical data
+  }
+}
+
+export function getLocalCanvasFlag(eventId, field) {
+  return Boolean(getAllLocalCanvasFlags()[eventId]?.[field]);
+}
+
+export function toggleLocalCanvasFlag(eventId, field) {
+  const flags = getAllLocalCanvasFlags();
+  const current = flags[eventId] || {};
+  const next = !current[field];
+  flags[eventId] = { ...current, [field]: next };
+  setAllLocalCanvasFlags(flags);
+  return next;
 }
 
 // Cross-page handoff, since navigating between #/canvas and #/calendar

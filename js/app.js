@@ -1,7 +1,7 @@
-import './store.js?v=17';
-import { initRouter } from './router.js?v=17';
-import { initSync } from './sync.js?v=17';
-import { compactOldSessions } from './compaction.js?v=17';
+import './store.js?v=18';
+import { initRouter } from './router.js?v=18';
+import { initSync } from './sync.js?v=18';
+import { compactOldSessions } from './compaction.js?v=18';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project

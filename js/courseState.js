@@ -1,4 +1,4 @@
-import { store } from './store.js?v=17';
+import { store } from './store.js?v=18';
 
 // CourseState rows are keyed by (courseId, key) rather than a UUID — a
 // synthetic "courseId:key" id keeps that natural key compatible with the

@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=17';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, patchCachedNotionTask, addCachedNotionTask } from '../notion.js?v=17';
-import { hexForCourse } from '../notionColors.js?v=17';
-import { escapeHtml, hexToRgba } from '../format.js?v=17';
-import { store } from '../store.js?v=17';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, toggleLocalCanvasFlag } from '../canvas.js?v=18';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=18';
+import { hexForCourse } from '../notionColors.js?v=18';
+import { escapeHtml, hexToRgba } from '../format.js?v=18';
+import { store } from '../store.js?v=18';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -21,12 +21,12 @@ let hideHandled = false;
 let searchQuery = '';
 
 // Same highlight-and-save pattern as the Calendar tab. Clicking an already-
-// linked event toggles it into `pending` like Calendar does. Clicking an
-// unlinked one instead creates its backing Homework task on the spot
-// (Date defaults to the Canvas deadline day) with the flag already set, so
-// marking an assignment never requires a separate manual-link trip through
-// the Calendar tab first — see autoLinkAndMark. No mass-delete or free-
-// standing add-task here — those stay Calendar-only.
+// linked event toggles it into `pending` like Calendar does, which gets
+// pushed to Notion (and so to Calendar) on save. Clicking an unlinked one
+// instead flips a local-only flag (see toggleLocalCanvasFlag) — no Notion
+// task gets created and nothing reaches Calendar, since marking complete/
+// urgent here should never silently cause a new Calendar item to appear. No
+// mass-delete or free-standing add-task here — those stay Calendar-only.
 const HIGHLIGHT_KINDS = {
   urgent: { field: 'urgent', property: 'Urgent', label: 'urgent' },
   completed: { field: 'mark', property: '?', label: 'completed' },
@@ -40,9 +40,6 @@ let pending = new Set();
 let touchedThisSession = new Set();
 let saving = false;
 let saveError = null;
-// Canvas event ids currently being auto-linked (see autoLinkAndMark) — kept
-// separate from `saving`/`pending`, which are about already-linked tasks.
-let linkingIds = new Set();
 
 // Unlink: press L, then click a linked (purple-striped) card to unlink it
 // immediately — clears that task's Deadline. No confirm step; relinking
@@ -321,20 +318,23 @@ function eventDay(event) {
   return event.deadline.slice(0, 10);
 }
 
-function isFieldActive(task, kind) {
-  if (!task) return false;
+// Linked events source their flag from the Notion task (and `pending` while
+// a save is armed); unlinked events have no task, so they fall back to the
+// local-only flag (see toggleLocalCanvasFlag) which never touches Notion.
+function isFieldActive(event, task, kind) {
   const field = HIGHLIGHT_KINDS[kind].field;
+  if (!task) return getLocalCanvasFlag(event.id, field);
   return activeHighlight === kind ? pending.has(task.id) : Boolean(task[field]);
 }
 
 // Mirrors calendar.js's chipStyle, simplified (no category shape/line
 // system — just course color, with done/urgent overrides for linked events).
-function eventChipStyle(color, task) {
-  if (isFieldActive(task, 'completed')) {
+function eventChipStyle(color, event, task) {
+  if (isFieldActive(event, task, 'completed')) {
     const grayStripes = `repeating-linear-gradient(45deg, ${hexToRgba('#9b9a97', 0.1)} 0 8px, transparent 8px 16px)`;
     return `border: 2px solid ${hexToRgba(color, 0.6)}; background-color: ${hexToRgba(color, 0.1)}; background-image: ${grayStripes};`;
   }
-  if (isFieldActive(task, 'urgent')) {
+  if (isFieldActive(event, task, 'urgent')) {
     const whiteStripes = `repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.28) 0 8px, transparent 8px 16px)`;
     return `border: 2px solid ${hexToRgba(color, 0.6)}; outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: 2px; background-color: ${hexToRgba(color, 0.12)}; background-image: ${whiteStripes};`;
   }
@@ -349,22 +349,20 @@ function eventChipHtml(event) {
   // scraped title — neither side's actual Name is ever touched by linking
   // (see linkCanvasTaskToExisting), so this is purely a display preference.
   const displayName = task?.name || event.name;
-  const done = isFieldActive(task, 'completed');
+  const done = isFieldActive(event, task, 'completed');
   const time = event.deadline?.length > 10
     ? new Date(event.deadline).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
     : '';
 
-  // Only linked events can be marked/unlinked directly — there's no backing
-  // task otherwise. In highlight mode (not unlink mode), clicking an
-  // unlinked event creates that backing task and marks it in one step — see
-  // autoLinkAndMark — instead of being a no-op or detouring through Calendar.
-  const isLinking = linkingIds.has(event.id);
+  // Only linked events can be marked/unlinked through Notion. In highlight
+  // mode (not unlink mode), clicking an unlinked event flips its local-only
+  // flag instead — see toggleLocalCanvasFlag — rather than creating a Notion
+  // task and pulling it onto Calendar just because it got marked here.
   let interactionClass = 'canvas-chip';
   if (unlinkMode) {
     interactionClass += isLinked ? ' is-highlightable' : '';
   } else if (activeHighlight) {
     interactionClass += isLinked ? ' is-highlightable' : ' canvas-chip-clickable';
-    if (isLinking) interactionClass += ' is-linking';
   } else {
     interactionClass += ' canvas-chip-clickable';
   }
@@ -372,7 +370,7 @@ function eventChipHtml(event) {
   const title = unlinkMode
     ? (isLinked ? 'Click to unlink' : '')
     : activeHighlight
-      ? (isLinked ? `Click to toggle ${HIGHLIGHT_KINDS[activeHighlight].label}` : (isLinking ? 'Linking…' : `Click to link and mark ${HIGHLIGHT_KINDS[activeHighlight].label}`))
+      ? (isLinked ? `Click to toggle ${HIGHLIGHT_KINDS[activeHighlight].label}` : `Click to mark ${HIGHLIGHT_KINDS[activeHighlight].label} (local only — won't link to Calendar)`)
       : (isLinked ? 'Already linked — click to view on Calendar' : event.name);
 
   // Same static dotted-selected indicator as Calendar's — non-animated,
@@ -382,7 +380,7 @@ function eventChipHtml(event) {
   const isPendingSelected = activeHighlight && task && pending.has(task.id) && touchedThisSession.has(task.id);
 
   return `
-    <div class="cal-chip ${interactionClass}${done ? ' is-done' : ''}${isLinked ? ' has-deadline' : ''}${isPendingSelected ? ' is-pending-selected' : ''}" style="${eventChipStyle(color, task)}" title="${escapeHtml(title)}" data-name="${escapeHtml(event.name)}" data-event-id="${escapeHtml(event.id)}" data-course="${escapeHtml(event.course)}" data-deadline="${escapeHtml(event.deadline || '')}" data-task-id="${escapeHtml(task?.id || '')}">
+    <div class="cal-chip ${interactionClass}${done ? ' is-done' : ''}${isLinked ? ' has-deadline' : ''}${isPendingSelected ? ' is-pending-selected' : ''}" style="${eventChipStyle(color, event, task)}" title="${escapeHtml(title)}" data-name="${escapeHtml(event.name)}" data-event-id="${escapeHtml(event.id)}" data-course="${escapeHtml(event.course)}" data-deadline="${escapeHtml(event.deadline || '')}" data-task-id="${escapeHtml(task?.id || '')}">
       <span class="cal-chip-ants"></span>
       <span class="cal-chip-name">${escapeHtml(displayName)}</span>
       <div class="cal-chip-bottom-stack">
@@ -538,40 +536,12 @@ async function saveHighlight(kind) {
 }
 
 // Clicking an unlinked card while Mark completed/Highlight urgent is armed:
-// create its backing Homework task immediately (Date defaults to the Canvas
-// deadline day — same default scheduleCanvasTask uses when nothing more
-// specific is picked) with the flag already set, so one click both links and
-// marks it instead of requiring a separate trip through Calendar first. Kept
-// off `pending`/`saving` (those track already-linked tasks mid-arm) so a
-// slow create request can't be mistaken for the bulk-save in flight.
-async function autoLinkAndMark(event, kind) {
-  if (linkingIds.has(event.id)) return;
-  linkingIds.add(event.id);
-  rebuild();
-
-  const cfg = HIGHLIGHT_KINDS[kind];
-  const deadlineDay = (event.deadline || '').slice(0, 10);
-  const result = await createTask({
-    name: event.name,
-    category: 'Homework',
-    course: event.course || '',
-    date: deadlineDay || isoDay(new Date()),
-    deadline: event.deadline || '',
-    canvasId: event.id,
-    [cfg.field]: true,
-  });
-
-  linkingIds.delete(event.id);
-
-  if (result.ok && result.task) {
-    addCachedNotionTask(result.task);
-    taskByCanvasId.set(event.id, result.task);
-    pending.add(result.task.id);
-    touchedThisSession.add(result.task.id);
-    saveError = null;
-  } else {
-    saveError = result.error || `Failed to link "${event.name}"`;
-  }
+// flip its local-only flag immediately (localStorage, see canvas.js) and
+// re-render. No Notion task gets created and nothing reaches Calendar —
+// marking something here is a Canvas-tab-only annotation unless/until the
+// assignment gets linked separately (via the normal pick-a-day flow).
+function toggleCanvasOnlyMark(event, kind) {
+  toggleLocalCanvasFlag(event.id, HIGHLIGHT_KINDS[kind].field);
   rebuild();
 }
 
@@ -789,8 +759,9 @@ function attachEvents() {
     // .canvas-chip-clickable only ever matches unlinked events once
     // activeHighlight is set (linked ones get is-highlightable instead, with
     // their own handler above), so this always means "no backing task yet"
-    // here — link-and-mark it directly rather than detouring through
-    // Calendar. Outside highlight mode it still means the pick-day/link flow.
+    // here — flip the local-only mark rather than creating a task and
+    // detouring onto Calendar. Outside highlight mode it still means the
+    // pick-day/link flow.
     container.querySelectorAll('.canvas-chip-clickable').forEach((el) => {
       el.addEventListener('click', () => {
         const item = {
@@ -801,7 +772,7 @@ function attachEvents() {
         };
 
         if (activeHighlight) {
-          autoLinkAndMark(item, activeHighlight);
+          toggleCanvasOnlyMark(item, activeHighlight);
           return;
         }
 
