@@ -1,5 +1,5 @@
-import { store } from './store.js?v=18';
-import { formatDateISO } from './format.js?v=18';
+import { store } from './store.js?v=19';
+import { formatDateISO } from './format.js?v=19';
 
 // goalHours: daily target shown as a dashed reference line on the hours graph.
 export const GRAPH_SERIES = [

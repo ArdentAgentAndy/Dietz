@@ -1,4 +1,4 @@
-import { seedData } from './seed.js?v=18';
+import { seedData } from './seed.js?v=19';
 
 const STORAGE_KEY = 'dietz:data';
 const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings'];

@@ -1,4 +1,4 @@
-import { store } from './store.js?v=18';
+import { store } from './store.js?v=19';
 
 const CACHE_KEY = 'dietz:canvasCache';
 
@@ -40,8 +40,10 @@ export async function fetchCanvasEvents() {
 // Complete/urgent flags for Canvas events the user has marked WITHOUT
 // linking them to a Notion task. Kept purely client-side (this device only,
 // never pushed to Notion/Calendar) since there's no backing task to store
-// them on — see js/views/canvas.js's click handler, which uses these
-// instead of autoLinkAndMark when the clicked card isn't linked.
+// them on. Only ever written via setLocalCanvasFlag on Save/Enter — see
+// js/views/canvas.js's toggleHighlight/saveHighlight, which stage these the
+// same way `pending` stages linked-task changes so Escape can discard an
+// unsaved mark instead of it having already landed in localStorage.
 const LOCAL_FLAGS_KEY = 'dietz:canvasLocalFlags';
 
 function getAllLocalCanvasFlags() {
@@ -65,13 +67,11 @@ export function getLocalCanvasFlag(eventId, field) {
   return Boolean(getAllLocalCanvasFlags()[eventId]?.[field]);
 }
 
-export function toggleLocalCanvasFlag(eventId, field) {
+export function setLocalCanvasFlag(eventId, field, value) {
   const flags = getAllLocalCanvasFlags();
   const current = flags[eventId] || {};
-  const next = !current[field];
-  flags[eventId] = { ...current, [field]: next };
+  flags[eventId] = { ...current, [field]: value };
   setAllLocalCanvasFlags(flags);
-  return next;
 }
 
 // Cross-page handoff, since navigating between #/canvas and #/calendar

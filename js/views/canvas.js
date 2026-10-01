@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, toggleLocalCanvasFlag } from '../canvas.js?v=18';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=18';
-import { hexForCourse } from '../notionColors.js?v=18';
-import { escapeHtml, hexToRgba } from '../format.js?v=18';
-import { store } from '../store.js?v=18';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, setLocalCanvasFlag } from '../canvas.js?v=19';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=19';
+import { hexForCourse } from '../notionColors.js?v=19';
+import { escapeHtml, hexToRgba } from '../format.js?v=19';
+import { store } from '../store.js?v=19';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -21,11 +21,12 @@ let hideHandled = false;
 let searchQuery = '';
 
 // Same highlight-and-save pattern as the Calendar tab. Clicking an already-
-// linked event toggles it into `pending` like Calendar does, which gets
-// pushed to Notion (and so to Calendar) on save. Clicking an unlinked one
-// instead flips a local-only flag (see toggleLocalCanvasFlag) — no Notion
-// task gets created and nothing reaches Calendar, since marking complete/
-// urgent here should never silently cause a new Calendar item to appear. No
+// linked event stages it into `pending` like Calendar does, which gets
+// pushed to Notion (and so to Calendar) on Save/Enter. Clicking an unlinked
+// one instead stages a local-only flag into `localPending` (see
+// setLocalCanvasFlag) — on save that's committed to localStorage only, never
+// Notion, so marking complete/urgent here never silently creates a Calendar
+// item. Either kind of staged-but-unsaved mark is discarded by Escape. No
 // mass-delete or free-standing add-task here — those stay Calendar-only.
 const HIGHLIGHT_KINDS = {
   urgent: { field: 'urgent', property: 'Urgent', label: 'urgent' },
@@ -34,10 +35,16 @@ const HIGHLIGHT_KINDS = {
 const HIGHLIGHT_KEYS = { completed: 'C', urgent: 'U' };
 const HIGHLIGHT_COLORS = { completed: '#9b9a97', urgent: '#ffffff' };
 let activeHighlight = null; // null | 'urgent' | 'completed'
-let pending = new Set();
+let pending = new Set(); // linked task ids
 // Same "only cards actually clicked this session" tracking as calendar.js —
 // see taskChipHtml there for the full rationale.
-let touchedThisSession = new Set();
+let touchedThisSession = new Set(); // linked task ids
+// Unlinked-card counterpart to `pending`/`touchedThisSession` — canvas event
+// id -> staged boolean. Only committed to localStorage (see
+// setLocalCanvasFlag) on Save/Enter, same as `pending` only reaches Notion
+// on save, so Escape can discard either kind of unsaved mark the same way.
+let localPending = new Map();
+let localTouchedThisSession = new Set();
 let saving = false;
 let saveError = null;
 
@@ -184,7 +191,7 @@ function onKeyDown(e) {
     // this isn't gated the same way plain letter keybinds are).
     if (document.activeElement?.dataset?.action === 'search') { document.activeElement.blur(); return; }
     if (unlinkMode) { unlinkMode = false; rebuild(); return; }
-    if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); rebuild(); return; }
+    if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); localPending = new Map(); localTouchedThisSession = new Set(); rebuild(); return; }
     return;
   }
 
@@ -320,10 +327,15 @@ function eventDay(event) {
 
 // Linked events source their flag from the Notion task (and `pending` while
 // a save is armed); unlinked events have no task, so they fall back to the
-// local-only flag (see toggleLocalCanvasFlag) which never touches Notion.
+// local-only flag in localStorage (and `localPending` while a save is armed
+// — see setLocalCanvasFlag/toggleCanvasOnlyMark), same two-stage shape as
+// the linked-task path so Escape can discard either one unsaved.
 function isFieldActive(event, task, kind) {
   const field = HIGHLIGHT_KINDS[kind].field;
-  if (!task) return getLocalCanvasFlag(event.id, field);
+  if (!task) {
+    if (activeHighlight === kind && localPending.has(event.id)) return localPending.get(event.id);
+    return getLocalCanvasFlag(event.id, field);
+  }
   return activeHighlight === kind ? pending.has(task.id) : Boolean(task[field]);
 }
 
@@ -355,8 +367,8 @@ function eventChipHtml(event) {
     : '';
 
   // Only linked events can be marked/unlinked through Notion. In highlight
-  // mode (not unlink mode), clicking an unlinked event flips its local-only
-  // flag instead — see toggleLocalCanvasFlag — rather than creating a Notion
+  // mode (not unlink mode), clicking an unlinked event stages its local-only
+  // flag instead — see toggleCanvasOnlyMark — rather than creating a Notion
   // task and pulling it onto Calendar just because it got marked here.
   let interactionClass = 'canvas-chip';
   if (unlinkMode) {
@@ -370,14 +382,19 @@ function eventChipHtml(event) {
   const title = unlinkMode
     ? (isLinked ? 'Click to unlink' : '')
     : activeHighlight
-      ? (isLinked ? `Click to toggle ${HIGHLIGHT_KINDS[activeHighlight].label}` : `Click to mark ${HIGHLIGHT_KINDS[activeHighlight].label} (local only — won't link to Calendar)`)
+      ? (isLinked ? `Click to toggle ${HIGHLIGHT_KINDS[activeHighlight].label}` : `Click to mark ${HIGHLIGHT_KINDS[activeHighlight].label} (local only — won't link to Calendar; Save/Enter to keep, Escape to discard)`)
       : (isLinked ? 'Already linked — click to view on Calendar' : event.name);
 
   // Same static dotted-selected indicator as Calendar's — non-animated,
   // distinct from the marching-ants hover effect, and (like Calendar) only
   // on cards actually clicked this session, not ones already true before
-  // the mode started.
-  const isPendingSelected = activeHighlight && task && pending.has(task.id) && touchedThisSession.has(task.id);
+  // the mode started. Unlinked cards use localPending/localTouchedThisSession
+  // in place of pending/touchedThisSession.
+  const isPendingSelected = activeHighlight && (
+    task
+      ? pending.has(task.id) && touchedThisSession.has(task.id)
+      : localPending.get(event.id) === true && localTouchedThisSession.has(event.id)
+  );
 
   return `
     <div class="cal-chip ${interactionClass}${done ? ' is-done' : ''}${isLinked ? ' has-deadline' : ''}${isPendingSelected ? ' is-pending-selected' : ''}" style="${eventChipStyle(color, event, task)}" title="${escapeHtml(title)}" data-name="${escapeHtml(event.name)}" data-event-id="${escapeHtml(event.id)}" data-course="${escapeHtml(event.course)}" data-deadline="${escapeHtml(event.deadline || '')}" data-task-id="${escapeHtml(task?.id || '')}">
@@ -492,6 +509,8 @@ function toggleHighlight(kind) {
     const field = HIGHLIGHT_KINDS[kind].field;
     pending = new Set([...taskByCanvasId.values()].filter((t) => t[field]).map((t) => t.id));
     touchedThisSession = new Set();
+    localPending = new Map();
+    localTouchedThisSession = new Set();
     rebuild();
   } else {
     saveHighlight(kind);
@@ -503,10 +522,17 @@ async function saveHighlight(kind) {
   const linkedTasks = [...taskByCanvasId.values()];
   const changed = linkedTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
 
+  // Local-only marks never touch Notion, so there's nothing to push for
+  // them — just commit whatever was staged this arm straight to
+  // localStorage, same moment the linked side's changes go out.
+  for (const [eventId, value] of localPending) setLocalCanvasFlag(eventId, cfg.field, value);
+
   if (!changed.length) {
     activeHighlight = null;
     pending = new Set();
     touchedThisSession = new Set();
+    localPending = new Map();
+    localTouchedThisSession = new Set();
     rebuild();
     return;
   }
@@ -532,16 +558,22 @@ async function saveHighlight(kind) {
   saving = false;
   pending = new Set();
   touchedThisSession = new Set();
+  localPending = new Map();
+  localTouchedThisSession = new Set();
   rebuild();
 }
 
 // Clicking an unlinked card while Mark completed/Highlight urgent is armed:
-// flip its local-only flag immediately (localStorage, see canvas.js) and
-// re-render. No Notion task gets created and nothing reaches Calendar —
-// marking something here is a Canvas-tab-only annotation unless/until the
-// assignment gets linked separately (via the normal pick-a-day flow).
+// stage its local-only flag in `localPending` (mirrors how a linked click
+// stages into `pending`) and re-render. Nothing is written to localStorage,
+// no Notion task gets created, and nothing reaches Calendar, until Save/
+// Enter actually commits it — so Escape can discard it like any other
+// unsaved mark instead of it having already taken effect.
 function toggleCanvasOnlyMark(event, kind) {
-  toggleLocalCanvasFlag(event.id, HIGHLIGHT_KINDS[kind].field);
+  const field = HIGHLIGHT_KINDS[kind].field;
+  const current = localPending.has(event.id) ? localPending.get(event.id) : getLocalCanvasFlag(event.id, field);
+  localPending.set(event.id, !current);
+  localTouchedThisSession.add(event.id);
   rebuild();
 }
 
