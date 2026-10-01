@@ -1082,6 +1082,14 @@ dialog#modal-dialog::backdrop {
   outline-offset: -2px;
 }
 
+/* In-flight autoLinkAndMark request — blocks a second click from firing a
+   duplicate create while the first is still pending. */
+.cal-chip.is-linking {
+  opacity: 0.55;
+  pointer-events: none;
+  cursor: wait;
+}
+
 .canvas-chip.is-highlighted,
 .cal-chip.is-highlight-flash {
   animation: canvas-flash 0.5s ease-in-out 3;

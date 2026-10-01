@@ -1,5 +1,5 @@
 import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight } from '../canvas.js?v=17';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=17';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, patchCachedNotionTask, addCachedNotionTask } from '../notion.js?v=17';
 import { hexForCourse } from '../notionColors.js?v=17';
 import { escapeHtml, hexToRgba } from '../format.js?v=17';
 import { store } from '../store.js?v=17';
@@ -14,12 +14,19 @@ let loadError = null;
 let viewMode = 'week'; // 'week' | 'month'
 let anchor = startOfDay(new Date());
 let courseFilter = '';
-let hideCompleted = false;
+// Hides anything already handled — marked complete, or just linked to a
+// Notion task at all (it's now tracked on Calendar, so it doesn't need to
+// keep cluttering the raw Canvas feed).
+let hideHandled = false;
 let searchQuery = '';
 
-// Same highlight-and-save pattern as the Calendar tab, but only meaningful
-// for already-linked events (unlinked ones have no backing Notion task to
-// mark). No mass-delete or add-task here — those stay Calendar-only.
+// Same highlight-and-save pattern as the Calendar tab. Clicking an already-
+// linked event toggles it into `pending` like Calendar does. Clicking an
+// unlinked one instead creates its backing Homework task on the spot
+// (Date defaults to the Canvas deadline day) with the flag already set, so
+// marking an assignment never requires a separate manual-link trip through
+// the Calendar tab first — see autoLinkAndMark. No mass-delete or free-
+// standing add-task here — those stay Calendar-only.
 const HIGHLIGHT_KINDS = {
   urgent: { field: 'urgent', property: 'Urgent', label: 'urgent' },
   completed: { field: 'mark', property: '?', label: 'completed' },
@@ -33,6 +40,9 @@ let pending = new Set();
 let touchedThisSession = new Set();
 let saving = false;
 let saveError = null;
+// Canvas event ids currently being auto-linked (see autoLinkAndMark) — kept
+// separate from `saving`/`pending`, which are about already-linked tasks.
+let linkingIds = new Set();
 
 // Unlink: press L, then click a linked (purple-striped) card to unlink it
 // immediately — clears that task's Deadline. No confirm step; relinking
@@ -195,7 +205,7 @@ function onKeyDown(e) {
 
   switch (e.key) {
     case 'f': case 'F': e.preventDefault(); focusSearch(); break;
-    case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
+    case 'h': case 'H': hideHandled = !hideHandled; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
     case 'l': case 'L': toggleUnlinkMode(); break;
@@ -295,7 +305,7 @@ function visibleEvents() {
   const q = searchQuery.trim().toLowerCase();
   return allEvents.filter((e) => {
     if (courseFilter && e.course !== courseFilter) return false;
-    if (hideCompleted && taskByCanvasId.get(e.id)?.mark) return false;
+    if (hideHandled && taskByCanvasId.has(e.id)) return false;
     if (q) {
       // Search against whatever name is actually shown — the linked
       // Calendar task's name once linked, same as eventChipHtml.
@@ -344,11 +354,17 @@ function eventChipHtml(event) {
     ? new Date(event.deadline).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
     : '';
 
-  // Only linked events are interactive in a highlight/unlink mode — there's
-  // no backing task to mark or unlink otherwise.
+  // Only linked events can be marked/unlinked directly — there's no backing
+  // task otherwise. In highlight mode (not unlink mode), clicking an
+  // unlinked event creates that backing task and marks it in one step — see
+  // autoLinkAndMark — instead of being a no-op or detouring through Calendar.
+  const isLinking = linkingIds.has(event.id);
   let interactionClass = 'canvas-chip';
-  if (unlinkMode || activeHighlight) {
+  if (unlinkMode) {
     interactionClass += isLinked ? ' is-highlightable' : '';
+  } else if (activeHighlight) {
+    interactionClass += isLinked ? ' is-highlightable' : ' canvas-chip-clickable';
+    if (isLinking) interactionClass += ' is-linking';
   } else {
     interactionClass += ' canvas-chip-clickable';
   }
@@ -356,7 +372,7 @@ function eventChipHtml(event) {
   const title = unlinkMode
     ? (isLinked ? 'Click to unlink' : '')
     : activeHighlight
-      ? (isLinked ? `Click to toggle ${HIGHLIGHT_KINDS[activeHighlight].label}` : '')
+      ? (isLinked ? `Click to toggle ${HIGHLIGHT_KINDS[activeHighlight].label}` : (isLinking ? 'Linking…' : `Click to link and mark ${HIGHLIGHT_KINDS[activeHighlight].label}`))
       : (isLinked ? 'Already linked — click to view on Calendar' : event.name);
 
   // Same static dotted-selected indicator as Calendar's — non-animated,
@@ -521,6 +537,44 @@ async function saveHighlight(kind) {
   rebuild();
 }
 
+// Clicking an unlinked card while Mark completed/Highlight urgent is armed:
+// create its backing Homework task immediately (Date defaults to the Canvas
+// deadline day — same default scheduleCanvasTask uses when nothing more
+// specific is picked) with the flag already set, so one click both links and
+// marks it instead of requiring a separate trip through Calendar first. Kept
+// off `pending`/`saving` (those track already-linked tasks mid-arm) so a
+// slow create request can't be mistaken for the bulk-save in flight.
+async function autoLinkAndMark(event, kind) {
+  if (linkingIds.has(event.id)) return;
+  linkingIds.add(event.id);
+  rebuild();
+
+  const cfg = HIGHLIGHT_KINDS[kind];
+  const deadlineDay = (event.deadline || '').slice(0, 10);
+  const result = await createTask({
+    name: event.name,
+    category: 'Homework',
+    course: event.course || '',
+    date: deadlineDay || isoDay(new Date()),
+    deadline: event.deadline || '',
+    canvasId: event.id,
+    [cfg.field]: true,
+  });
+
+  linkingIds.delete(event.id);
+
+  if (result.ok && result.task) {
+    addCachedNotionTask(result.task);
+    taskByCanvasId.set(event.id, result.task);
+    pending.add(result.task.id);
+    touchedThisSession.add(result.task.id);
+    saveError = null;
+  } else {
+    saveError = result.error || `Failed to link "${event.name}"`;
+  }
+  rebuild();
+}
+
 function toggleUnlinkMode() {
   if (activeHighlight) return; // mutual exclusion
   unlinkMode = !unlinkMode;
@@ -604,7 +658,7 @@ function rebuild() {
     const isActive = courseFilter === c;
     const color = hexForCourse(c);
     const style = isActive ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
-    return `<button data-course="${escapeHtml(c)}" class="${isActive ? 'active' : ''}"${style}>${escapeHtml(c)}</button>`;
+    return `<button data-course-filter="${escapeHtml(c)}" class="${isActive ? 'active' : ''}"${style}>${escapeHtml(c)}</button>`;
   }
 
   container.innerHTML = `
@@ -612,7 +666,7 @@ function rebuild() {
       <div class="row-between">
         <h1 class="mono">Canvas</h1>
         <div style="display:flex; gap:8px;">
-          <button data-action="hide-completed" class="${hideCompleted ? 'active' : ''}">[H] ${hideCompleted ? 'Showing active only' : 'Hide completed'}</button>
+          <button data-action="hide-handled" class="${hideHandled ? 'active' : ''}">[H] ${hideHandled ? 'Showing unlinked only' : 'Hide completed/linked'}</button>
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
           ${unlinkButtonHtml()}
@@ -638,7 +692,7 @@ function rebuild() {
       </div>
 
       <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">
-        <button data-course="" class="${courseFilter === '' ? 'active' : ''}">All</button>
+        <button data-course-filter="" class="${courseFilter === '' ? 'active' : ''}">All</button>
         ${primary.map(courseButtonHtml).join('')}
         ${other.length ? `
           <span class="filter-gap"></span>
@@ -693,9 +747,9 @@ function attachEvents() {
     rebuild();
   });
 
-  container.querySelectorAll('[data-course]').forEach((btn) => {
+  container.querySelectorAll('[data-course-filter]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      courseFilter = btn.dataset.course;
+      courseFilter = btn.dataset.courseFilter;
       rebuild();
     });
   });
@@ -705,8 +759,8 @@ function attachEvents() {
     rebuild();
   });
 
-  container.querySelector('[data-action="hide-completed"]')?.addEventListener('click', () => {
-    hideCompleted = !hideCompleted;
+  container.querySelector('[data-action="hide-handled"]')?.addEventListener('click', () => {
+    hideHandled = !hideHandled;
     rebuild();
   });
 
@@ -720,19 +774,37 @@ function attachEvents() {
     container.querySelectorAll('.cal-chip.is-highlightable').forEach((el) => {
       el.addEventListener('click', () => unlinkTask(el.dataset.taskId));
     });
-  } else if (activeHighlight) {
-    container.querySelectorAll('.cal-chip.is-highlightable').forEach((el) => {
-      el.addEventListener('click', () => {
-        const id = el.dataset.taskId;
-        if (pending.has(id)) pending.delete(id);
-        else pending.add(id);
-        touchedThisSession.add(id);
-        rebuild();
-      });
-    });
   } else {
+    if (activeHighlight) {
+      container.querySelectorAll('.cal-chip.is-highlightable').forEach((el) => {
+        el.addEventListener('click', () => {
+          const id = el.dataset.taskId;
+          if (pending.has(id)) pending.delete(id);
+          else pending.add(id);
+          touchedThisSession.add(id);
+          rebuild();
+        });
+      });
+    }
+    // .canvas-chip-clickable only ever matches unlinked events once
+    // activeHighlight is set (linked ones get is-highlightable instead, with
+    // their own handler above), so this always means "no backing task yet"
+    // here — link-and-mark it directly rather than detouring through
+    // Calendar. Outside highlight mode it still means the pick-day/link flow.
     container.querySelectorAll('.canvas-chip-clickable').forEach((el) => {
       el.addEventListener('click', () => {
+        const item = {
+          id: el.dataset.eventId,
+          name: el.dataset.name,
+          course: el.dataset.course,
+          deadline: el.dataset.deadline,
+        };
+
+        if (activeHighlight) {
+          autoLinkAndMark(item, activeHighlight);
+          return;
+        }
+
         // Already linked — jump to the existing Calendar task instead of
         // letting another click create a duplicate.
         const linkedTask = taskByCanvasId.get(el.dataset.eventId);
@@ -741,12 +813,7 @@ function attachEvents() {
           location.hash = '/calendar';
           return;
         }
-        setPendingSchedule({
-          id: el.dataset.eventId,
-          name: el.dataset.name,
-          course: el.dataset.course,
-          deadline: el.dataset.deadline,
-        });
+        setPendingSchedule(item);
         location.hash = '/calendar';
       });
     });
