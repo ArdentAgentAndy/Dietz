@@ -70,12 +70,16 @@ top nav should flip to "Synced" within a few seconds.
 
 ## 7. Daily digest email (optional)
 
-Sends one email a day (6am script time) listing Canvas items due today,
-due tomorrow, and anything marked urgent in Notion — or "all clear" if
-there's nothing to report. Needs `CANVAS_CALENDAR_ID` and the Notion
-properties (see below) already configured, since it reuses the same data
-those features read; either can be left unset and that section is just
-skipped.
+Sends one email a day (6am script time) with three sections — Due Today,
+Due Tomorrow, Urgent — combining Canvas deadlines with Notion Calendar
+tasks (its own Date property, independent of any Canvas deadline) into one
+deduplicated list per day: a Canvas item linked to a Notion task shows once
+as that task, an unlinked one is prefixed `[C]` since it only exists in
+Canvas, not yet tracked in Calendar. Subject line is
+`Dietz - Daily Digest: N due today, N due tomorrow, N urgent`. Needs
+`CANVAS_CALENDAR_ID` and the Notion properties (see below) already
+configured, since it reuses the same data those features read; either can
+be left unset and that section is just empty.
 
 1. *(Optional)* **Project Settings → Script Properties → Add script
    property** — `DIGEST_EMAIL`, value: the address to send to. Skip this to

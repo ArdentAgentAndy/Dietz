@@ -504,12 +504,84 @@ function digestDateRange_() {
   return { today: today, tomorrow: tomorrow };
 }
 
-function digestEventLine_(e) {
-  return '- ' + (e.course ? e.course + ': ' + e.name : e.name);
+// A Canvas deadline (plain yyyy-mm-dd or ISO string) or a Notion date/
+// deadline property ({start,end} or null) -> yyyy-mm-dd, or null. Matches
+// the frontend's own deadline.slice(0,10)/eventDay() convention (see
+// canvas.js/calendar.js) so this never disagrees with what the app shows.
+function digestDay_(value) {
+  var start = typeof value === 'string' ? value : (value && value.start);
+  return start ? start.slice(0, 10) : null;
 }
 
-function digestTaskLine_(t) {
-  return '- ' + (t.course ? t.course + ': ' : '') + t.name;
+// Same input -> "h:mm a" if it carries a time, else '' (an all-day value
+// has no time to show).
+function digestTime_(value) {
+  var start = typeof value === 'string' ? value : (value && value.start);
+  if (!start || start.length <= 10) return '';
+  return Utilities.formatDate(new Date(start), Session.getScriptTimeZone(), 'h:mm a');
+}
+
+// Same input -> a short date, plus the time if it has one. For urgent items,
+// which aren't already grouped under a "today"/"tomorrow" heading.
+function digestDateTime_(value) {
+  var start = typeof value === 'string' ? value : (value && value.start);
+  if (!start) return '';
+  var tz = Session.getScriptTimeZone();
+  if (start.length <= 10) return Utilities.formatDate(new Date(start + 'T00:00:00'), tz, 'EEE M/d');
+  return Utilities.formatDate(new Date(start), tz, 'EEE M/d, h:mm a');
+}
+
+function digestBullet_(label, when) {
+  return '- ' + label + (when ? ' — ' + when : '');
+}
+
+// Combines Canvas deadlines and Notion Calendar-scheduled tasks (its own
+// Date property, independent of any Canvas deadline) into one deduplicated,
+// day-bucketed list. A Canvas item linked (by CanvasId) to a Notion task
+// shows once, as that task, under whichever day(s) its deadline/date land
+// on; an unlinked one is prefixed [C] since it exists only in Canvas, not
+// yet tracked in Calendar. Done (mark: true) tasks are skipped entirely.
+function digestDueLists_(events, tasks, range) {
+  var taskByCanvasId = {};
+  tasks.forEach(function (t) { if (t.canvasId) taskByCanvasId[t.canvasId] = t; });
+
+  var buckets = { today: [], tomorrow: [] };
+  var seenByBucket = { today: {}, tomorrow: {} };
+
+  function bucketFor(day) {
+    if (day === range.today) return 'today';
+    if (day === range.tomorrow) return 'tomorrow';
+    return null;
+  }
+
+  events.forEach(function (e) {
+    var bucket = bucketFor(digestDay_(e.deadline));
+    if (!bucket) return;
+    var linked = taskByCanvasId[e.id];
+    if (linked) {
+      if (linked.mark || seenByBucket[bucket][linked.id]) return;
+      seenByBucket[bucket][linked.id] = true;
+      var label = linked.course ? linked.course + ': ' + linked.name : linked.name;
+      buckets[bucket].push(digestBullet_(label, digestTime_(linked.deadline) || digestTime_(e.deadline)));
+    } else {
+      var cLabel = '[C] ' + (e.course ? e.course + ': ' + e.name : e.name);
+      buckets[bucket].push(digestBullet_(cLabel, digestTime_(e.deadline)));
+    }
+  });
+
+  // A task's own Date (when it's scheduled on the Calendar) is independent
+  // of its Deadline (when it's due) — checked separately so a task
+  // scheduled for today but due tomorrow shows under both, not just one.
+  tasks.forEach(function (t) {
+    if (t.mark) return;
+    var bucket = bucketFor(digestDay_(t.date));
+    if (!bucket || seenByBucket[bucket][t.id]) return;
+    seenByBucket[bucket][t.id] = true;
+    var label = t.course ? t.course + ': ' + t.name : t.name;
+    buckets[bucket].push(digestBullet_(label, digestTime_(t.date)));
+  });
+
+  return buckets;
 }
 
 function sendDailyDigest() {
@@ -517,35 +589,21 @@ function sendDailyDigest() {
   var events = canvasEvents_().events || [];
   var tasks = notionQueryTasks_().tasks || [];
 
-  // A Canvas event linked (by CanvasId) to a Notion task that's already
-  // marked done shouldn't still show up as "due" in the digest.
-  var doneCanvasIds = {};
-  tasks.forEach(function (t) {
-    if (t.canvasId && t.mark) doneCanvasIds[t.canvasId] = true;
-  });
-
-  var dueToday = [];
-  var dueTomorrow = [];
-  events.forEach(function (e) {
-    if (doneCanvasIds[e.id]) return;
-    var day = (e.deadline || '').slice(0, 10);
-    if (day === range.today) dueToday.push(e);
-    else if (day === range.tomorrow) dueTomorrow.push(e);
-  });
+  var due = digestDueLists_(events, tasks, range);
 
   var urgent = tasks.filter(function (t) { return t.urgent && !t.mark; });
+  var urgentLines = urgent.map(function (t) {
+    var label = t.course ? t.course + ': ' + t.name : t.name;
+    return digestBullet_(label, digestDateTime_(t.date) || digestDateTime_(t.deadline));
+  });
 
   var sections = [];
-  if (dueToday.length) sections.push('DUE TODAY\n' + dueToday.map(digestEventLine_).join('\n'));
-  if (dueTomorrow.length) sections.push('DUE TOMORROW\n' + dueTomorrow.map(digestEventLine_).join('\n'));
-  if (urgent.length) sections.push('URGENT\n' + urgent.map(digestTaskLine_).join('\n'));
+  if (due.today.length) sections.push('DUE TODAY\n' + due.today.join('\n'));
+  if (due.tomorrow.length) sections.push('DUE TOMORROW\n' + due.tomorrow.join('\n'));
+  if (urgentLines.length) sections.push('URGENT\n' + urgentLines.join('\n'));
 
-  var subjectParts = [];
-  if (dueToday.length) subjectParts.push(dueToday.length + ' due today');
-  if (dueTomorrow.length) subjectParts.push(dueTomorrow.length + ' due tomorrow');
-  if (urgent.length) subjectParts.push(urgent.length + ' urgent');
-
-  var subject = subjectParts.length ? 'Dietz — ' + subjectParts.join(', ') : 'Dietz — all clear';
+  var subject = 'Dietz - Daily Digest: ' + due.today.length + ' due today, ' +
+    due.tomorrow.length + ' due tomorrow, ' + urgent.length + ' urgent';
   var body = sections.length ? sections.join('\n\n') : 'Nothing due today or tomorrow, and nothing urgent.';
 
   // DIGEST_EMAIL is optional — an unset property falls back to the Google
