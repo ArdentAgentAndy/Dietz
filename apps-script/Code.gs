@@ -606,10 +606,7 @@ function sendDailyDigest() {
     due.tomorrow.length + ' due tomorrow, ' + urgent.length + ' urgent';
   var body = sections.length ? sections.join('\n\n') : 'Nothing due today or tomorrow, and nothing urgent.';
 
-  // DIGEST_EMAIL is optional — an unset property falls back to the Google
-  // account this script is running as (the one that owns/deployed it).
-  var email = PropertiesService.getScriptProperties().getProperty('DIGEST_EMAIL') || Session.getEffectiveUser().getEmail();
-  MailApp.sendEmail({ to: email, subject: subject, body: body });
+  MailApp.sendEmail({ to: 'hkbfel@gmail.com', subject: subject, body: body });
 }
 
 // One-time setup — select this function in the Apps Script editor's

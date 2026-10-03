@@ -81,18 +81,15 @@ Canvas, not yet tracked in Calendar. Subject line is
 configured, since it reuses the same data those features read; either can
 be left unset and that section is just empty.
 
-1. *(Optional)* **Project Settings → Script Properties → Add script
-   property** — `DIGEST_EMAIL`, value: the address to send to. Skip this to
-   just send to the Google account this script is running as.
-2. In the Apps Script editor, select **`createDailyDigestTrigger`** from the
+1. In the Apps Script editor, select **`createDailyDigestTrigger`** from the
    function dropdown (top toolbar) and click **Run**. The first run prompts
    you to authorize sending email and managing triggers — allow it. This
    installs the daily trigger; you only need to run it once (re-running is
    safe and just replaces the existing trigger, e.g. after changing the
    hour in that function).
-3. To change the send time, edit the `.atHour(6)` call in
+2. To change the send time, edit the `.atHour(6)` call in
    `createDailyDigestTrigger`, `clasp push`, then re-run the function once
-   as in step 2.
+   as in step 1.
 
 To test without waiting for 6am, select **`sendDailyDigest`** itself in the
 dropdown and click Run — it sends immediately.
