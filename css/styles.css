@@ -300,6 +300,14 @@ h1, h2, h3 {
   padding: 6px 10px;
 }
 
+/* A tappable equivalent of Escape (discard an in-progress mark / exit
+   unlink mode) for mobile, where there's no Escape key — sized a bit larger
+   than the other toolbar buttons since it's meant to be thumbed, not
+   precision-clicked. */
+.cal-cancel-btn {
+  padding: 10px 20px;
+}
+
 /* Fixed width so the label's text length (week range vs. month name)
    doesn't change .cal-nav's total width — otherwise, since this block is
    right-aligned in a row-between header, the prev/next buttons shift

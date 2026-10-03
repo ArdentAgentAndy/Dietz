@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=21';
-import { hexForNotionColor } from '../notionColors.js?v=21';
-import { escapeHtml, hexToRgba } from '../format.js?v=21';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=21';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=28';
+import { hexForNotionColor } from '../notionColors.js?v=28';
+import { escapeHtml, hexToRgba } from '../format.js?v=28';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=28';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
@@ -81,7 +81,6 @@ let pending = new Set();
 // that were already true (and so already in `pending`) before the mode
 // started (see taskChipHtml's isPendingSelected).
 let touchedThisSession = new Set();
-let saving = false;
 let saveError = null;
 
 // WASD spatial-navigation highlight: separate from the mouse-hover effect,
@@ -112,7 +111,21 @@ let schedulingBusy = false; // true while the add/link request is in flight — 
 // since this is destructive — which archives every marked task in Notion.
 let deleteMode = false;
 let markedForDelete = new Set();
-let deleting = false;
+
+// Tasks deleted (single or mass) while their createTask() was still in
+// flight — there's no real Notion page yet for that id, so sending its
+// delete would just fail server-side and resurrect the "deleted" card (see
+// openTaskDialog's delete handler and the create success handler below).
+// Tracked by tempId so the create handler can discard the result — and
+// delete the real page it just made — instead of ever showing it.
+const pendingDeleteTempIds = new Set();
+
+// Same idea for a task edited while its createTask() was still in flight —
+// there's no real page yet to send the update to, so it'd just fail and
+// roll the edit back. Tracked by tempId -> the fields to apply once the
+// create resolves and a real id exists (see openTaskDialog's submit
+// handler and the create success handler below).
+const pendingEditFields = new Map();
 
 function isFieldActive(task, kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
@@ -291,7 +304,11 @@ function onKeyDown(e) {
   }
 
   switch (e.key) {
-    case '+': case '=': openTaskDialog(null, hoveredDate || undefined); break;
+    // preventDefault matters here the same way it does for Enter above:
+    // opening the dialog focuses its Name field while this same keypress's
+    // default action (typing the character) is still pending, so without
+    // it the "=" (or "+") types itself straight into the field.
+    case '+': case '=': e.preventDefault(); openTaskDialog(null, hoveredDate || undefined); break;
     case 'f': case 'F': e.preventDefault(); focusSearch(); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
@@ -478,37 +495,39 @@ async function moveTaskToDate(taskId, newDay) {
 async function saveHighlight(kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
   const changed = allTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
+  const newValues = new Map(changed.map((t) => [t.id, pending.has(t.id)]));
+
+  activeHighlight = null;
+  pending = new Set();
+  touchedThisSession = new Set();
 
   if (!changed.length) {
-    activeHighlight = null;
-    pending = new Set();
-    touchedThisSession = new Set();
     rebuild();
     return;
   }
 
-  saving = true;
+  // Apply immediately, before the Notion round-trip — a failure rolls these
+  // back (see below) rather than leaving the UI waiting on the network for
+  // something that already happened locally.
+  const prevValues = new Map(changed.map((t) => [t.id, t[cfg.field]]));
+  for (const t of changed) {
+    t[cfg.field] = newValues.get(t.id);
+    patchCachedNotionTask(t.id, { [cfg.field]: newValues.get(t.id) });
+  }
+  saveError = null;
   rebuild();
 
-  const updates = changed.map((t) => ({ pageId: t.id, value: pending.has(t.id) }));
+  const updates = changed.map((t) => ({ pageId: t.id, value: newValues.get(t.id) }));
   const result = await pushCheckboxUpdates(cfg.property, updates);
 
-  if (result.ok) {
+  if (!result.ok) {
     for (const t of changed) {
-      const value = pending.has(t.id);
-      t[cfg.field] = value;
-      patchCachedNotionTask(t.id, { [cfg.field]: value });
+      t[cfg.field] = prevValues.get(t.id);
+      patchCachedNotionTask(t.id, { [cfg.field]: prevValues.get(t.id) });
     }
-    saveError = null;
-  } else {
     saveError = result.error || `Failed to save ${cfg.label} flags to Notion`;
+    rebuild();
   }
-
-  activeHighlight = null;
-  saving = false;
-  pending = new Set();
-  touchedThisSession = new Set();
-  rebuild();
 }
 
 // Categories present in the data, grouped/ordered per CATEGORY_GROUPS
@@ -545,6 +564,25 @@ function subValueColorHex(category, value) {
   if (!config) return null;
   const task = allTasks.find((t) => t.category === category && t[config.prop] === value);
   return task ? hexForNotionColor(task[config.colorProp]) : null;
+}
+
+// Best-effort color guess for a task being added/edited, before the server
+// confirms its real Notion select-option colors — reused from another task
+// that already has this category (categoryColor is shared per status option,
+// so any task in the category has the right one) or this exact category+
+// sub-value pair (course/project/lead color is per-value, so only an exact
+// match is trustworthy; otherwise leave it blank rather than show a
+// different value's color). Used so the optimistic render doesn't show a
+// wrong or stale (post-edit) color while waiting on the round-trip.
+function guessedColors(category, subValue) {
+  const config = SUB_FILTER_BY_CATEGORY[category];
+  const anyInCategory = allTasks.find((t) => t.category === category);
+  const colors = { categoryColor: anyInCategory?.categoryColor || '' };
+  if (config && subValue) {
+    const exact = allTasks.find((t) => t.category === category && t[config.prop] === subValue);
+    colors[config.colorProp] = exact?.[config.colorProp] || '';
+  }
+  return colors;
 }
 
 function visibleTasks() {
@@ -768,11 +806,11 @@ const HIGHLIGHT_COLORS = { completed: '#9b9a97', urgent: '#ffffff' };
 function highlightButtonHtml(kind, idleLabel) {
   const isActive = activeHighlight === kind;
   const isOtherActive = (activeHighlight && activeHighlight !== kind) || deleteMode;
-  const label = isActive ? (saving ? 'Saving…' : `Save ${HIGHLIGHT_KINDS[kind].label}`) : idleLabel;
+  const label = isActive ? `Save ${HIGHLIGHT_KINDS[kind].label}` : idleLabel;
   const keyHint = isActive ? 'Enter' : HIGHLIGHT_KEYS[kind];
   const color = HIGHLIGHT_COLORS[kind];
   const style = isActive ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
-  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${saving || isOtherActive ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
+  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${isOtherActive ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
 }
 
 // Shared by the button click and the 'c'/'u' keybinds (see attachKeybinds).
@@ -790,8 +828,8 @@ function toggleHighlight(kind) {
 }
 
 function deleteButtonHtml() {
-  const disabled = deleting || (activeHighlight && !deleteMode);
-  const label = deleteMode ? (deleting ? 'Deleting…' : 'Confirm delete') : 'Mass delete';
+  const disabled = activeHighlight && !deleteMode;
+  const label = deleteMode ? 'Confirm delete' : 'Mass delete';
   const keyHint = deleteMode ? 'Enter' : 'X';
   const style = deleteMode ? ' style="border-color:#ff6b6b; color:#ff6b6b; background:rgba(255, 107, 107, 0.14);"' : '';
   return `<button data-action="delete-mode" class="${deleteMode ? 'active' : ''}"${style} ${disabled ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
@@ -820,25 +858,35 @@ async function toggleDeleteMode() {
   const ok = confirm(`Delete ${count} task${count === 1 ? '' : 's'}? They'll be moved to Notion's trash, recoverable there.`);
   if (!ok) return; // stay in delete mode so the selection can still be adjusted
 
-  deleting = true;
-  rebuild();
-
   const ids = [...markedForDelete];
-  const results = await Promise.all(ids.map((id) => deleteTask(id)));
-  const failed = results.some((r) => !r.ok);
+  const removed = allTasks.filter((t) => markedForDelete.has(t.id));
 
-  if (!failed) {
-    allTasks = allTasks.filter((t) => !markedForDelete.has(t.id));
-    for (const id of ids) removeCachedNotionTask(id);
-    saveError = null;
-  } else {
-    saveError = 'Some tasks failed to delete — check Notion and try again.';
-  }
-
+  // Apply immediately — the Notion archive calls happen in the background;
+  // any that fail get added back instead of blocking the UI on all of them.
+  allTasks = allTasks.filter((t) => !markedForDelete.has(t.id));
+  for (const id of ids) removeCachedNotionTask(id);
+  saveError = null;
   deleteMode = false;
-  deleting = false;
   markedForDelete = new Set();
   rebuild();
+
+  // A still-"temp-" id's createTask() is still in flight — there's no real
+  // page yet to send a delete for (see pendingDeleteTempIds above). Flag it
+  // instead of calling deleteTask, which would just fail and (via the
+  // failedTasks handling below) resurrect it.
+  const realIds = ids.filter((id) => !id.startsWith('temp-'));
+  for (const id of ids) if (id.startsWith('temp-')) pendingDeleteTempIds.add(id);
+
+  const results = await Promise.all(realIds.map((id) => deleteTask(id)));
+  const failedIds = new Set(realIds.filter((_, i) => !results[i].ok));
+  const failedTasks = removed.filter((t) => failedIds.has(t.id));
+
+  if (failedTasks.length) {
+    allTasks = [...allTasks, ...failedTasks];
+    for (const t of failedTasks) addCachedNotionTask(t);
+    saveError = `${failedTasks.length} task${failedTasks.length === 1 ? '' : 's'} failed to delete — check Notion and try again.`;
+    rebuild();
+  }
 }
 
 function uniqueValues(prop) {
@@ -927,7 +975,6 @@ function openTaskDialog(existing, defaultDate) {
         <label style="flex-direction:row; align-items:center; gap:6px;"><input type="checkbox" name="mark" ${existing?.mark ? 'checked' : ''}> Completed</label>
         <label style="flex-direction:row; align-items:center; gap:6px;"><input type="checkbox" name="urgent" ${existing?.urgent ? 'checked' : ''}> Urgent</label>
       </div>
-      <p class="muted" data-form-error style="color:var(--red); display:none;"></p>
       <div class="modal-actions">
         ${existing ? '<button type="button" class="btn-danger" data-action="delete">Delete</button>' : ''}
         <button type="button" data-action="cancel">Cancel</button>
@@ -942,37 +989,41 @@ function openTaskDialog(existing, defaultDate) {
   form.querySelector('[name="category"]').addEventListener('change', (e) => renderSubField(e.target.value));
   form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
 
-  form.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
+  form.querySelector('[data-action="delete"]')?.addEventListener('click', () => {
     if (!confirm(`Delete "${existing.name || 'this task'}"? It'll be moved to Notion's trash, recoverable there.`)) return;
 
-    const deleteBtn = form.querySelector('[data-action="delete"]');
-    const errorEl = form.querySelector('[data-form-error]');
-    deleteBtn.disabled = true;
-    deleteBtn.textContent = 'Deleting…';
+    // Apply immediately and close — the Notion archive call happens in the
+    // background; a failure brings the task back and surfaces saveError on
+    // the page behind this (now-closed) dialog, same as mass delete.
+    allTasks = allTasks.filter((t) => t.id !== existing.id);
+    removeCachedNotionTask(existing.id);
+    saveError = null;
+    dialog.close();
+    rebuild();
 
-    const result = await deleteTask(existing.id);
-    if (result.ok) {
-      dialog.close();
-      await load();
-    } else {
-      errorEl.textContent = result.error || 'Something went wrong talking to Notion.';
-      errorEl.style.display = 'block';
-      deleteBtn.disabled = false;
-      deleteBtn.textContent = 'Delete';
+    if (existing.id.startsWith('temp-')) {
+      // Its createTask() is still in flight — there's no real page yet to
+      // delete. Flag it so the create handler discards the result (and
+      // deletes the real page it just made) instead of resurrecting it.
+      pendingDeleteTempIds.add(existing.id);
+      return;
     }
+
+    deleteTask(existing.id).then((result) => {
+      if (!result.ok) {
+        allTasks = [...allTasks, existing];
+        addCachedNotionTask(existing);
+        saveError = result.error || 'Failed to delete task';
+        rebuild();
+      }
+    });
   });
 
-  form.addEventListener('submit', async (e) => {
-    // Unlike the app's other (synchronous) dialogs, this one awaits a
-    // network call — without preventDefault, the method="dialog" form's
-    // native auto-close would fire immediately on submit, before the
-    // request resolves, regardless of success or failure.
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     const data = new FormData(form);
     const category = data.get('category');
     const prop = subFieldProp(category);
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const errorEl = form.querySelector('[data-form-error]');
 
     const fields = {
       name: data.get('name'),
@@ -983,20 +1034,124 @@ function openTaskDialog(existing, defaultDate) {
       urgent: data.get('urgent') === 'on',
     };
     if (prop) fields[prop] = data.get('subValue') || '';
+    const dateObj = fields.date ? { start: fields.date, end: null } : null;
+    const colors = guessedColors(category, prop ? fields[prop] : '');
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = existing ? 'Saving…' : 'Adding…';
+    // Apply immediately and close — the Notion create/update call happens in
+    // the background. A failure rolls the local change back (edit) or drops
+    // the placeholder card (add) and surfaces saveError on the page behind
+    // this (now-closed) dialog, same as the other write flows in this file.
+    saveError = null;
 
-    const result = existing ? await updateTask(existing.id, fields) : await createTask(fields);
-
-    if (result.ok) {
+    if (existing) {
+      const prevTask = { ...existing };
+      Object.assign(existing, fields, { date: dateObj }, colors);
+      patchCachedNotionTask(existing.id, existing);
       dialog.close();
-      await load();
+      rebuild();
+
+      if (existing.id.startsWith('temp-')) {
+        // Its createTask() is still in flight — there's no real page yet to
+        // update. The optimistic edit above is already showing correctly;
+        // queue the fields so the create handler pushes them once the real
+        // id exists, instead of sending an update for a page that doesn't
+        // exist yet (which would just fail and roll this edit back).
+        pendingEditFields.set(existing.id, fields);
+        return;
+      }
+
+      updateTask(existing.id, fields).then((result) => {
+        if (result.ok) {
+          if (result.task) {
+            Object.assign(existing, result.task);
+            patchCachedNotionTask(existing.id, result.task);
+            rebuild();
+          }
+        } else {
+          Object.assign(existing, prevTask);
+          patchCachedNotionTask(existing.id, prevTask);
+          saveError = result.error || 'Failed to save task';
+          rebuild();
+        }
+      });
     } else {
-      errorEl.textContent = result.error || 'Something went wrong talking to Notion.';
-      errorEl.style.display = 'block';
-      submitBtn.disabled = false;
-      submitBtn.textContent = existing ? 'Save' : 'Add';
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const optimisticTask = {
+        id: tempId, url: '', name: fields.name, category: fields.category,
+        categoryColor: '', course: '', courseColor: '', project: '', projectColor: '',
+        lead: '', leadColor: '', class: '', type: '', task: '', select: '',
+        date: dateObj, deadline: null, canvasId: '', duration: fields.duration,
+        location: '', room: '', credit: '', score: '', display: false,
+        mark: fields.mark, urgent: fields.urgent,
+      };
+      if (prop) optimisticTask[prop] = fields[prop];
+      Object.assign(optimisticTask, colors);
+      allTasks = [...allTasks, optimisticTask];
+      addCachedNotionTask(optimisticTask);
+      dialog.close();
+      rebuild();
+
+      createTask(fields).then((result) => {
+        if (pendingDeleteTempIds.delete(tempId)) {
+          // Deleted locally before this resolved (see the delete handlers
+          // above) — the real page now exists only on Notion's side, with
+          // nothing in allTasks pointing at it any more. Clean it up there
+          // instead of ever showing the card it would otherwise become. Any
+          // edit queued before the delete is moot now — drop it too.
+          pendingEditFields.delete(tempId);
+          if (result.ok && result.task) deleteTask(result.task.id);
+          return;
+        }
+        const queuedFields = pendingEditFields.get(tempId);
+        pendingEditFields.delete(tempId);
+
+        if (result.ok && result.task) {
+          // An edit made (and queued) while this was still pending gets
+          // merged into the swapped-in task right now, rather than swapping
+          // to the server's un-edited copy and correcting it a moment later
+          // — that would flash back to the pre-edit values in between.
+          let finalTask = result.task;
+          if (queuedFields) {
+            const qProp = subFieldProp(queuedFields.category);
+            const qColors = guessedColors(queuedFields.category, qProp ? queuedFields[qProp] : '');
+            const qDateObj = queuedFields.date ? { start: queuedFields.date, end: null } : null;
+            finalTask = { ...result.task, ...queuedFields, date: qDateObj, ...qColors };
+          }
+
+          // Swap the placeholder id for the real one — without this, the
+          // card's data-task-id still points at an id nothing in allTasks
+          // has any more, so clicking it right after it's created (edit,
+          // mark complete/urgent, delete) silently finds nothing and does
+          // nothing.
+          allTasks = allTasks.map((t) => (t.id === tempId ? finalTask : t));
+          removeCachedNotionTask(tempId);
+          addCachedNotionTask(finalTask);
+          rebuild();
+
+          if (queuedFields) {
+            updateTask(finalTask.id, queuedFields).then((editResult) => {
+              if (editResult.ok) {
+                if (editResult.task) {
+                  const t = allTasks.find((t) => t.id === finalTask.id);
+                  if (t) {
+                    Object.assign(t, editResult.task);
+                    patchCachedNotionTask(t.id, editResult.task);
+                    rebuild();
+                  }
+                }
+              } else {
+                saveError = editResult.error || 'Failed to save task';
+                rebuild();
+              }
+            });
+          }
+        } else {
+          allTasks = allTasks.filter((t) => t.id !== tempId);
+          removeCachedNotionTask(tempId);
+          saveError = result.error || 'Failed to add task';
+          rebuild();
+        }
+      });
     }
   });
 

@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, setLocalCanvasFlag } from '../canvas.js?v=21';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=21';
-import { hexForCourse } from '../notionColors.js?v=21';
-import { escapeHtml, hexToRgba } from '../format.js?v=21';
-import { store } from '../store.js?v=21';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, setLocalCanvasFlag } from '../canvas.js?v=28';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=28';
+import { hexForCourse } from '../notionColors.js?v=28';
+import { escapeHtml, hexToRgba } from '../format.js?v=28';
+import { store } from '../store.js?v=28';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -45,7 +45,6 @@ let touchedThisSession = new Set(); // linked task ids
 // on save, so Escape can discard either kind of unsaved mark the same way.
 let localPending = new Map();
 let localTouchedThisSession = new Set();
-let saving = false;
 let saveError = null;
 
 // Unlink: press L, then click a linked (purple-striped) card to unlink it
@@ -183,6 +182,15 @@ function handleKeyNav(dir) {
   else moveKeyNavFocus(dir);
 }
 
+// Drops out of unlink mode or discards an in-progress (unsaved) highlight
+// mark — the same thing Escape does, minus the search-box-blur special
+// case, so it can also back a tap target for mobile, where there's no
+// Escape key. A no-op when neither mode is active.
+function cancelActiveMode() {
+  if (unlinkMode) { unlinkMode = false; rebuild(); return; }
+  if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); localPending = new Map(); localTouchedThisSession = new Set(); rebuild(); }
+}
+
 function onKeyDown(e) {
   if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
     // Checked ahead of isTypingTarget() below so Escape still works while
@@ -190,8 +198,7 @@ function onKeyDown(e) {
     // whatever was typed in place (mirrors the Enter/F flow, which is why
     // this isn't gated the same way plain letter keybinds are).
     if (document.activeElement?.dataset?.action === 'search') { document.activeElement.blur(); return; }
-    if (unlinkMode) { unlinkMode = false; rebuild(); return; }
-    if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); localPending = new Map(); localTouchedThisSession = new Set(); rebuild(); return; }
+    cancelActiveMode();
     return;
   }
 
@@ -487,11 +494,11 @@ function rangeLabel() {
 function highlightButtonHtml(kind, idleLabel) {
   const isActive = activeHighlight === kind;
   const isOtherActive = (activeHighlight && activeHighlight !== kind) || unlinkMode;
-  const label = isActive ? (saving ? 'Saving…' : `Save ${HIGHLIGHT_KINDS[kind].label}`) : idleLabel;
+  const label = isActive ? `Save ${HIGHLIGHT_KINDS[kind].label}` : idleLabel;
   const keyHint = isActive ? 'Enter' : HIGHLIGHT_KEYS[kind];
   const color = HIGHLIGHT_COLORS[kind];
   const style = isActive ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
-  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${saving || isOtherActive ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
+  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${isOtherActive ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
 }
 
 function unlinkButtonHtml() {
@@ -521,46 +528,46 @@ async function saveHighlight(kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
   const linkedTasks = [...taskByCanvasId.values()];
   const changed = linkedTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
+  const newValues = new Map(changed.map((t) => [t.id, pending.has(t.id)]));
 
   // Local-only marks never touch Notion, so there's nothing to push for
   // them — just commit whatever was staged this arm straight to
   // localStorage, same moment the linked side's changes go out.
   for (const [eventId, value] of localPending) setLocalCanvasFlag(eventId, cfg.field, value);
 
-  if (!changed.length) {
-    activeHighlight = null;
-    pending = new Set();
-    touchedThisSession = new Set();
-    localPending = new Map();
-    localTouchedThisSession = new Set();
-    rebuild();
-    return;
-  }
-
-  saving = true;
-  rebuild();
-
-  const updates = changed.map((t) => ({ pageId: t.id, value: pending.has(t.id) }));
-  const result = await pushCheckboxUpdates(cfg.property, updates);
-
-  if (result.ok) {
-    for (const t of changed) {
-      const value = pending.has(t.id);
-      t[cfg.field] = value;
-      patchCachedNotionTask(t.id, { [cfg.field]: value });
-    }
-    saveError = null;
-  } else {
-    saveError = result.error || `Failed to save ${cfg.label} flags to Notion`;
-  }
-
   activeHighlight = null;
-  saving = false;
   pending = new Set();
   touchedThisSession = new Set();
   localPending = new Map();
   localTouchedThisSession = new Set();
+
+  if (!changed.length) {
+    rebuild();
+    return;
+  }
+
+  // Apply immediately, before the Notion round-trip — a failure rolls these
+  // back (see below) rather than leaving the UI waiting on the network for
+  // something that already happened locally.
+  const prevValues = new Map(changed.map((t) => [t.id, t[cfg.field]]));
+  for (const t of changed) {
+    t[cfg.field] = newValues.get(t.id);
+    patchCachedNotionTask(t.id, { [cfg.field]: newValues.get(t.id) });
+  }
+  saveError = null;
   rebuild();
+
+  const updates = changed.map((t) => ({ pageId: t.id, value: newValues.get(t.id) }));
+  const result = await pushCheckboxUpdates(cfg.property, updates);
+
+  if (!result.ok) {
+    for (const t of changed) {
+      t[cfg.field] = prevValues.get(t.id);
+      patchCachedNotionTask(t.id, { [cfg.field]: prevValues.get(t.id) });
+    }
+    saveError = result.error || `Failed to save ${cfg.label} flags to Notion`;
+    rebuild();
+  }
 }
 
 // Clicking an unlinked card while Mark completed/Highlight urgent is armed:
@@ -702,6 +709,10 @@ function rebuild() {
         ` : ''}
         ${showOtherCourses ? other.map(courseButtonHtml).join('') : ''}
       </div>
+
+      <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
+        <button data-action="cancel-mode" class="cal-cancel-btn">Cancel</button>
+      </div>
     </section>
 
     <section class="card cal-grid-card">
@@ -724,6 +735,8 @@ function rebuild() {
 }
 
 function attachEvents() {
+  container.querySelector('[data-action="cancel-mode"]')?.addEventListener('click', cancelActiveMode);
+
   container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
     searchQuery = e.target.value;
     rebuild();
