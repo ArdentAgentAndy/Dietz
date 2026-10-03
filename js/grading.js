@@ -20,17 +20,13 @@ function itemPercent(item) {
   return item.possible ? Number(item.earned) / Number(item.possible) : 0;
 }
 
-// dropLowest/bestOf apply to graded items only, ranked by item percent.
+// dropLowest applies to graded items only, ranked by item percent. Floored
+// at gradedCount-1 so a component with too few graded items yet never has
+// everything dropped out from under it.
 function applyDropRules(component, items) {
-  if (items.length < 2) return items;
-  let kept = [...items].sort((a, b) => itemPercent(a) - itemPercent(b));
-  if (component.dropLowest) {
-    kept = kept.slice(Math.min(component.dropLowest, kept.length - 1));
-  }
-  if (component.bestOf) {
-    kept = kept.slice(Math.max(0, kept.length - component.bestOf));
-  }
-  return kept;
+  if (items.length < 2 || !component.dropLowest) return items;
+  const kept = [...items].sort((a, b) => itemPercent(a) - itemPercent(b));
+  return kept.slice(Math.min(component.dropLowest, kept.length - 1));
 }
 
 // Fraction (0-1) earned for a weighted-course component, or null if ungraded.
@@ -38,15 +34,14 @@ function weightedComponentPercent(component, items) {
   const graded = gradedItems(component, items);
   if (!graded.length) return null;
 
-  if (component.attendanceCap) {
-    const attended = graded.reduce((sum, i) => sum + Number(i.earned), 0);
-    return Math.min(attended, component.attendanceCap.cap) / component.attendanceCap.cap;
-  }
-
   const kept = applyDropRules(component, graded);
-  const possible = kept.reduce((sum, i) => sum + Number(i.possible), 0);
+  let possible = kept.reduce((sum, i) => sum + Number(i.possible), 0);
   if (!possible) return null;
-  const earned = kept.reduce((sum, i) => sum + Number(i.earned), 0);
+  let earned = kept.reduce((sum, i) => sum + Number(i.earned), 0);
+  if (component.cap != null) {
+    earned = Math.min(earned, component.cap);
+    possible = Math.min(possible, component.cap);
+  }
   return earned / possible;
 }
 
@@ -99,7 +94,10 @@ function letterForPercent(percent, cutoffs, rounding) {
   return 'F';
 }
 
-function computeWeightedGrade(config, items) {
+// bonus/extraCredit/penalty are expressed directly in percentage points here
+// (unlike the points-course version, where they're raw points against that
+// course's own total) — they add straight onto the final 0-100 percent.
+function computeWeightedGrade(config, items, courseState = {}) {
   let weightedSum = 0;
   let weightTotal = 0;
   const components = config.components.map((component) => {
@@ -118,13 +116,19 @@ function computeWeightedGrade(config, items) {
   });
 
   const hasGradedWork = weightTotal > 0;
-  const percent = hasGradedWork ? (weightedSum / weightTotal) * 100 : null;
+  const bonus = computeBonus(config.bonus, courseState);
+  const extraCredit = computeExtraCredit(config.extraCredit, courseState);
+  const penalty = computePenalty(config.penalty, courseState);
+  const percent = hasGradedWork ? (weightedSum / weightTotal) * 100 + bonus + extraCredit - penalty : null;
 
   return {
     hasGradedWork,
     percent,
     letter: percent === null ? null : letterForPercent(percent, config.cutoffs, config.rounding),
     components,
+    bonus,
+    extraCredit,
+    penalty,
   };
 }
 
@@ -184,8 +188,6 @@ export function itemStatus(component, items) {
     else if (!isGraded(i)) status.set(i.id, 'ungraded');
     else status.set(i.id, 'counted');
   }
-
-  if (component.attendanceCap) return status;
 
   const graded = relevant.filter((i) => !i.excused && isGraded(i));
   const kept = new Set(applyDropRules(component, graded).map((i) => i.id));

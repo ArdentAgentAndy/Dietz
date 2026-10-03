@@ -52,7 +52,7 @@ test('MATH 241: an excused midterm drops out of the weight denominator entirely'
   assert.equal(mt1.graded, false);
 });
 
-// ---- CS 124 (weighted, dropLowest, attendanceCap) -----------------------
+// ---- CS 124 (weighted, dropLowest) --------------------------------------
 
 test('CS 124: quizzes dropLowest', () => {
   const items = [20, 18, 16, 14, 12].map((e) => item('quizzes', e, 20));
@@ -62,23 +62,28 @@ test('CS 124: quizzes dropLowest', () => {
   assert.equal(result.letter, 'A-'); // CS124 has no A+, A needs >=93
 });
 
-test('CS 124: discussion attendanceCap caps beyond the cap even if more sections attended', () => {
-  const items = Array.from({ length: 12 }, () => item('discussion', 1, 1));
+test('CS 124: discussion dropLowest discards absences even before all 14 sections have happened', () => {
+  const items = [
+    ...Array.from({ length: 5 }, () => item('discussion', 1, 1)),
+    ...Array.from({ length: 2 }, () => item('discussion', 0, 1)),
+  ];
   const result = computeGrade(courseConfigs.cs124, items);
-  // 12 attended, capped at 10/10 = 100%
+  // dropLowest 4 of only 7 graded drops the 2 absences right away (plus 2 of
+  // the attended ones, tied at the same percent) -> 3/3 = 100%
   assertClose(result.percent, 100);
   assert.equal(result.letter, 'A');
 });
 
-test('CS 124: discussion attendanceCap with some absences recorded', () => {
+test('CS 124: discussion dropLowest only forgives up to 4 absences, not unlimited', () => {
   const items = [
-    ...Array.from({ length: 8 }, () => item('discussion', 1, 1)),
-    ...Array.from({ length: 2 }, () => item('discussion', 0, 1)),
+    ...Array.from({ length: 2 }, () => item('discussion', 1, 1)),
+    ...Array.from({ length: 5 }, () => item('discussion', 0, 1)),
   ];
   const result = computeGrade(courseConfigs.cs124, items);
-  // 8 attended / cap 10 = 80%
-  assertClose(result.percent, 80);
-  assert.equal(result.letter, 'B-');
+  // 5 absences, but dropLowest is a fixed 4 -> 1 absence stays counted
+  // alongside the 2 attended -> 2/3 = 66.67%
+  assertClose(result.percent, 66.67);
+  assert.equal(result.letter, 'D');
 });
 
 // ---- AE 100 (weighted, no drop/cap rules) -------------------------------
@@ -91,60 +96,62 @@ test('AE 100: plain weighted average across partially-graded components', () => 
   assert.equal(result.letter, 'B+');
 });
 
-// ---- ENG 100 (points, bestOf, bonus cap) --------------------------------
+// ---- ENG 100 (points, dropLowest, bonus cap) ----------------------------
 
-test('ENG 100: attendance bestOf is a no-op while under the graded count, plus bonus', () => {
+test('ENG 100: attendance dropLowest drops its worst scores even with only a few sessions graded', () => {
   const items = [
-    ...Array.from({ length: 8 }, () => item('attendance', 20, 20)),
+    ...Array.from({ length: 3 }, () => item('attendance', 20, 20)),
     ...Array.from({ length: 2 }, () => item('attendance', 0, 20)),
   ];
-  const result = computeGrade(courseConfigs.eng100, items, { bonusPoints: 15 });
-  // bestOf 15 with only 10 graded keeps all: 160/200 earned, +15 bonus -> 175/200 = 87.5%
-  assertClose(result.percent, 87.5);
-  assert.equal(result.letter, 'B');
-});
-
-test('ENG 100: bonus is clamped at its cap', () => {
-  const items = [
-    ...Array.from({ length: 8 }, () => item('attendance', 20, 20)),
-    ...Array.from({ length: 2 }, () => item('attendance', 0, 20)),
-  ];
-  const result = computeGrade(courseConfigs.eng100, items, { bonusPoints: 999 });
-  // bonus clamped to 40, but only 40 needed to reach 200/200 = 100%
+  const result = computeGrade(courseConfigs.eng100, items);
+  // dropLowest 2 of only 5 graded still drops the 2 zeros right away (unlike
+  // a "best of" rule, which would wait until more than 15 were graded) ->
+  // keep the 3 full-credit sessions: 60/60 = 100%
   assertClose(result.percent, 100);
   assert.equal(result.letter, 'A');
 });
 
-// ---- CLCV 115 (points, cap on both earned and possible) -----------------
+test('ENG 100: bonus is clamped at its cap', () => {
+  const items = [item('homework', 390, 430)];
+  const result = computeGrade(courseConfigs.eng100, items, { bonusPoints: 999 });
+  // bonus clamped to 40: (390+40)/430 = 100%
+  assertClose(result.percent, 100);
+  assert.equal(result.letter, 'A');
+});
 
-test('CLCV 115: mini-quiz cap caps possible too, once you bank enough points', () => {
+// ---- CLCV 115 (weighted, cap on a weighted component, dropLowest) -------
+
+test('CLCV 115: mini-quiz cap caps possible too, once you bank enough points, capping that 13% component at 100%', () => {
   const items = [
     ...Array.from({ length: 18 }, () => item('miniQuizzes', 8, 8)),
     ...Array.from({ length: 2 }, () => item('miniQuizzes', 3, 8)),
   ];
-  // raw: earned 150 / possible 160, cap 130 -> both clamped to 130/130
+  // raw: earned 150 / possible 160, cap 130 -> both clamped to 130/130 = 100%
+  // of the 13%-weight component, and it's the only one graded.
   const result = computeGrade(courseConfigs.clcv115, items);
   assertClose(result.percent, 100);
   assert.equal(result.letter, 'A+');
 });
 
-test('CLCV 115: mini-quiz totals are untouched below the cap', () => {
+test('CLCV 115: components combine by their assigned weight, not by raw point totals', () => {
   const items = [
-    ...Array.from({ length: 15 }, () => item('miniQuizzes', 6, 8)),
-    item('exam1', 140, 150),
+    item('exam1', 135, 150), // 90%, weight 15
+    ...Array.from({ length: 10 }, () => item('discussion', 20, 20)), // 100% each
+    ...Array.from({ length: 4 }, () => item('discussion', 0, 20)), // dropped as the 4 lowest
   ];
   const result = computeGrade(courseConfigs.clcv115, items);
-  // miniQuizzes: 90/120 (under cap 130, no clamp); exam1: 140/150
-  // total: (90+140)/(120+150) = 230/270 = 85.19%
-  assertClose(result.percent, 85.19);
-  assert.equal(result.letter, 'B');
+  // discussion: dropLowest 4 of 14 drops the four 0s -> 200/200 = 100%, weight 20
+  // (15*0.9 + 20*1.0) / (15+20) = 33.5/35 = 95.71%
+  assertClose(result.percent, 95.71);
+  assert.equal(result.letter, 'A');
 });
 
-test('CLCV 115: extra credit is clamped at its max and can push a component over 100%', () => {
-  const items = [item('exam1', 140, 150)];
+test('CLCV 115: extra credit is in percentage points now, clamped at its (rescaled) max', () => {
+  const items = [item('exam1', 150, 150)];
   const result = computeGrade(courseConfigs.clcv115, items, { extraCreditPoints: 25 });
-  // extra credit clamped to 20: (140+20)/150 = 106.67%
-  assertClose(result.percent, 106.67);
+  // exam1 alone -> 100%; extra credit clamped to 2 percentage points (not 20
+  // raw points, now that this course is weighted) -> 102%
+  assertClose(result.percent, 102);
   assert.equal(result.letter, 'A+');
 });
 

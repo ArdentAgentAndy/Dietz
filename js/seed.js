@@ -40,7 +40,7 @@ export const courseConfigs = {
         id: 'discussion',
         name: 'Discussion attendance',
         weight: 10,
-        attendanceCap: { sections: 14, cap: 10 },
+        itemPoints: 1, itemCount: 14, dropLowest: 4,
       },
     ],
   },
@@ -66,7 +66,7 @@ export const courseConfigs = {
     components: [
       {
         id: 'attendance', name: 'Attendance & participation', possible: 300,
-        itemPoints: 20, itemCount: 17, bestOf: 15,
+        itemPoints: 20, itemCount: 17, dropLowest: 2,
       },
       { id: 'mentorMeetings', name: '1-on-1 mentor meetings (MM1, MM2)', possible: 120 },
       { id: 'homework', name: 'Homework (A01-A10)', possible: 430 },
@@ -82,27 +82,35 @@ export const courseConfigs = {
     },
   },
 
+  // Weighted, not points — each component's share of the final grade is a
+  // fixed percentage (matching the syllabus weights below) regardless of how
+  // many raw points that component happens to be built from. Bonus/extra
+  // credit/penalty are in percentage points here (see grading.js), not raw
+  // points, so extraCredit.max below (2) is the percentage-point version of
+  // the old 1000-point scale's 20-point max (20/1000 * 100 = 2).
   clcv115: {
-    type: 'points',
+    type: 'weighted',
     rounding: 'none',
-    totalPossible: 1000,
     cutoffs: STANDARD_CUTOFFS,
     components: [
-      { id: 'exam1', name: 'Exam 1 (CBTF)', possible: 150 },
-      { id: 'exam2', name: 'Exam 2 (CBTF)', possible: 150 },
-      { id: 'final', name: 'Final exam', possible: 150 },
-      { id: 'miniQuizzes', name: 'Canvas mini-quizzes', possible: 200, cap: 130 },
+      { id: 'exam1', name: 'Exam 1 (CBTF)', weight: 15 },
+      { id: 'exam2', name: 'Exam 2 (CBTF)', weight: 15 },
+      { id: 'final', name: 'Final exam', weight: 15 },
+      // cap stays in raw mini-quiz points (not percentage) — it clamps the
+      // component's own earned/possible sum before that sum is turned into
+      // a percent, so it needs to match the items' own point scale.
+      { id: 'miniQuizzes', name: 'Canvas mini-quizzes', weight: 13, cap: 130 },
       {
-        id: 'preSection', name: 'Pre-section quizzes', possible: 100,
-        itemPoints: 10, itemCount: 14, bestOf: 10,
+        id: 'preSection', name: 'Pre-section quizzes', weight: 10,
+        itemPoints: 10, itemCount: 14, dropLowest: 4,
       },
-      { id: 'essays', name: 'Essays (2 in-section + 2 prep)', possible: 120 },
+      { id: 'essays', name: 'Essays (2 in-section + 2 prep)', weight: 12 },
       {
-        id: 'discussion', name: 'Discussion sections', possible: 200,
-        itemPoints: 20, itemCount: 14, bestOf: 10,
+        id: 'discussion', name: 'Discussion sections', weight: 20,
+        itemPoints: 20, itemCount: 14, dropLowest: 4,
       },
     ],
-    extraCredit: { max: 20, label: 'Spurlock/Krannert/play assignment', stateKey: 'extraCreditPoints' },
+    extraCredit: { max: 2, label: 'Spurlock/Krannert/play assignment', stateKey: 'extraCreditPoints' },
   },
 
   afst112: {

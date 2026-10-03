@@ -1,10 +1,10 @@
-import { store } from '../store.js?v=21';
-import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=21';
-import { clearCourseState } from '../courseState.js?v=21';
-import { escapeHtml } from '../format.js?v=21';
+import { store } from '../store.js?v=28';
+import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=28';
+import { clearCourseState } from '../courseState.js?v=28';
+import { escapeHtml } from '../format.js?v=28';
 
 let container = null;
-let draftComponents = [{ name: '', value: '', dropLowest: '', bestOf: '', cap: '', excusable: false }];
+let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];
 
 export function render(rootEl) {
   container = rootEl;
@@ -116,8 +116,7 @@ function componentRowsHtml(type) {
       </div>
       <div class="component-row-rules">
         <label>Drop lowest <input type="number" min="0" data-field="dropLowest" data-index="${i}" value="${c.dropLowest}"></label>
-        <label>Best of <input type="number" min="0" data-field="bestOf" data-index="${i}" value="${c.bestOf}"></label>
-        ${type === 'points' ? `<label>Cap <input type="number" min="0" data-field="cap" data-index="${i}" value="${c.cap}"></label>` : ''}
+        <label>Cap <input type="number" min="0" data-field="cap" data-index="${i}" value="${c.cap}"></label>
         ${type === 'weighted' ? `<label class="checkbox-label"><input type="checkbox" data-field="excusable" data-index="${i}" ${c.excusable ? 'checked' : ''}> Excusable</label>` : ''}
       </div>
     </div>
@@ -131,8 +130,7 @@ function readDraftFromForm(form, type) {
     c.name = form.querySelector(`[data-field="name"][data-index="${i}"]`)?.value ?? c.name;
     c.value = form.querySelector(`[data-field="value"][data-index="${i}"]`)?.value ?? c.value;
     c.dropLowest = form.querySelector(`[data-field="dropLowest"][data-index="${i}"]`)?.value ?? c.dropLowest;
-    c.bestOf = form.querySelector(`[data-field="bestOf"][data-index="${i}"]`)?.value ?? c.bestOf;
-    if (type === 'points') c.cap = form.querySelector(`[data-field="cap"][data-index="${i}"]`)?.value ?? c.cap;
+    c.cap = form.querySelector(`[data-field="cap"][data-index="${i}"]`)?.value ?? c.cap;
     if (type === 'weighted') c.excusable = form.querySelector(`[data-field="excusable"][data-index="${i}"]`)?.checked ?? c.excusable;
   });
 }
@@ -181,7 +179,7 @@ function renderAddCourseForm(dialog, values = {}) {
 
   form.querySelector('[data-action="add-component"]').addEventListener('click', () => {
     readDraftFromForm(form, type);
-    draftComponents.push({ name: '', value: '', dropLowest: '', bestOf: '', cap: '', excusable: false });
+    draftComponents.push({ name: '', value: '', dropLowest: '', cap: '', excusable: false });
     renderAddCourseForm(dialog, readBasicFields(form));
   });
 
@@ -214,16 +212,13 @@ function submitNewCourse(fields, type) {
     .filter((c) => c.name.trim() && c.value !== '')
     .map((c, i) => {
       const comp = { id: `c${i}`, name: c.name.trim() };
+      if (c.dropLowest) comp.dropLowest = Number(c.dropLowest);
+      if (c.cap) comp.cap = Number(c.cap);
       if (type === 'weighted') {
         comp.weight = Number(c.value);
-        if (c.dropLowest) comp.dropLowest = Number(c.dropLowest);
-        if (c.bestOf) comp.bestOf = Number(c.bestOf);
         if (c.excusable) comp.excusable = true;
       } else {
         comp.possible = Number(c.value);
-        if (c.dropLowest) comp.dropLowest = Number(c.dropLowest);
-        if (c.bestOf) comp.bestOf = Number(c.bestOf);
-        if (c.cap) comp.cap = Number(c.cap);
       }
       return comp;
     });
@@ -257,12 +252,12 @@ function submitNewCourse(fields, type) {
     archived: false,
   });
 
-  draftComponents = [{ name: '', value: '', dropLowest: '', bestOf: '', cap: '', excusable: false }];
+  draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];
   rebuild();
 }
 
 function openAddCourseDialog() {
-  draftComponents = [{ name: '', value: '', dropLowest: '', bestOf: '', cap: '', excusable: false }];
+  draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];
   const dialog = container.querySelector('#modal-dialog');
   renderAddCourseForm(dialog);
   dialog.showModal();

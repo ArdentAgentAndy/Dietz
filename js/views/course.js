@@ -1,7 +1,7 @@
-import { store } from '../store.js?v=21';
-import { computeGrade, itemStatus } from '../grading.js?v=21';
-import { getCourseState, setCourseState } from '../courseState.js?v=21';
-import { escapeHtml } from '../format.js?v=21';
+import { store } from '../store.js?v=28';
+import { computeGrade, itemStatus } from '../grading.js?v=28';
+import { getCourseState, setCourseState } from '../courseState.js?v=28';
+import { escapeHtml } from '../format.js?v=28';
 
 let container = null;
 let courseId = null;
@@ -20,10 +20,8 @@ export function unmount() {
 function ruleTagsHtml(component) {
   const tags = [];
   if (component.dropLowest) tags.push(`drop lowest ${component.dropLowest}`);
-  if (component.bestOf) tags.push(`best of ${component.bestOf}`);
   if (component.cap != null) tags.push(`cap ${component.cap}`);
   if (component.excusable) tags.push('excusable');
-  if (component.attendanceCap) tags.push(`counted up to ${component.attendanceCap.cap}`);
   return tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
 }
 
