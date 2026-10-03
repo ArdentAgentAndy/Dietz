@@ -68,6 +68,31 @@ Open the app → **Settings** → paste the deployment URL into **Web app URL**
 and the value from step 4 into **Token**. The sync status indicator in the
 top nav should flip to "Synced" within a few seconds.
 
+## 7. Daily digest email (optional)
+
+Sends one email a day (6am script time) listing Canvas items due today,
+due tomorrow, and anything marked urgent in Notion — or "all clear" if
+there's nothing to report. Needs `CANVAS_CALENDAR_ID` and the Notion
+properties (see below) already configured, since it reuses the same data
+those features read; either can be left unset and that section is just
+skipped.
+
+1. *(Optional)* **Project Settings → Script Properties → Add script
+   property** — `DIGEST_EMAIL`, value: the address to send to. Skip this to
+   just send to the Google account this script is running as.
+2. In the Apps Script editor, select **`createDailyDigestTrigger`** from the
+   function dropdown (top toolbar) and click **Run**. The first run prompts
+   you to authorize sending email and managing triggers — allow it. This
+   installs the daily trigger; you only need to run it once (re-running is
+   safe and just replaces the existing trigger, e.g. after changing the
+   hour in that function).
+3. To change the send time, edit the `.atHour(6)` call in
+   `createDailyDigestTrigger`, `clasp push`, then re-run the function once
+   as in step 2.
+
+To test without waiting for 6am, select **`sendDailyDigest`** itself in the
+dropdown and click Run — it sends immediately.
+
 ## Redeploying after a code change
 
 Editing `Code.gs` locally and running `clasp push` updates the script, but

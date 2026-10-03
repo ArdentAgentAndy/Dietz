@@ -481,3 +481,86 @@ function doPost(e) {
 
   return jsonOut_({ ok: true, updatedAt: new Date().toISOString() });
 }
+
+// --- Daily digest email -------------------------------------------------
+// Fires from a time-driven trigger (installed once by running
+// createDailyDigestTrigger below from the Apps Script editor — see
+// SETUP.md), not from any request the frontend makes — neither the static
+// site nor this backend is otherwise watched proactively, so a scheduled
+// trigger is the only way to get a notification without the app being open.
+
+// "Today"/"tomorrow" as yyyy-mm-dd in the script's own timezone (see
+// appsscript.json). Canvas event deadlines are matched by slicing their
+// first 10 characters the same way the frontend's own eventDay() does (see
+// canvas.js) — for an all-day event canvasEventDeadline_ already formats
+// that in UTC specifically so it reproduces the calendar day Canvas meant,
+// independent of script timezone, so this stays consistent with it.
+function digestDateRange_() {
+  var tz = Session.getScriptTimeZone();
+  var today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  var tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  var tomorrow = Utilities.formatDate(tomorrowDate, tz, 'yyyy-MM-dd');
+  return { today: today, tomorrow: tomorrow };
+}
+
+function digestEventLine_(e) {
+  return '- ' + (e.course ? e.course + ': ' + e.name : e.name);
+}
+
+function digestTaskLine_(t) {
+  return '- ' + (t.course ? t.course + ': ' : '') + t.name;
+}
+
+function sendDailyDigest() {
+  var range = digestDateRange_();
+  var events = canvasEvents_().events || [];
+  var tasks = notionQueryTasks_().tasks || [];
+
+  // A Canvas event linked (by CanvasId) to a Notion task that's already
+  // marked done shouldn't still show up as "due" in the digest.
+  var doneCanvasIds = {};
+  tasks.forEach(function (t) {
+    if (t.canvasId && t.mark) doneCanvasIds[t.canvasId] = true;
+  });
+
+  var dueToday = [];
+  var dueTomorrow = [];
+  events.forEach(function (e) {
+    if (doneCanvasIds[e.id]) return;
+    var day = (e.deadline || '').slice(0, 10);
+    if (day === range.today) dueToday.push(e);
+    else if (day === range.tomorrow) dueTomorrow.push(e);
+  });
+
+  var urgent = tasks.filter(function (t) { return t.urgent && !t.mark; });
+
+  var sections = [];
+  if (dueToday.length) sections.push('DUE TODAY\n' + dueToday.map(digestEventLine_).join('\n'));
+  if (dueTomorrow.length) sections.push('DUE TOMORROW\n' + dueTomorrow.map(digestEventLine_).join('\n'));
+  if (urgent.length) sections.push('URGENT\n' + urgent.map(digestTaskLine_).join('\n'));
+
+  var subjectParts = [];
+  if (dueToday.length) subjectParts.push(dueToday.length + ' due today');
+  if (dueTomorrow.length) subjectParts.push(dueTomorrow.length + ' due tomorrow');
+  if (urgent.length) subjectParts.push(urgent.length + ' urgent');
+
+  var subject = subjectParts.length ? 'Dietz — ' + subjectParts.join(', ') : 'Dietz — all clear';
+  var body = sections.length ? sections.join('\n\n') : 'Nothing due today or tomorrow, and nothing urgent.';
+
+  // DIGEST_EMAIL is optional — an unset property falls back to the Google
+  // account this script is running as (the one that owns/deployed it).
+  var email = PropertiesService.getScriptProperties().getProperty('DIGEST_EMAIL') || Session.getEffectiveUser().getEmail();
+  MailApp.sendEmail({ to: email, subject: subject, body: body });
+}
+
+// One-time setup — select this function in the Apps Script editor's
+// function dropdown and click Run once (see SETUP.md). Safe to re-run: it
+// clears any existing trigger for sendDailyDigest first, so changing the
+// hour below and re-running doesn't create duplicate triggers.
+function createDailyDigestTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(function (t) { return t.getHandlerFunction() === 'sendDailyDigest'; })
+    .forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('sendDailyDigest').timeBased().atHour(6).everyDays(1).create();
+}
