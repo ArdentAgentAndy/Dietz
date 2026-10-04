@@ -1,5 +1,5 @@
-import { store } from '../store.js?v=32';
-import { timerState, startTimer, stopTimer } from '../timer.js?v=32';
+import { store } from '../store.js?v=33';
+import { timerState, startTimer, stopTimer } from '../timer.js?v=33';
 import {
   GRAPH_SERIES,
   liveCategoriesByGroup,
@@ -9,7 +9,7 @@ import {
   compactedSessions,
   datesForRange,
   minutesByGroupForDates,
-} from '../sessions.js?v=32';
+} from '../sessions.js?v=33';
 import {
   formatDateISO,
   formatDisplayDate,
@@ -19,11 +19,11 @@ import {
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
-} from '../format.js?v=32';
-import { computeGrade } from '../grading.js?v=32';
-import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=32';
-import { getCourseState } from '../courseState.js?v=32';
-import { archiveCourseById, deleteCourseById } from './courses.js?v=32';
+} from '../format.js?v=33';
+import { computeGrade } from '../grading.js?v=33';
+import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=33';
+import { getCourseState } from '../courseState.js?v=33';
+import { archiveCourseById, deleteCourseById } from './courses.js?v=33';
 
 let container = null;
 let tickIntervalId = null;

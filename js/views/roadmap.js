@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=32';
-import { escapeHtml, hexToRgba } from '../format.js?v=32';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=32';
+import { store } from '../store.js?v=33';
+import { escapeHtml, hexToRgba } from '../format.js?v=33';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=33';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -11,7 +11,7 @@ const SEMESTERS = [
 const PROGRAM_ORDER = ['AE', 'ECE', 'MATH', 'CS'];
 
 let container = null;
-let view = 'semesters'; // 'semesters' | 'track'
+let view = 'semesters'; // 'semesters' | 'track' | 'possible'
 let markMode = null; // null | 'completed' | 'taking'
 let activeSubjects = new Set();
 let draggingId = null;
@@ -173,26 +173,39 @@ function categoryFulfillment(program, category, full) {
   };
 }
 
-function trackViewHtml(full, visible) {
+// Shared by both "Track" (filtered to status taking/completed — the
+// grow-as-you-go dashboard) and "Possible" (unfiltered — the full
+// reference catalog). `statusFilter` is null for Possible, or
+// ['taking','completed'] for Track; either way the fulfillment math
+// (met/progressText) always runs against the FULL unfiltered data, since a
+// category's green/not-green state must never depend on which cards
+// happen to be displayed — only which cards get *shown as cards* changes.
+function categoryViewHtml(full, visible, statusFilter) {
   const visibleIds = new Set(visible.map((e) => e.id));
 
-  return PROGRAM_ORDER.map((program) => {
+  const programsHtml = PROGRAM_ORDER.map((program) => {
     const categoriesHtml = CATEGORIES.filter((c) => c.program === program).map((cat) => {
       const { tagged, met, progressText } = categoryFulfillment(program, cat.category, full);
-      const visibleTagged = sortEntries(tagged.filter((e) => visibleIds.has(e.id)));
-      if (!visibleTagged.length) return ''; // subject filter hid every course in this category
+      let shown = tagged.filter((e) => visibleIds.has(e.id));
+      if (statusFilter) shown = shown.filter((e) => statusFilter.includes(e.status));
+      if (!shown.length) return ''; // nothing to show — skip the whole category block
 
       return `
         <div class="rm-category${met ? ' is-met' : ''}">
           <div class="rm-category-head"><span class="mono">${escapeHtml(cat.category)}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-          <div class="rm-card-grid">${visibleTagged.map(cardHtml).join('')}</div>
+          <div class="rm-card-grid">${sortEntries(shown).map(cardHtml).join('')}</div>
         </div>
       `;
     }).join('');
 
-    const notesHtml = FREE_NOTES.filter((n) => n.program === program)
+    // Free Electives etc. have no cards to filter, so they're only shown
+    // on the unfiltered Possible view — Track only ever shows things
+    // that actually got marked.
+    const notesHtml = statusFilter ? '' : FREE_NOTES.filter((n) => n.program === program)
       .map((n) => `<p class="muted">${escapeHtml(n.label)} — ${n.credits} hrs (any eligible course; not tracked here)</p>`)
       .join('');
+
+    if (!categoriesHtml && !notesHtml) return ''; // whole program has nothing to show
 
     return `
       <section class="card">
@@ -202,6 +215,11 @@ function trackViewHtml(full, visible) {
       </section>
     `;
   }).join('');
+
+  if (statusFilter && !programsHtml) {
+    return '<section class="card"><p class="muted">Mark a course as taking or completed to see it here — this fills in as you plan out your schedule.</p></section>';
+  }
+  return programsHtml;
 }
 
 function headerHtml() {
@@ -212,6 +230,7 @@ function headerHtml() {
         <div class="range-toggle">
           <button data-action="view" data-view="semesters" class="${view === 'semesters' ? 'active' : ''}">Semesters</button>
           <button data-action="view" data-view="track" class="${view === 'track' ? 'active' : ''}">Track</button>
+          <button data-action="view" data-view="possible" class="${view === 'possible' ? 'active' : ''}">Possible</button>
         </div>
       </div>
       <div class="range-toggle" style="margin-top:8px;">
@@ -243,9 +262,15 @@ function rebuild() {
   const full = allEntries();
   const visible = sortEntries(full.filter((e) => !activeSubjects.size || activeSubjects.has(e.subject)));
 
+  const bodyHtml = view === 'semesters'
+    ? semestersViewHtml(visible)
+    : view === 'track'
+      ? categoryViewHtml(full, visible, ['taking', 'completed'])
+      : categoryViewHtml(full, visible, null);
+
   container.innerHTML = `
     ${headerHtml()}
-    ${view === 'semesters' ? semestersViewHtml(visible) : trackViewHtml(full, visible)}
+    ${bodyHtml}
     ${footerHtml()}
   `;
 

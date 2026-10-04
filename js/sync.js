@@ -1,5 +1,5 @@
-import { store } from './store.js?v=32';
-import { compactOldSessions } from './compaction.js?v=32';
+import { store } from './store.js?v=33';
+import { compactOldSessions } from './compaction.js?v=33';
 
 const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
