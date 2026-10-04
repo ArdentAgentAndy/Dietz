@@ -1349,3 +1349,148 @@ details summary {
     font-size: 11px;
   }
 }
+
+/* --- Roadmap (#/roadmap) ------------------------------------------------ */
+
+/* ~60% the height of a Calendar/Canvas chip (128px) per the smaller-card
+   request — subject/level/number/credits on one line, truncated name,
+   program badges, everything scaled down accordingly. */
+.rm-card {
+  position: relative;
+  height: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  padding: 5px 7px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.rm-card:hover {
+  border-color: var(--accent);
+}
+
+.rm-card-top {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.rm-subject {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* The course number's leading (level) digit, called out per the "should
+   stand out" request — bold, larger, accent-colored, ahead of the rest of
+   the number in the muted/regular weight. */
+.rm-level {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent);
+  margin-left: 3px;
+}
+
+.rm-num {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rm-credits {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.rm-card-name {
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rm-badges {
+  margin-top: auto;
+  display: flex;
+  gap: 3px;
+}
+
+.rm-badge {
+  font-size: 8px;
+  line-height: 1.5;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+.rm-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
+}
+
+.rm-semesters-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.rm-semester-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 140px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.rm-semester-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.rm-pool {
+  margin-top: 16px;
+}
+
+[data-semester].is-drag-over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.rm-category {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.rm-category.is-met {
+  border-color: var(--green);
+  background: rgba(91, 200, 122, 0.08);
+}
+
+.rm-category-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .rm-semesters-grid {
+    grid-template-columns: repeat(8, minmax(110px, 1fr));
+    overflow-x: auto;
+  }
+}

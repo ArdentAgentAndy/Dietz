@@ -17,6 +17,15 @@ var TABLES = {
   // any other table so the digest/reminder triggers below can see a
   // Canvas-only item's done state too, not just linked tasks' `mark`.
   CanvasFlags: { columns: ['id', 'mark', 'urgent'], key: ['id'] },
+  // Roadmap (#/roadmap): the catalog of AE/ECE/MATH/CS courses itself is
+  // static reference data (js/roadmapCourses.js), not synced — these two
+  // tables hold only what actually varies per user. RoadmapStatus is
+  // status/semester for a course from that static catalog, keyed by its
+  // id there (e.g. "AE311"). RoadmapCustom is for a manually-added course
+  // (Gen Eds, etc. — anything outside the static catalog), so it carries
+  // its own name/credits rather than just referencing a catalog id.
+  RoadmapStatus: { columns: ['id', 'status', 'semester'], key: ['id'] },
+  RoadmapCustom: { columns: ['id', 'subject', 'number', 'name', 'credits', 'status', 'semester'], key: ['id'] },
 };
 
 function checkToken_(token) {

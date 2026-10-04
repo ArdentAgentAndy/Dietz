@@ -1,9 +1,9 @@
-import { store } from '../store.js?v=31';
-import { escapeHtml } from '../format.js?v=31';
-import { requestSync } from '../sync.js?v=31';
-import { notificationPermission, enableNotifications } from '../push.js?v=31';
+import { store } from '../store.js?v=32';
+import { escapeHtml } from '../format.js?v=32';
+import { requestSync } from '../sync.js?v=32';
+import { notificationPermission, enableNotifications } from '../push.js?v=32';
 
-const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags'];
+const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
 
 let container = null;
 
