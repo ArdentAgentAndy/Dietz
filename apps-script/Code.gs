@@ -9,6 +9,14 @@ var TABLES = {
   Sessions: { columns: ['id', 'categoryId', 'date', 'start', 'end', 'minutes', 'source', 'note'], key: ['id'] },
   PastTerms: { columns: ['id', 'term', 'credits', 'gpa'], key: ['id'] },
   Settings: { columns: ['key', 'value'], key: ['key'] },
+  // Complete/urgent flags for Canvas events marked in the UI without being
+  // linked to a Notion task (see js/canvas.js) — id is the Canvas event id.
+  // Column names match the Notion task fields they mirror (`mark`/`urgent`,
+  // not e.g. "completed") since js/views/canvas.js's HIGHLIGHT_KINDS reuses
+  // the same field name for both the linked and unlinked path. Synced like
+  // any other table so the digest/reminder triggers below can see a
+  // Canvas-only item's done state too, not just linked tasks' `mark`.
+  CanvasFlags: { columns: ['id', 'mark', 'urgent'], key: ['id'] },
 };
 
 function checkToken_(token) {
@@ -482,12 +490,13 @@ function doPost(e) {
   return jsonOut_({ ok: true, updatedAt: new Date().toISOString() });
 }
 
-// --- Daily digest push notification -------------------------------------
-// Fires from a time-driven trigger (installed once by running
-// createDailyDigestTrigger below from the Apps Script editor — see
-// SETUP.md), not from any request the frontend makes — neither the static
-// site nor this backend is otherwise watched proactively, so a scheduled
-// trigger is the only way to get a notification without the app being open.
+// --- Push notifications -------------------------------------------------
+// All three (morning digest, evening digest, due-soon reminders) fire from
+// time-driven triggers (installed once by running installNotificationTriggers
+// below from the Apps Script editor — see SETUP.md), not from any request
+// the frontend makes — neither the static site nor this backend is
+// otherwise watched proactively, so a scheduled trigger is the only way to
+// get a notification without the app being open.
 
 // "Today"/"tomorrow" as yyyy-mm-dd in the script's own timezone (see
 // appsscript.json). Canvas event deadlines are matched by slicing their
@@ -535,64 +544,86 @@ function digestBullet_(label, when) {
   return '- ' + label + (when ? ' — ' + when : '');
 }
 
-// Combines Canvas deadlines and Notion Calendar-scheduled tasks (its own
-// Date property, independent of any Canvas deadline) into one deduplicated,
-// day-bucketed list. A Canvas item linked (by CanvasId) to a Notion task
-// shows once, as that task, under whichever day(s) its deadline/date land
-// on; an unlinked one is prefixed [C] since it exists only in Canvas, not
-// yet tracked in Calendar. Done (mark: true) tasks are skipped entirely.
-function digestDueLists_(events, tasks, range) {
+// Reads the CanvasFlags sheet (see TABLES above) into a lookup of Canvas
+// event id -> true for events marked completed in the Canvas tab's UI
+// without being linked to a Notion task, which syncs through the normal
+// outbox like any other table (see js/canvas.js) so this backend can see
+// it too — needed below so a completed-but-unlinked Canvas item doesn't
+// show up in the digest or get a due-soon reminder.
+function canvasDoneIds_() {
+  var done = {};
+  readTable_('CanvasFlags').forEach(function (f) { if (f.mark) done[f.id] = true; });
+  return done;
+}
+
+// Merged, deduplicated, done-filtered items due on one given day (yyyy-MM-dd
+// — see digestDateRange_). Each item is { id, label, due }, where `due` is
+// the raw deadline/date value (string or {start,end}) — callers format it
+// themselves (digestBullet_/digestTime_ for a display line, or raw
+// date math for the due-soon reminder check). A Canvas item linked (by
+// CanvasId) to a Notion task is represented once, as that task; an
+// unlinked one is prefixed [C] since it exists only in Canvas, not yet
+// tracked in Calendar. A done item — a Notion task with mark: true, or an
+// unlinked Canvas event flagged completed in canvasDoneIds — is skipped
+// entirely.
+function digestDayItems_(day, events, tasks, canvasDoneIds) {
   var taskByCanvasId = {};
   tasks.forEach(function (t) { if (t.canvasId) taskByCanvasId[t.canvasId] = t; });
 
-  var buckets = { today: [], tomorrow: [] };
-  var seenByBucket = { today: {}, tomorrow: {} };
-
-  function bucketFor(day) {
-    if (day === range.today) return 'today';
-    if (day === range.tomorrow) return 'tomorrow';
-    return null;
-  }
+  var items = [];
+  var seen = {};
 
   events.forEach(function (e) {
-    var bucket = bucketFor(digestDay_(e.deadline));
-    if (!bucket) return;
+    if (digestDay_(e.deadline) !== day) return;
     var linked = taskByCanvasId[e.id];
     if (linked) {
-      if (linked.mark || seenByBucket[bucket][linked.id]) return;
-      seenByBucket[bucket][linked.id] = true;
+      if (linked.mark || seen[linked.id]) return;
+      seen[linked.id] = true;
       var label = linked.course ? linked.course + ': ' + linked.name : linked.name;
-      buckets[bucket].push(digestBullet_(label, digestTime_(linked.deadline) || digestTime_(e.deadline)));
+      items.push({ id: linked.id, label: label, due: linked.deadline || e.deadline });
     } else {
+      if (canvasDoneIds[e.id] || seen[e.id]) return;
+      seen[e.id] = true;
       var cLabel = '[C] ' + (e.course ? e.course + ': ' + e.name : e.name);
-      buckets[bucket].push(digestBullet_(cLabel, digestTime_(e.deadline)));
+      items.push({ id: e.id, label: cLabel, due: e.deadline });
     }
   });
 
   // A task's own Date (when it's scheduled on the Calendar) is independent
   // of its Deadline (when it's due) — checked separately so a task
-  // scheduled for today but due tomorrow shows under both, not just one.
+  // scheduled for today but due tomorrow counts on both days, not just one.
   tasks.forEach(function (t) {
-    if (t.mark) return;
-    var bucket = bucketFor(digestDay_(t.date));
-    if (!bucket || seenByBucket[bucket][t.id]) return;
-    seenByBucket[bucket][t.id] = true;
+    if (t.mark || seen[t.id]) return;
+    if (digestDay_(t.date) !== day) return;
+    seen[t.id] = true;
     var label = t.course ? t.course + ': ' + t.name : t.name;
-    buckets[bucket].push(digestBullet_(label, digestTime_(t.date)));
+    items.push({ id: t.id, label: label, due: t.date });
   });
 
-  return buckets;
+  return items;
+}
+
+// Thin formatting wrapper over digestDayItems_ for the morning digest's
+// two day-buckets (see sendMorningDigest below).
+function digestDueLists_(events, tasks, range, canvasDoneIds) {
+  function format(day) {
+    return digestDayItems_(day, events, tasks, canvasDoneIds).map(function (item) {
+      return digestBullet_(item.label, digestTime_(item.due));
+    });
+  }
+  return { today: format(range.today), tomorrow: format(range.tomorrow) };
 }
 
 // Sends a Web Push notification via OneSignal's REST API instead of email —
 // OneSignal does the VAPID signing + payload encryption raw Web Push
 // requires, so this is just a plain HTTPS POST. ONESIGNAL_APP_ID/
 // ONESIGNAL_REST_API_KEY are set in Script Properties (see SETUP.md §7);
-// if either is missing this is a no-op so sendDailyDigest still runs clean
-// before OneSignal is set up. Targets the fixed external id "me" that the
-// frontend assigns every subscribed device to in push.js (single-user app,
+// if either is missing this is a no-op so the digest/reminder functions
+// below still run clean before OneSignal is set up. Targets the fixed
+// external id "me" that the frontend assigns every subscribed device to in
+// push.js (single-user app,
 // so no per-device subscription storage is needed).
-function oneSignalSend_(subject, body) {
+function oneSignalSend_(subject, body, url) {
   var props = PropertiesService.getScriptProperties();
   var appId = props.getProperty('ONESIGNAL_APP_ID');
   var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
@@ -608,16 +639,23 @@ function oneSignalSend_(subject, body) {
       include_aliases: { external_id: ['me'] },
       headings: { en: subject },
       contents: { en: body },
+      url: url,
     }),
   });
 }
 
-function sendDailyDigest() {
+// Opens straight to Calendar (not Canvas) since that's the merged
+// Canvas+Notion view every notification below is built from.
+var CALENDAR_URL_ = 'https://ardentagentandy.github.io/Dietz/#/calendar';
+
+// 6am: the full picture — today, tomorrow, and urgent.
+function sendMorningDigest() {
   var range = digestDateRange_();
   var events = canvasEvents_().events || [];
   var tasks = notionQueryTasks_().tasks || [];
+  var canvasDoneIds = canvasDoneIds_();
 
-  var due = digestDueLists_(events, tasks, range);
+  var due = digestDueLists_(events, tasks, range, canvasDoneIds);
 
   var urgent = tasks.filter(function (t) { return t.urgent && !t.mark; });
   var urgentLines = urgent.map(function (t) {
@@ -630,20 +668,92 @@ function sendDailyDigest() {
   if (due.tomorrow.length) sections.push('DUE TOMORROW\n' + due.tomorrow.join('\n'));
   if (urgentLines.length) sections.push('URGENT\n' + urgentLines.join('\n'));
 
-  var subject = 'Dietz - Daily Digest: ' + due.today.length + ' due today, ' +
-    due.tomorrow.length + ' due tomorrow, ' + urgent.length + ' urgent';
-  var body = sections.length ? sections.join('\n\n') : 'Nothing due today or tomorrow, and nothing urgent.';
+  var subject = 'Daily Digest';
+  var counts = due.today.length + ' today, ' + due.tomorrow.length + ' tomorrow, ' + urgent.length + ' urgent';
+  var body = counts + (sections.length ? '\n\n' + sections.join('\n\n') : '');
 
-  oneSignalSend_(subject, body);
+  oneSignalSend_(subject, body, CALENDAR_URL_);
+}
+
+// 10pm: whatever's due today and still not done — recomputed fresh at send
+// time, so anything marked done since the morning digest naturally drops
+// off. Always sends, even when nothing's left, so a quiet night still
+// confirms the check actually ran.
+function sendEveningDigest() {
+  var range = digestDateRange_();
+  var events = canvasEvents_().events || [];
+  var tasks = notionQueryTasks_().tasks || [];
+  var canvasDoneIds = canvasDoneIds_();
+
+  var items = digestDayItems_(range.today, events, tasks, canvasDoneIds);
+  var lines = items.map(function (item) { return digestBullet_(item.label, digestTime_(item.due)); });
+
+  var subject = 'Remaining Today';
+  var body = items.length + ' remaining' + (lines.length ? '\n\n' + lines.join('\n') : '');
+
+  oneSignalSend_(subject, body, CALENDAR_URL_);
+}
+
+// Tracks which items already got a due-soon reminder today, in Script
+// Properties (survives between the periodic trigger's stateless runs).
+// Keyed by date so it resets itself the next day without any cleanup job.
+function reminderState_() {
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var raw = PropertiesService.getScriptProperties().getProperty('DUE_SOON_REMINDED');
+  var state = raw ? JSON.parse(raw) : null;
+  if (!state || state.date !== today) state = { date: today, ids: [] };
+  return state;
+}
+
+function saveReminderState_(state) {
+  PropertiesService.getScriptProperties().setProperty('DUE_SOON_REMINDED', JSON.stringify(state));
+}
+
+// Runs every 15 minutes (see installNotificationTriggers): for anything due
+// today with a specific time (an all-day item has no time to count down
+// from, so it's skipped), not yet done, and due in the next 2 hours or
+// less but not yet overdue, sends one reminder and remembers it so it never
+// repeats that same day.
+function sendDueSoonReminders() {
+  var range = digestDateRange_();
+  var events = canvasEvents_().events || [];
+  var tasks = notionQueryTasks_().tasks || [];
+  var canvasDoneIds = canvasDoneIds_();
+  var state = reminderState_();
+  var reminded = {};
+  state.ids.forEach(function (id) { reminded[id] = true; });
+
+  var items = digestDayItems_(range.today, events, tasks, canvasDoneIds);
+  var now = new Date();
+  var changed = false;
+
+  items.forEach(function (item) {
+    if (reminded[item.id]) return;
+    var start = typeof item.due === 'string' ? item.due : (item.due && item.due.start);
+    if (!start || start.length <= 10) return; // all-day — no specific time to be "2 hours before"
+
+    var minutesUntil = (new Date(start) - now) / 60000;
+    if (minutesUntil <= 0 || minutesUntil > 120) return;
+
+    oneSignalSend_('Due Soon', item.label + ' is due at ' + digestTime_(start) + '.', CALENDAR_URL_);
+    reminded[item.id] = true;
+    state.ids.push(item.id);
+    changed = true;
+  });
+
+  if (changed) saveReminderState_(state);
 }
 
 // One-time setup — select this function in the Apps Script editor's
 // function dropdown and click Run once (see SETUP.md). Safe to re-run: it
-// clears any existing trigger for sendDailyDigest first, so changing the
-// hour below and re-running doesn't create duplicate triggers.
-function createDailyDigestTrigger() {
+// clears any existing triggers for these three handlers first, so changing
+// the schedule below and re-running doesn't create duplicate triggers.
+function installNotificationTriggers() {
+  var handlers = { sendMorningDigest: true, sendEveningDigest: true, sendDueSoonReminders: true };
   ScriptApp.getProjectTriggers()
-    .filter(function (t) { return t.getHandlerFunction() === 'sendDailyDigest'; })
+    .filter(function (t) { return handlers[t.getHandlerFunction()]; })
     .forEach(function (t) { ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger('sendDailyDigest').timeBased().atHour(6).everyDays(1).create();
+  ScriptApp.newTrigger('sendMorningDigest').timeBased().atHour(6).everyDays(1).create();
+  ScriptApp.newTrigger('sendEveningDigest').timeBased().atHour(22).everyDays(1).create();
+  ScriptApp.newTrigger('sendDueSoonReminders').timeBased().everyMinutes(15).create();
 }

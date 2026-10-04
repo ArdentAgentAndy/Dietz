@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getLocalCanvasFlag, setLocalCanvasFlag } from '../canvas.js?v=30';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=30';
-import { hexForCourse } from '../notionColors.js?v=30';
-import { escapeHtml, hexToRgba } from '../format.js?v=30';
-import { store } from '../store.js?v=30';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=31';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=31';
+import { hexForCourse } from '../notionColors.js?v=31';
+import { escapeHtml, hexToRgba } from '../format.js?v=31';
+import { store } from '../store.js?v=31';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -23,11 +23,11 @@ let searchQuery = '';
 // Same highlight-and-save pattern as the Calendar tab. Clicking an already-
 // linked event stages it into `pending` like Calendar does, which gets
 // pushed to Notion (and so to Calendar) on Save/Enter. Clicking an unlinked
-// one instead stages a local-only flag into `localPending` (see
-// setLocalCanvasFlag) — on save that's committed to localStorage only, never
-// Notion, so marking complete/urgent here never silently creates a Calendar
-// item. Either kind of staged-but-unsaved mark is discarded by Escape. No
-// mass-delete or free-standing add-task here — those stay Calendar-only.
+// one instead stages a flag into `localPending` (see setCanvasFlag) — on
+// save that's synced via the CanvasFlags table, never Notion, so marking
+// complete/urgent here never silently creates a Calendar item. Either kind
+// of staged-but-unsaved mark is discarded by Escape. No mass-delete or
+// free-standing add-task here — those stay Calendar-only.
 const HIGHLIGHT_KINDS = {
   urgent: { field: 'urgent', property: 'Urgent', label: 'urgent' },
   completed: { field: 'mark', property: '?', label: 'completed' },
@@ -40,9 +40,9 @@ let pending = new Set(); // linked task ids
 // see taskChipHtml there for the full rationale.
 let touchedThisSession = new Set(); // linked task ids
 // Unlinked-card counterpart to `pending`/`touchedThisSession` — canvas event
-// id -> staged boolean. Only committed to localStorage (see
-// setLocalCanvasFlag) on Save/Enter, same as `pending` only reaches Notion
-// on save, so Escape can discard either kind of unsaved mark the same way.
+// id -> staged boolean. Only committed (see setCanvasFlag) on Save/Enter,
+// same as `pending` only reaches Notion on save, so Escape can discard
+// either kind of unsaved mark the same way.
 let localPending = new Map();
 let localTouchedThisSession = new Set();
 let saveError = null;
@@ -334,14 +334,14 @@ function eventDay(event) {
 
 // Linked events source their flag from the Notion task (and `pending` while
 // a save is armed); unlinked events have no task, so they fall back to the
-// local-only flag in localStorage (and `localPending` while a save is armed
-// — see setLocalCanvasFlag/toggleCanvasOnlyMark), same two-stage shape as
-// the linked-task path so Escape can discard either one unsaved.
+// synced CanvasFlags table (and `localPending` while a save is armed — see
+// setCanvasFlag/toggleCanvasOnlyMark), same two-stage shape as the
+// linked-task path so Escape can discard either one unsaved.
 function isFieldActive(event, task, kind) {
   const field = HIGHLIGHT_KINDS[kind].field;
   if (!task) {
     if (activeHighlight === kind && localPending.has(event.id)) return localPending.get(event.id);
-    return getLocalCanvasFlag(event.id, field);
+    return getCanvasFlag(event.id, field);
   }
   return activeHighlight === kind ? pending.has(task.id) : Boolean(task[field]);
 }
@@ -530,10 +530,10 @@ async function saveHighlight(kind) {
   const changed = linkedTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
   const newValues = new Map(changed.map((t) => [t.id, pending.has(t.id)]));
 
-  // Local-only marks never touch Notion, so there's nothing to push for
-  // them — just commit whatever was staged this arm straight to
-  // localStorage, same moment the linked side's changes go out.
-  for (const [eventId, value] of localPending) setLocalCanvasFlag(eventId, cfg.field, value);
+  // Unlinked marks never touch Notion, so there's nothing to push for
+  // them there — just commit whatever was staged this arm to CanvasFlags,
+  // same moment the linked side's changes go out.
+  for (const [eventId, value] of localPending) setCanvasFlag(eventId, cfg.field, value);
 
   activeHighlight = null;
   pending = new Set();
@@ -572,13 +572,13 @@ async function saveHighlight(kind) {
 
 // Clicking an unlinked card while Mark completed/Highlight urgent is armed:
 // stage its local-only flag in `localPending` (mirrors how a linked click
-// stages into `pending`) and re-render. Nothing is written to localStorage,
+// stages into `pending`) and re-render. Nothing is written to CanvasFlags,
 // no Notion task gets created, and nothing reaches Calendar, until Save/
 // Enter actually commits it — so Escape can discard it like any other
 // unsaved mark instead of it having already taken effect.
 function toggleCanvasOnlyMark(event, kind) {
   const field = HIGHLIGHT_KINDS[kind].field;
-  const current = localPending.has(event.id) ? localPending.get(event.id) : getLocalCanvasFlag(event.id, field);
+  const current = localPending.has(event.id) ? localPending.get(event.id) : getCanvasFlag(event.id, field);
   localPending.set(event.id, !current);
   localTouchedThisSession.add(event.id);
   rebuild();

@@ -1,7 +1,7 @@
-import { store } from './store.js?v=30';
-import { compactOldSessions } from './compaction.js?v=30';
+import { store } from './store.js?v=31';
+import { compactOldSessions } from './compaction.js?v=31';
 
-const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings'];
+const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
 const RETRY_BASE_MS = 3000;
 const RETRY_MAX_MS = 60000;

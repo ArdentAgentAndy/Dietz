@@ -1,4 +1,4 @@
-import { store } from './store.js?v=30';
+import { store } from './store.js?v=31';
 
 const CACHE_KEY = 'dietz:canvasCache';
 
@@ -38,40 +38,21 @@ export async function fetchCanvasEvents() {
 }
 
 // Complete/urgent flags for Canvas events the user has marked WITHOUT
-// linking them to a Notion task. Kept purely client-side (this device only,
-// never pushed to Notion/Calendar) since there's no backing task to store
-// them on. Only ever written via setLocalCanvasFlag on Save/Enter — see
-// js/views/canvas.js's toggleHighlight/saveHighlight, which stage these the
-// same way `pending` stages linked-task changes so Escape can discard an
-// unsaved mark instead of it having already landed in localStorage.
-const LOCAL_FLAGS_KEY = 'dietz:canvasLocalFlags';
-
-function getAllLocalCanvasFlags() {
-  try {
-    const raw = localStorage.getItem(LOCAL_FLAGS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
+// linking them to a Notion task — there's no backing task to store them
+// on, so they live in their own synced table (CanvasFlags) instead, keyed
+// by the Canvas event id. Synced like any other table (via store.upsert's
+// outbox) rather than kept local-only, so the Apps Script backend can see
+// a completed mark too, for the digest/due-soon-reminder triggers (see
+// Code.gs's canvasDoneIds_). Only ever written via setCanvasFlag on
+// Save/Enter — see js/views/canvas.js's toggleHighlight/saveHighlight,
+// which stage these the same way `pending` stages linked-task changes so
+// Escape can discard an unsaved mark instead of it having already synced.
+export function getCanvasFlag(eventId, field) {
+  return Boolean(store.table('CanvasFlags').find((f) => f.id === eventId)?.[field]);
 }
 
-function setAllLocalCanvasFlags(flags) {
-  try {
-    localStorage.setItem(LOCAL_FLAGS_KEY, JSON.stringify(flags));
-  } catch (e) {
-    // ignore — local-only flags are a convenience, not critical data
-  }
-}
-
-export function getLocalCanvasFlag(eventId, field) {
-  return Boolean(getAllLocalCanvasFlags()[eventId]?.[field]);
-}
-
-export function setLocalCanvasFlag(eventId, field, value) {
-  const flags = getAllLocalCanvasFlags();
-  const current = flags[eventId] || {};
-  flags[eventId] = { ...current, [field]: value };
-  setAllLocalCanvasFlags(flags);
+export function setCanvasFlag(eventId, field, value) {
+  store.upsert('CanvasFlags', { id: eventId, [field]: value });
 }
 
 // Cross-page handoff, since navigating between #/canvas and #/calendar

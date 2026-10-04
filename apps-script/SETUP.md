@@ -68,18 +68,33 @@ Open the app → **Settings** → paste the deployment URL into **Web app URL**
 and the value from step 4 into **Token**. The sync status indicator in the
 top nav should flip to "Synced" within a few seconds.
 
-## 7. Daily digest push notification (optional)
+## 7. Push notifications (optional)
 
-Sends one Web Push notification a day (6am script time) with three
-sections — Due Today, Due Tomorrow, Urgent — combining Canvas deadlines
-with Notion Calendar tasks (its own Date property, independent of any
-Canvas deadline) into one deduplicated list per day: a Canvas item linked
-to a Notion task shows once as that task, an unlinked one is prefixed `[C]`
-since it only exists in Canvas, not yet tracked in Calendar. Notification
-title is `Dietz - Daily Digest: N due today, N due tomorrow, N urgent`.
-Needs `CANVAS_CALENDAR_ID` and the Notion properties (see below) already
-configured, since it reuses the same data those features read; either can
-be left unset and that section is just empty.
+Three time-driven triggers, all reading the same merged Canvas+Notion data
+(a Canvas item linked to a Notion task shows once as that task, an
+unlinked one is prefixed `[C]` since it only exists in Canvas, not yet
+tracked in Calendar; anything done — a Notion task's `mark`, or an
+unlinked Canvas event flagged completed in the Canvas tab, synced via the
+`CanvasFlags` table — is excluded):
+
+- **`sendMorningDigest`, 6am** — the full picture: Due Today, Due
+  Tomorrow, Urgent. Title `Daily Digest`; body's first line is the counts
+  (e.g. `2 today, 1 tomorrow, 0 urgent`), followed by the section details.
+- **`sendEveningDigest`, 10pm** — just what's still due today and not
+  done, recomputed fresh (so anything marked done since morning drops
+  off). Title `Remaining Today`. Always sends, even when nothing's left,
+  so a quiet night still confirms the check ran.
+- **`sendDueSoonReminders`, every 15 min** — for anything due today with
+  a specific time (an all-day item has nothing to count down from, so
+  it's skipped), not done, and due in the next 2 hours but not yet
+  overdue, sends one reminder titled `Due Soon` and remembers it (in
+  Script Properties, reset daily) so it never repeats that day.
+
+All three open straight to the Calendar page on tap (the merged view
+they're built from). Each needs `CANVAS_CALENDAR_ID` and the Notion
+properties (see below) already configured, since they reuse the same
+data those features read; either can be left unset and that part is just
+empty.
 
 This goes out as a real push notification, not email — raw Web Push needs
 VAPID signing and payload encryption that Apps Script can't do natively,
@@ -125,22 +140,22 @@ notifications**, and allow the permission prompt. On iOS this only works
 if the app was added to the Home Screen first (Share → Add to Home
 Screen) — Safari doesn't support Web Push for an ordinary browser tab.
 
-### 7d. Install the trigger
+### 7d. Install the triggers
 
-1. In the Apps Script editor, select **`createDailyDigestTrigger`** from the
-   function dropdown (top toolbar) and click **Run**. The first run prompts
-   you to authorize managing triggers and making external requests — allow
-   it. This installs the daily trigger; you only need to run it once
-   (re-running is safe and just replaces the existing trigger, e.g. after
-   changing the hour in that function).
-2. To change the send time, edit the `.atHour(6)` call in
-   `createDailyDigestTrigger`, `clasp push`, then re-run the function once
-   as in step 1.
+1. In the Apps Script editor, select **`installNotificationTriggers`** from
+   the function dropdown (top toolbar) and click **Run**. The first run
+   prompts you to authorize managing triggers and making external requests
+   — allow it. This installs all three triggers; you only need to run it
+   once (re-running is safe and just replaces the existing ones, e.g.
+   after changing a schedule below).
+2. To change a schedule, edit the `.atHour(6)` / `.atHour(22)` /
+   `.everyMinutes(15)` calls in `installNotificationTriggers`, `clasp
+   push`, then re-run the function once as in step 1.
 
-To test without waiting for 6am, select **`sendDailyDigest`** itself in the
-dropdown and click Run — it sends immediately (once you've enabled
-notifications in Settings per 7c, so there's a subscribed device to send
-to).
+To test without waiting, select **`sendMorningDigest`**, **`sendEveningDigest`**,
+or **`sendDueSoonReminders`** directly in the dropdown and click Run — each
+sends immediately (once you've enabled notifications in Settings per 7c,
+so there's a subscribed device to send to).
 
 ## Redeploying after a code change
 
