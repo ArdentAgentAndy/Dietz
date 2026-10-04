@@ -482,7 +482,7 @@ function doPost(e) {
   return jsonOut_({ ok: true, updatedAt: new Date().toISOString() });
 }
 
-// --- Daily digest email -------------------------------------------------
+// --- Daily digest push notification -------------------------------------
 // Fires from a time-driven trigger (installed once by running
 // createDailyDigestTrigger below from the Apps Script editor — see
 // SETUP.md), not from any request the frontend makes — neither the static
@@ -584,6 +584,34 @@ function digestDueLists_(events, tasks, range) {
   return buckets;
 }
 
+// Sends a Web Push notification via OneSignal's REST API instead of email —
+// OneSignal does the VAPID signing + payload encryption raw Web Push
+// requires, so this is just a plain HTTPS POST. ONESIGNAL_APP_ID/
+// ONESIGNAL_REST_API_KEY are set in Script Properties (see SETUP.md §7);
+// if either is missing this is a no-op so sendDailyDigest still runs clean
+// before OneSignal is set up. Targets the fixed external id "me" that the
+// frontend assigns every subscribed device to in push.js (single-user app,
+// so no per-device subscription storage is needed).
+function oneSignalSend_(subject, body) {
+  var props = PropertiesService.getScriptProperties();
+  var appId = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) return;
+
+  UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { Authorization: 'Key ' + apiKey },
+    payload: JSON.stringify({
+      app_id: appId,
+      target_channel: 'push',
+      include_aliases: { external_id: ['me'] },
+      headings: { en: subject },
+      contents: { en: body },
+    }),
+  });
+}
+
 function sendDailyDigest() {
   var range = digestDateRange_();
   var events = canvasEvents_().events || [];
@@ -606,7 +634,7 @@ function sendDailyDigest() {
     due.tomorrow.length + ' due tomorrow, ' + urgent.length + ' urgent';
   var body = sections.length ? sections.join('\n\n') : 'Nothing due today or tomorrow, and nothing urgent.';
 
-  MailApp.sendEmail({ to: 'hkbfel@gmail.com', subject: subject, body: body });
+  oneSignalSend_(subject, body);
 }
 
 // One-time setup — select this function in the Apps Script editor's

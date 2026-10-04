@@ -1,8 +1,9 @@
-import './store.js?v=28';
-import { initRouter } from './router.js?v=28';
-import { initSync } from './sync.js?v=28';
-import { compactOldSessions } from './compaction.js?v=28';
-import { migrateCourseConfigs } from './migrations.js?v=28';
+import './store.js?v=29';
+import { initRouter } from './router.js?v=29';
+import { initSync } from './sync.js?v=29';
+import { compactOldSessions } from './compaction.js?v=29';
+import { migrateCourseConfigs } from './migrations.js?v=29';
+import { initPush } from './push.js?v=29';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project
@@ -13,6 +14,7 @@ if ('serviceWorker' in navigator) {
 
 migrateCourseConfigs();
 compactOldSessions();
+initPush();
 initRouter();
 initSync(document.getElementById('sync-status'), document.getElementById('sync-btn'));
 

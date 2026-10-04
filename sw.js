@@ -4,6 +4,11 @@
 // app's own local-first design (see CLAUDE.md) — but network-first, so
 // online use never risks serving stale JS/CSS behind the ?v= cache-busting
 // already used on every import; cache is only a fallback when offline.
+// Adds OneSignal's push/notificationclick listeners on top of the caching
+// logic below (see push.js) — this stays the one SW file so installability
+// and offline caching aren't disturbed.
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+
 const CACHE = 'dietz-shell-v1';
 const SHELL = ['./', './index.html', './manifest.json'];
 

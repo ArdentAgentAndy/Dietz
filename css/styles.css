@@ -69,6 +69,12 @@ a {
   gap: 16px;
 }
 
+.app-version {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .sync-btn {
   padding: 4px 7px;
   font-size: 13px;

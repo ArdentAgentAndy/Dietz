@@ -1,6 +1,7 @@
-import { store } from '../store.js?v=28';
-import { escapeHtml } from '../format.js?v=28';
-import { requestSync } from '../sync.js?v=28';
+import { store } from '../store.js?v=29';
+import { escapeHtml } from '../format.js?v=29';
+import { requestSync } from '../sync.js?v=29';
+import { notificationPermission, enableNotifications } from '../push.js?v=29';
 
 const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings'];
 
@@ -92,6 +93,12 @@ function rebuild() {
     </section>
 
     <section class="card">
+      <h2 class="mono">Notifications</h2>
+      <p class="muted">Push notifications for the daily digest (see apps-script/SETUP.md §7), instead of email. Status: <strong>${escapeHtml(notificationPermission())}</strong>.</p>
+      <button data-action="enable-push">Enable notifications</button>
+    </section>
+
+    <section class="card">
       <h2 class="mono">App</h2>
       <p class="muted">If the installed app (desktop or phone) is showing an old version after a fix was pushed, use this — it clears the offline cache and service worker, then reloads.</p>
       <button data-action="force-refresh">Force refresh</button>
@@ -134,6 +141,13 @@ function attachEvents() {
   });
 
   container.querySelector('[data-action="export"]')?.addEventListener('click', exportBackup);
+
+  container.querySelector('[data-action="enable-push"]')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    e.target.textContent = 'Requesting…';
+    await enableNotifications();
+    rebuild();
+  });
 
   container.querySelector('[data-action="force-refresh"]')?.addEventListener('click', forceRefresh);
 }
