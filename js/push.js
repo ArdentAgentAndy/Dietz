@@ -25,12 +25,24 @@ function deferred(fn) {
   });
 }
 
+// serviceWorkerPath is resolved from the domain root, not from the current
+// page's directory, so on a GitHub Pages project site (e.g. .../Dietz/)
+// it needs the subpath spelled out, with a matching scope — otherwise
+// OneSignal tries to register at the domain root, finds nothing there, and
+// the push subscription silently never completes (notifications stay
+// permission: granted but with no actual push token). Computed from
+// location so this stays correct whether served from a domain root or a
+// project subpath, matching the same reasoning as the SW registration
+// comment in app.js.
+const SCOPE = new URL('.', location.href).pathname;
+
 export function initPush() {
   deferred((OneSignal) =>
     OneSignal.init({
       appId: ONESIGNAL_APP_ID,
       safari_web_id: SAFARI_WEB_ID,
-      serviceWorkerPath: 'sw.js',
+      serviceWorkerPath: SCOPE.replace(/^\//, '') + 'sw.js',
+      serviceWorkerParam: { scope: SCOPE },
     })
   );
 }
