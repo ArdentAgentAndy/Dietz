@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=33';
-import { hexForNotionColor } from '../notionColors.js?v=33';
-import { escapeHtml, hexToRgba } from '../format.js?v=33';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=33';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=34';
+import { hexForNotionColor } from '../notionColors.js?v=34';
+import { escapeHtml, hexToRgba } from '../format.js?v=34';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=34';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
@@ -277,8 +277,7 @@ function onKeyDown(e) {
     const dialog = container?.querySelector('#modal-dialog');
     if (dialog?.open) { dialog.close(); return; }
     if (schedulingItem) { schedulingItem = null; rebuild(); return; }
-    if (deleteMode) { deleteMode = false; markedForDelete = new Set(); rebuild(); return; }
-    if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); rebuild(); return; }
+    cancelActiveMode();
     return;
   }
 
@@ -827,6 +826,22 @@ function toggleHighlight(kind) {
   }
 }
 
+// Discards whatever mode is currently armed (mass delete or a highlight
+// mode) without saving — the Escape handler already did exactly this
+// inline; shared here so a physical button can trigger the same thing for
+// touch/mobile, where there's no Escape key and clicking the mode's own
+// button again *saves* rather than cancels (see toggleHighlight/
+// toggleDeleteMode above).
+function cancelActiveMode() {
+  if (deleteMode) { deleteMode = false; markedForDelete = new Set(); rebuild(); return; }
+  if (activeHighlight) { activeHighlight = null; pending = new Set(); touchedThisSession = new Set(); rebuild(); }
+}
+
+function cancelButtonHtml() {
+  if (!deleteMode && !activeHighlight) return '';
+  return '<button data-action="cancel-mode" class="cal-cancel-btn">Cancel</button>';
+}
+
 function deleteButtonHtml() {
   const disabled = activeHighlight && !deleteMode;
   const label = deleteMode ? 'Confirm delete' : 'Mass delete';
@@ -1207,6 +1222,7 @@ function rebuild() {
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
           ${deleteButtonHtml()}
+          ${cancelButtonHtml()}
         </div>
       </div>
       ${saveError ? `<p class="muted" style="color:var(--red); margin-top:8px;">Couldn't save: ${escapeHtml(saveError)}</p>` : ''}
@@ -1344,6 +1360,8 @@ function attachEvents() {
   });
 
   container.querySelector('[data-action="delete-mode"]')?.addEventListener('click', () => toggleDeleteMode());
+
+  container.querySelector('[data-action="cancel-mode"]')?.addEventListener('click', cancelActiveMode);
 
   if (deleteMode) {
     container.querySelectorAll('.cal-chip.is-highlightable').forEach((el) => {

@@ -531,12 +531,13 @@ function digestDay_(value) {
   return start ? start.slice(0, 10) : null;
 }
 
-// Same input -> "h:mm a" if it carries a time, else '' (an all-day value
-// has no time to show).
+// Same input -> 24-hour "HH:mm" if it carries a time, else '' (an all-day
+// value has no time to show) — matches the frontend's own hour12: false
+// clock-time formatting (see calendar.js/canvas.js/classes.js).
 function digestTime_(value) {
   var start = typeof value === 'string' ? value : (value && value.start);
   if (!start || start.length <= 10) return '';
-  return Utilities.formatDate(new Date(start), Session.getScriptTimeZone(), 'h:mm a');
+  return Utilities.formatDate(new Date(start), Session.getScriptTimeZone(), 'HH:mm');
 }
 
 // Same input -> a short date, plus the time if it has one. For urgent items,
@@ -546,7 +547,7 @@ function digestDateTime_(value) {
   if (!start) return '';
   var tz = Session.getScriptTimeZone();
   if (start.length <= 10) return Utilities.formatDate(new Date(start + 'T00:00:00'), tz, 'EEE M/d');
-  return Utilities.formatDate(new Date(start), tz, 'EEE M/d, h:mm a');
+  return Utilities.formatDate(new Date(start), tz, 'EEE M/d, HH:mm');
 }
 
 function digestBullet_(label, when) {

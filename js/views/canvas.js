@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=33';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=33';
-import { hexForCourse } from '../notionColors.js?v=33';
-import { escapeHtml, hexToRgba } from '../format.js?v=33';
-import { store } from '../store.js?v=33';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=34';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=34';
+import { hexForCourse } from '../notionColors.js?v=34';
+import { escapeHtml, hexToRgba } from '../format.js?v=34';
+import { store } from '../store.js?v=34';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -508,6 +508,14 @@ function unlinkButtonHtml() {
   return `<button data-action="unlink-mode" class="${unlinkMode ? 'active' : ''}"${style} ${disabled ? 'disabled' : ''}>[L] ${label}</button>`;
 }
 
+// Physical counterpart to cancelActiveMode() above — clicking a mode's own
+// button again *saves* (see toggleHighlight), so touch/mobile users (no
+// Escape key) otherwise have no way to back out without committing.
+function cancelButtonHtml() {
+  if (!unlinkMode && !activeHighlight) return '';
+  return '<button data-action="cancel-mode" class="cal-cancel-btn">Cancel</button>';
+}
+
 // Shared by the button click and the 'c'/'u' keybinds.
 function toggleHighlight(kind) {
   if (unlinkMode) return; // mutual exclusion
@@ -679,6 +687,7 @@ function rebuild() {
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
           ${unlinkButtonHtml()}
+          ${cancelButtonHtml()}
         </div>
       </div>
       ${saveError ? `<p class="muted" style="color:var(--red); margin-top:8px;">${escapeHtml(saveError)}</p>` : ''}
@@ -709,10 +718,6 @@ function rebuild() {
         ` : ''}
         ${showOtherCourses ? other.map(courseButtonHtml).join('') : ''}
       </div>
-
-      <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
-        <button data-action="cancel-mode" class="cal-cancel-btn">Cancel</button>
-      </div>
     </section>
 
     <section class="card cal-grid-card">
@@ -735,8 +740,6 @@ function rebuild() {
 }
 
 function attachEvents() {
-  container.querySelector('[data-action="cancel-mode"]')?.addEventListener('click', cancelActiveMode);
-
   container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
     searchQuery = e.target.value;
     rebuild();
@@ -784,6 +787,8 @@ function attachEvents() {
   });
 
   container.querySelector('[data-action="unlink-mode"]')?.addEventListener('click', () => toggleUnlinkMode());
+
+  container.querySelector('[data-action="cancel-mode"]')?.addEventListener('click', cancelActiveMode);
 
   if (unlinkMode) {
     container.querySelectorAll('.cal-chip.is-highlightable').forEach((el) => {
