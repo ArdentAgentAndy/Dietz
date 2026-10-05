@@ -1357,7 +1357,7 @@ details summary {
    program badges, everything scaled down accordingly. */
 .rm-card {
   position: relative;
-  height: 72px;
+  min-height: 72px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1408,12 +1408,18 @@ details summary {
   color: var(--muted);
 }
 
+/* Wraps instead of truncating to one line, so the title actually reads —
+   clamped at 2 lines (with its own ellipsis past that) so one long name
+   can't blow out the card indefinitely; .rm-card's height is min-height
+   now specifically so a wrapped 2-line title can grow the card instead of
+   getting clipped. */
 .rm-card-name {
   font-size: 10px;
   color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .rm-badges {
@@ -1431,9 +1437,12 @@ details summary {
   color: var(--muted);
 }
 
+/* Fixed 104px columns, not minmax(...,1fr) — a sparse row (e.g. 2 cards in
+   an 8-across semester column) must not stretch those cards to fill the
+   leftover space; every card stays the same size everywhere on this page. */
 .rm-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, 104px);
   gap: 6px;
 }
 
@@ -1499,7 +1508,7 @@ details summary {
    categories share a row, but make big ones taller by more than that
    saves, so overall page height is shortest somewhere up near this width. */
 .rm-category .rm-card-grid {
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fit, 104px);
   max-width: 900px;
 }
 

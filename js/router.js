@@ -1,12 +1,12 @@
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/home.js?v=42') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=42') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=42'), params: ['id'] },
-  { pattern: /^\/classes$/, load: () => import('./views/classes.js?v=42') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=42') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=42') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=42') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=42') },
+  { pattern: /^\/$/, load: () => import('./views/home.js?v=43') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=43') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=43'), params: ['id'] },
+  { pattern: /^\/classes$/, load: () => import('./views/classes.js?v=43') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=43') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=43') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=43') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=43') },
 ];
 
 function currentPath() {

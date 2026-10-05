@@ -1,6 +1,6 @@
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=42';
-import { hexForNotionColor } from '../notionColors.js?v=42';
-import { escapeHtml, hexToRgba } from '../format.js?v=42';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=43';
+import { hexForNotionColor } from '../notionColors.js?v=43';
+import { escapeHtml, hexToRgba } from '../format.js?v=43';
 
 let container = null;
 
