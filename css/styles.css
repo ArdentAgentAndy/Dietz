@@ -1468,11 +1468,39 @@ details summary {
   background: var(--accent-dim);
 }
 
-.rm-category {
+/* Categories pack left-to-right and wrap, each sized to its own content
+   (capped) rather than stretching full width — a 2-course category like
+   Orientation should only be as wide as its 2 cards, not span the whole
+   page, so several small categories can share a row instead of each
+   claiming its own. */
+.rm-categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
   margin-top: 8px;
+}
+
+.rm-category {
+  width: fit-content;
+  max-width: 100%;
   padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+
+/* auto-fit (not the shared .rm-card-grid's auto-fill) so a small category's
+   grid actually shrinks to its content's width instead of reserving empty
+   column tracks — that's what lets .rm-category's width: fit-content work.
+   Capped at ~8 cards per row so a big category (e.g. 19-course AE
+   Technical Core) still wraps internally instead of one giant row, rather
+   than claiming the whole ~1240px wide page the way every category did
+   before this — tuned empirically: narrower caps let more small
+   categories share a row, but make big ones taller by more than that
+   saves, so overall page height is shortest somewhere up near this width. */
+.rm-category .rm-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  max-width: 900px;
 }
 
 .rm-category.is-met {
@@ -1482,8 +1510,9 @@ details summary {
 
 .rm-category-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px 8px;
   margin-bottom: 6px;
   font-size: 12px;
 }

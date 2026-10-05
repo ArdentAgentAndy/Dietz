@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=34';
-import { escapeHtml, hexToRgba } from '../format.js?v=34';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=34';
+import { store } from '../store.js?v=41';
+import { escapeHtml, hexToRgba } from '../format.js?v=41';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=41';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -210,7 +210,7 @@ function categoryViewHtml(full, visible, statusFilter) {
     return `
       <section class="card">
         <h2 class="mono">${escapeHtml(PROGRAM_LABELS[program])}</h2>
-        ${categoriesHtml}
+        <div class="rm-categories">${categoriesHtml}</div>
         ${notesHtml}
       </section>
     `;
