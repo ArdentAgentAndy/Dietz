@@ -1,5 +1,5 @@
-import { store } from './store.js?v=41';
-import { formatDateISO } from './format.js?v=41';
+import { store } from './store.js?v=42';
+import { formatDateISO } from './format.js?v=42';
 
 const TIMER_KEY = 'dietz:timer';
 

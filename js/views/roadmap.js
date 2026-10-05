@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=41';
-import { escapeHtml, hexToRgba } from '../format.js?v=41';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=41';
+import { store } from '../store.js?v=42';
+import { escapeHtml, hexToRgba } from '../format.js?v=42';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=42';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -14,6 +14,7 @@ let container = null;
 let view = 'semesters'; // 'semesters' | 'track' | 'possible'
 let markMode = null; // null | 'completed' | 'taking'
 let activeSubjects = new Set();
+let searchQuery = '';
 let draggingId = null;
 
 export function render(rootEl) {
@@ -68,6 +69,15 @@ function allSubjects() {
   return [...new Set(allEntries().map((e) => e.subject))].sort();
 }
 
+// Matches subject+number (e.g. "ae311" or "AE 311") or the course name.
+function matchesSearch(entry) {
+  const q = searchQuery.trim().toLowerCase();
+  if (!q) return true;
+  const code = `${entry.subject}${entry.number}`.toLowerCase();
+  const codeSpaced = `${entry.subject} ${entry.number}`.toLowerCase();
+  return code.includes(q) || codeSpaced.includes(q) || entry.name.toLowerCase().includes(q);
+}
+
 // Diagonal-stripe overlay for a marked card — same inline
 // repeating-linear-gradient technique as the gray "done" stripe on
 // Calendar/Canvas chips (see taskChipHtml/eventChipHtml there), just a
@@ -118,7 +128,7 @@ function assignSemester(id, semester) {
   rebuild();
 }
 
-function semestersViewHtml(entries) {
+function semestersViewHtml(entries, filterBar) {
   const bySemester = {};
   SEMESTERS.forEach((s) => (bySemester[s.id] = []));
   const unassigned = [];
@@ -142,6 +152,7 @@ function semestersViewHtml(entries) {
     <section class="card">
       <div class="rm-semesters-grid">${columns}</div>
     </section>
+    ${filterBar}
     <section class="card rm-pool" data-semester="">
       <h2 class="mono">Unassigned</h2>
       <div class="rm-card-grid">${sortEntries(unassigned).map(cardHtml).join('')}</div>
@@ -241,7 +252,7 @@ function headerHtml() {
   `;
 }
 
-function footerHtml() {
+function filterBarHtml() {
   const subjects = allSubjects();
   return `
     <section class="card">
@@ -249,7 +260,8 @@ function footerHtml() {
         <h2 class="mono">Filter</h2>
         <button data-action="add-course">+ Add course</button>
       </div>
-      <div class="range-toggle" style="flex-wrap:wrap; gap:6px;">
+      <input type="text" class="cal-search-input mono" data-action="search" placeholder="Search courses…" value="${escapeHtml(searchQuery)}" style="width:100%; margin-top:8px;">
+      <div class="range-toggle" style="flex-wrap:wrap; gap:6px; margin-top:8px;">
         <button data-action="subject-filter" data-subject="" class="${activeSubjects.size === 0 ? 'active' : ''}">All</button>
         ${subjects.map((s) => `<button data-action="subject-filter" data-subject="${escapeHtml(s)}" class="${activeSubjects.has(s) ? 'active' : ''}">${escapeHtml(s)}</button>`).join('')}
       </div>
@@ -259,22 +271,38 @@ function footerHtml() {
 }
 
 function rebuild() {
+  // rebuild() replaces the whole DOM tree, including the search input
+  // itself, on every keystroke — capture focus/cursor beforehand so typing
+  // doesn't kick focus out of the box after each character (same pattern
+  // as Canvas/Calendar's own search boxes).
+  const searchEl = container.querySelector('[data-action="search"]');
+  const searchWasFocused = document.activeElement === searchEl;
+  const searchSelection = searchWasFocused ? [searchEl.selectionStart, searchEl.selectionEnd] : null;
+
   const full = allEntries();
-  const visible = sortEntries(full.filter((e) => !activeSubjects.size || activeSubjects.has(e.subject)));
+  const visible = sortEntries(full.filter((e) => (!activeSubjects.size || activeSubjects.has(e.subject)) && matchesSearch(e)));
+  const filterBar = filterBarHtml();
 
   const bodyHtml = view === 'semesters'
-    ? semestersViewHtml(visible)
-    : view === 'track'
+    ? semestersViewHtml(visible, filterBar)
+    : filterBar + (view === 'track'
       ? categoryViewHtml(full, visible, ['taking', 'completed'])
-      : categoryViewHtml(full, visible, null);
+      : categoryViewHtml(full, visible, null));
 
   container.innerHTML = `
     ${headerHtml()}
     ${bodyHtml}
-    ${footerHtml()}
   `;
 
   attachEvents(full);
+
+  if (searchWasFocused) {
+    const newSearchEl = container.querySelector('[data-action="search"]');
+    if (newSearchEl) {
+      newSearchEl.focus();
+      newSearchEl.setSelectionRange(...searchSelection);
+    }
+  }
 }
 
 function openAddDialog() {
@@ -345,6 +373,11 @@ function attachEvents(full) {
   });
 
   container.querySelector('[data-action="add-course"]')?.addEventListener('click', openAddDialog);
+
+  container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
+    searchQuery = e.target.value;
+    rebuild();
+  });
 
   container.querySelectorAll('.rm-card').forEach((el) => {
     const entry = full.find((e) => e.id === el.dataset.id);
