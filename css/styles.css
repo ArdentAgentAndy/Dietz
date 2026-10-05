@@ -1523,7 +1523,31 @@ details summary {
   justify-content: space-between;
   gap: 4px 8px;
   margin-bottom: 6px;
-  font-size: 12px;
+  font-size: 10px;
+}
+
+/* AE Major's bespoke layout (see aeMajorHtml) — Technical Core (the
+   biggest category) on the right, everything else stacked in three rows
+   on the left. */
+.rm-ae-grid {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.rm-ae-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rm-ae-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 @media (max-width: 900px) {

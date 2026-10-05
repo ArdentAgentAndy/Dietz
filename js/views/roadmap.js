@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=43';
-import { escapeHtml, hexToRgba } from '../format.js?v=43';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=43';
+import { store } from '../store.js?v=44';
+import { escapeHtml, hexToRgba } from '../format.js?v=44';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=44';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -174,14 +174,84 @@ function categoryFulfillment(program, category, full) {
     return {
       tagged,
       met: completedCredits >= def.requiredCredits,
-      progressText: `${completedCredits}/${def.requiredCredits}cr completed${taking.length ? `, ${taking.length} taking` : ''}`,
+      progressText: `${completedCredits}/${def.requiredCredits}cr${taking.length ? `, ${taking.length} taking` : ''}`,
     };
   }
   return {
     tagged,
     met: completed.length >= def.required,
-    progressText: `${completed.length}/${def.required} completed${taking.length ? `, ${taking.length} taking` : ''}`,
+    progressText: `${completed.length}/${def.required}${taking.length ? `, ${taking.length} taking` : ''}`,
   };
+}
+
+// Category keys carry a "(choose N)" suffix internally (it has to match the
+// exact string js/roadmapCourses.js tags each course with), but that's
+// redundant once the box also shows "1/N" progress right next to it — strip
+// it for display only.
+function categoryDisplayName(category) {
+  return category.replace(/\s*\(choose \d+\)\s*$/i, '');
+}
+
+// One category box with an explicit (not auto-fit) grid of `cols` x `rows`
+// card slots — unlike the generic shrink-to-content boxes below, these
+// slots are reserved whether or not they're actually filled, which is what
+// lets AE Major's layout stay in the same fixed arrangement on Track even
+// when nothing's marked yet. Sized per category to how many you'd actually
+// ever need there (e.g. Orientation 2, the two Technical Electives groups
+// ~2 each since each only needs 6cr worth) — Possible can still show more
+// than that for an elective category with many real options (e.g. all ~20
+// Technical Electives — AE choices); the box just grows past its preset
+// instead of clipping or needing its own internal scroll.
+function aeCategoryBoxHtml(categoryKey, cols, rows, full, visibleIds, statusFilter) {
+  const { tagged, met, progressText } = categoryFulfillment('AE', categoryKey, full);
+  let shown = tagged.filter((e) => visibleIds.has(e.id));
+  if (statusFilter) shown = shown.filter((e) => statusFilter.includes(e.status));
+
+  return `
+    <div class="rm-category${met ? ' is-met' : ''}">
+      <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
+      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},104px); grid-template-rows:repeat(${rows},minmax(72px,auto));">${sortEntries(shown).map(cardHtml).join('')}</div>
+    </div>
+  `;
+}
+
+// AE Major's own fixed two-column arrangement (Technical Core on the
+// right since it's the biggest category; everything else stacked on the
+// left) — bespoke to AE for now, not derived from CATEGORIES order like
+// the generic programs below.
+function aeMajorHtml(full, visibleIds, statusFilter) {
+  const box = (key, cols, rows) => aeCategoryBoxHtml(key, cols, rows, full, visibleIds, statusFilter);
+
+  const notesHtml = statusFilter ? '' : FREE_NOTES.filter((n) => n.program === 'AE')
+    .map((n) => `<p class="muted">${escapeHtml(n.label)} — ${n.credits} hrs (any eligible course; not tracked here)</p>`)
+    .join('');
+
+  return `
+    <section class="card">
+      <h2 class="mono">${escapeHtml(PROGRAM_LABELS.AE)}</h2>
+      <div class="rm-ae-grid">
+        <div class="rm-ae-left">
+          <div class="rm-ae-row">
+            ${box('Orientation', 2, 1)}
+            ${box('Calculus I (choose 1)', 1, 1)}
+            ${box('Intro Computing (choose 1)', 1, 1)}
+          </div>
+          <div class="rm-ae-row">
+            ${box('Foundational Math and Science', 4, 2)}
+          </div>
+          <div class="rm-ae-row">
+            ${box('Propulsion (choose 1)', 1, 1)}
+            ${box('Technical Electives — AE', 2, 1)}
+            ${box('Technical Electives — Open', 2, 1)}
+          </div>
+        </div>
+        <div class="rm-ae-right">
+          ${box('AE Technical Core', 5, 4)}
+        </div>
+      </div>
+      ${notesHtml}
+    </section>
+  `;
 }
 
 // Shared by both "Track" (filtered to status taking/completed — the
@@ -195,6 +265,8 @@ function categoryViewHtml(full, visible, statusFilter) {
   const visibleIds = new Set(visible.map((e) => e.id));
 
   const programsHtml = PROGRAM_ORDER.map((program) => {
+    if (program === 'AE') return aeMajorHtml(full, visibleIds, statusFilter);
+
     const categoriesHtml = CATEGORIES.filter((c) => c.program === program).map((cat) => {
       const { tagged, met, progressText } = categoryFulfillment(program, cat.category, full);
       let shown = tagged.filter((e) => visibleIds.has(e.id));
@@ -203,7 +275,7 @@ function categoryViewHtml(full, visible, statusFilter) {
 
       return `
         <div class="rm-category${met ? ' is-met' : ''}">
-          <div class="rm-category-head"><span class="mono">${escapeHtml(cat.category)}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
+          <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(cat.category))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
           <div class="rm-card-grid">${sortEntries(shown).map(cardHtml).join('')}</div>
         </div>
       `;
