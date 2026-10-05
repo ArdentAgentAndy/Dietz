@@ -1,7 +1,7 @@
-import { store } from '../store.js?v=49';
-import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=49';
-import { clearCourseState } from '../courseState.js?v=49';
-import { escapeHtml } from '../format.js?v=49';
+import { store } from '../store.js?v=50';
+import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=50';
+import { clearCourseState } from '../courseState.js?v=50';
+import { escapeHtml } from '../format.js?v=50';
 
 let container = null;
 let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];

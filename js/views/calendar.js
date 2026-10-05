@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=49';
-import { hexForNotionColor } from '../notionColors.js?v=49';
-import { escapeHtml, hexToRgba } from '../format.js?v=49';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=49';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=50';
+import { hexForNotionColor } from '../notionColors.js?v=50';
+import { escapeHtml, hexToRgba } from '../format.js?v=50';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=50';
 
 // Categories that get a course/project/lead sub-filter and two-tone
 // (border = category, fill = sub-value) chip styling. Everything else in
