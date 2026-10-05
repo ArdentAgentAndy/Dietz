@@ -1539,6 +1539,12 @@ details summary {
   flex-wrap: wrap;
 }
 
+/* Pushes Technical Core flush to the right edge of the section instead of
+   just sitting immediately next to the left column's own width. */
+.rm-ae-right {
+  margin-left: auto;
+}
+
 .rm-ae-left {
   display: flex;
   flex-direction: column;
