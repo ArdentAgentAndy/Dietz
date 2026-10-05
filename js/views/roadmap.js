@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=46';
-import { escapeHtml, hexToRgba } from '../format.js?v=46';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=46';
+import { store } from '../store.js?v=47';
+import { escapeHtml, hexToRgba } from '../format.js?v=47';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=47';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -233,15 +233,16 @@ function aeMajorHtml(full, visibleIds, statusFilter) {
       <h2 class="mono">${escapeHtml(PROGRAM_LABELS.AE)}</h2>
       <div class="rm-ae-grid">
         <div class="rm-ae-left">
-          <div class="rm-ae-subgrid">
-            <div class="rm-ae-stack">
-              ${box('Orientation', 2, 1)}
-              ${box('Intro Computing (choose 1)', 1, 1)}
-              ${box('Propulsion (choose 1)', 1, 1)}
-            </div>
-            ${box('Foundational Math and Science', 3, 3)}
+          ${box('Foundational Math and Science', 4, 2)}
+          <div class="rm-ae-row">
+            ${box('Orientation', 2, 1)}
           </div>
           <div class="rm-ae-row">
+            ${box('Calculus I (choose 1)', 1, 1)}
+            ${box('Intro Computing (choose 1)', 1, 1)}
+          </div>
+          <div class="rm-ae-row">
+            ${box('Propulsion (choose 1)', 1, 1)}
             ${box('Technical Electives — AE', 2, 1)}
             ${box('Technical Electives — Open', 2, 1)}
           </div>
