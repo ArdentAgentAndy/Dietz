@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=45';
-import { escapeHtml, hexToRgba } from '../format.js?v=45';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=45';
+import { store } from '../store.js?v=46';
+import { escapeHtml, hexToRgba } from '../format.js?v=46';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=46';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -189,7 +189,11 @@ function categoryFulfillment(program, category, full) {
 // redundant once the box also shows "1/N" progress right next to it — strip
 // it for display only.
 function categoryDisplayName(category) {
-  return category.replace(/\s*\(choose \d+\)\s*$/i, '');
+  return category
+    .replace(/\s*\(choose \d+\)\s*$/i, '')
+    .replace(/^Intro Computing$/, 'Intro CS')
+    .replace(/ — AE$/, ' (AE)')
+    .replace(/ — Open$/, ' (Open)');
 }
 
 // One category box with an explicit (not auto-fit) grid of `cols` x `rows`
@@ -215,32 +219,29 @@ function aeCategoryBoxHtml(categoryKey, cols, rows, full, visibleIds, statusFilt
   `;
 }
 
-// AE Major's own fixed two-column arrangement (Technical Core on the
-// right since it's the biggest category; everything else stacked on the
-// left) — bespoke to AE for now, not derived from CATEGORIES order like
-// the generic programs below.
+// AE Major's own fixed layout for Track only (Possible reverts to the
+// generic flex-wrap rendering below, same as ECE/Math/CS) — Technical Core
+// on the right; on the left, Orientation/Intro CS/Propulsion stacked in a
+// column next to Foundational Math and Science (now 3x3 since Calculus I
+// merged into it), bottom-aligned with that stack via align-items:flex-end
+// on .rm-ae-subgrid, then Technical Electives (AE)/(Open) in a row below.
 function aeMajorHtml(full, visibleIds, statusFilter) {
   const box = (key, cols, rows) => aeCategoryBoxHtml(key, cols, rows, full, visibleIds, statusFilter);
-
-  const notesHtml = statusFilter ? '' : FREE_NOTES.filter((n) => n.program === 'AE')
-    .map((n) => `<p class="muted">${escapeHtml(n.label)} — ${n.credits} hrs (any eligible course; not tracked here)</p>`)
-    .join('');
 
   return `
     <section class="card">
       <h2 class="mono">${escapeHtml(PROGRAM_LABELS.AE)}</h2>
       <div class="rm-ae-grid">
         <div class="rm-ae-left">
-          <div class="rm-ae-row">
-            ${box('Orientation', 2, 1)}
-            ${box('Calculus I (choose 1)', 1, 1)}
-            ${box('Intro Computing (choose 1)', 1, 1)}
+          <div class="rm-ae-subgrid">
+            <div class="rm-ae-stack">
+              ${box('Orientation', 2, 1)}
+              ${box('Intro Computing (choose 1)', 1, 1)}
+              ${box('Propulsion (choose 1)', 1, 1)}
+            </div>
+            ${box('Foundational Math and Science', 3, 3)}
           </div>
           <div class="rm-ae-row">
-            ${box('Foundational Math and Science', 4, 2)}
-          </div>
-          <div class="rm-ae-row">
-            ${box('Propulsion (choose 1)', 1, 1)}
             ${box('Technical Electives — AE', 2, 1)}
             ${box('Technical Electives — Open', 2, 1)}
           </div>
@@ -249,7 +250,6 @@ function aeMajorHtml(full, visibleIds, statusFilter) {
           ${box('AE Technical Core', 5, 4)}
         </div>
       </div>
-      ${notesHtml}
     </section>
   `;
 }
@@ -265,7 +265,9 @@ function categoryViewHtml(full, visible, statusFilter) {
   const visibleIds = new Set(visible.map((e) => e.id));
 
   const programsHtml = PROGRAM_ORDER.map((program) => {
-    if (program === 'AE') return aeMajorHtml(full, visibleIds, statusFilter);
+    // AE's fixed box layout is Track-only (statusFilter truthy) — Possible
+    // uses the same generic flex-wrap rendering as every other program.
+    if (program === 'AE' && statusFilter) return aeMajorHtml(full, visibleIds, statusFilter);
 
     const categoriesHtml = CATEGORIES.filter((c) => c.program === program).map((cat) => {
       const { tagged, met, progressText } = categoryFulfillment(program, cat.category, full);

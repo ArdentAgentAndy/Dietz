@@ -1552,6 +1552,23 @@ details summary {
   align-items: flex-start;
 }
 
+/* Orientation/Intro CS/Propulsion stacked next to Foundational Math and
+   Science, bottom-aligned (flex-end) so Foundational's bottom edge lines
+   up with Propulsion's regardless of small height differences (e.g. a
+   wrapped 2-line title) between the two sides. */
+.rm-ae-subgrid {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.rm-ae-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @media (max-width: 900px) {
   .rm-semesters-grid {
     grid-template-columns: repeat(8, minmax(110px, 1fr));
