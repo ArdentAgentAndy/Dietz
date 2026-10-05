@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=47';
-import { escapeHtml, hexToRgba } from '../format.js?v=47';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=47';
+import { store } from '../store.js?v=48';
+import { escapeHtml, hexToRgba } from '../format.js?v=48';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=48';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -167,20 +167,19 @@ function categoryFulfillment(program, category, full) {
   const def = CATEGORIES.find((c) => c.program === program && c.category === category);
   const tagged = full.filter((e) => e.programs.some((p) => p.program === program && p.category === category));
   const completed = tagged.filter((e) => e.status === 'completed');
-  const taking = tagged.filter((e) => e.status === 'taking');
 
   if (def.requiredCredits != null) {
     const completedCredits = completed.reduce((sum, e) => sum + (e.credits || 0), 0);
     return {
       tagged,
       met: completedCredits >= def.requiredCredits,
-      progressText: `${completedCredits}/${def.requiredCredits}cr${taking.length ? `, ${taking.length} taking` : ''}`,
+      progressText: `${completedCredits}/${def.requiredCredits}cr`,
     };
   }
   return {
     tagged,
     met: completed.length >= def.required,
-    progressText: `${completed.length}/${def.required}${taking.length ? `, ${taking.length} taking` : ''}`,
+    progressText: `${completed.length}/${def.required}`,
   };
 }
 
@@ -192,6 +191,7 @@ function categoryDisplayName(category) {
   return category
     .replace(/\s*\(choose \d+\)\s*$/i, '')
     .replace(/^Intro Computing$/, 'Intro CS')
+    .replace(/^Technical Electives/, 'Tech Electives')
     .replace(/ — AE$/, ' (AE)')
     .replace(/ — Open$/, ' (Open)');
 }
@@ -211,10 +211,20 @@ function aeCategoryBoxHtml(categoryKey, cols, rows, full, visibleIds, statusFilt
   let shown = tagged.filter((e) => visibleIds.has(e.id));
   if (statusFilter) shown = shown.filter((e) => statusFilter.includes(e.status));
 
+  // A 2-col/1-row box (Orientation, Tech Electives (AE)/(Open)) should be
+  // exactly as wide as two separate 1x1 boxes sitting next to each other
+  // in the same row, not just 2 card-widths + the usual 6px inter-card
+  // gap — otherwise it reads narrower and the stacked column looks
+  // misaligned. .rm-category's own chrome is 18px (8px padding + 1px
+  // border, each side) and .rm-ae-row's gap between sibling boxes is 8px,
+  // so solving (18 + 2*cardW + gap) = 2*(cardW + 18) + 8 for gap gives a
+  // constant 26px, independent of --rm-card-w.
+  const gap = cols === 2 && rows === 1 ? '26px' : '6px';
+
   return `
     <div class="rm-category${met ? ' is-met' : ''}">
       <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},var(--rm-card-w)); grid-template-rows:repeat(${rows},minmax(72px,auto));">${sortEntries(shown).map(cardHtml).join('')}</div>
+      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},var(--rm-card-w)); grid-template-rows:repeat(${rows},minmax(72px,auto)); gap:${gap};">${sortEntries(shown).map(cardHtml).join('')}</div>
     </div>
   `;
 }
@@ -233,7 +243,7 @@ function aeMajorHtml(full, visibleIds, statusFilter) {
       <h2 class="mono">${escapeHtml(PROGRAM_LABELS.AE)}</h2>
       <div class="rm-ae-grid">
         <div class="rm-ae-left">
-          ${box('Foundational Math and Science', 4, 2)}
+          ${box('Foundational Math and Science', 3, 3)}
           <div class="rm-ae-row">
             ${box('Orientation', 2, 1)}
           </div>
