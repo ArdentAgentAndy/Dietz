@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=44';
-import { escapeHtml, hexToRgba } from '../format.js?v=44';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=44';
+import { store } from '../store.js?v=45';
+import { escapeHtml, hexToRgba } from '../format.js?v=45';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=45';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -210,7 +210,7 @@ function aeCategoryBoxHtml(categoryKey, cols, rows, full, visibleIds, statusFilt
   return `
     <div class="rm-category${met ? ' is-met' : ''}">
       <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},104px); grid-template-rows:repeat(${rows},minmax(72px,auto));">${sortEntries(shown).map(cardHtml).join('')}</div>
+      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},var(--rm-card-w)); grid-template-rows:repeat(${rows},minmax(72px,auto));">${sortEntries(shown).map(cardHtml).join('')}</div>
     </div>
   `;
 }

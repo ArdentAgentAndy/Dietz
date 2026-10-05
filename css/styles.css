@@ -12,6 +12,7 @@
   --green: #5bc87a;
   --radius: 12px;
   --radius-sm: 8px;
+  --rm-card-w: 90px;
 }
 
 * {
@@ -1437,12 +1438,13 @@ details summary {
   color: var(--muted);
 }
 
-/* Fixed 104px columns, not minmax(...,1fr) — a sparse row (e.g. 2 cards in
-   an 8-across semester column) must not stretch those cards to fill the
-   leftover space; every card stays the same size everywhere on this page. */
+/* Fixed --rm-card-w columns, not minmax(...,1fr) — a sparse row (e.g. 2
+   cards in an 8-across semester column) must not stretch those cards to
+   fill the leftover space; every card stays the same size everywhere on
+   this page. */
 .rm-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 104px);
+  grid-template-columns: repeat(auto-fill, var(--rm-card-w));
   gap: 6px;
 }
 
@@ -1508,7 +1510,7 @@ details summary {
    categories share a row, but make big ones taller by more than that
    saves, so overall page height is shortest somewhere up near this width. */
 .rm-category .rm-card-grid {
-  grid-template-columns: repeat(auto-fit, 104px);
+  grid-template-columns: repeat(auto-fit, var(--rm-card-w));
   max-width: 900px;
 }
 
