@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=50';
-import { escapeHtml, hexToRgba } from '../format.js?v=50';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=50';
+import { store } from '../store.js?v=52';
+import { escapeHtml, hexToRgba } from '../format.js?v=52';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=52';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -212,19 +212,23 @@ function aeCategoryBoxHtml(categoryKey, cols, rows, full, visibleIds, statusFilt
   if (statusFilter) shown = shown.filter((e) => statusFilter.includes(e.status));
 
   // A 2-col/1-row box (Orientation, Tech Electives (AE)/(Open)) should be
-  // exactly as wide as two separate 1x1 boxes sitting next to each other
-  // in the same row, not just 2 card-widths + the usual 6px inter-card
-  // gap — otherwise it reads narrower and the stacked column looks
-  // misaligned. .rm-category's own chrome is 18px (8px padding + 1px
-  // border, each side) and .rm-ae-row's gap between sibling boxes is 8px,
-  // so solving (18 + 2*cardW + gap) = 2*(cardW + 18) + 8 for gap gives a
-  // constant 26px, independent of --rm-card-w.
-  const gap = cols === 2 && rows === 1 ? '26px' : '6px';
+  // exactly as wide as two separate 1x1 boxes side by side — but the extra
+  // width belongs AFTER the cards (left-aligned, trailing empty space),
+  // not as a wider gap between them. So the grid keeps its normal 6px
+  // gap; instead the grid's own box gets an explicit width wide enough to
+  // match (.rm-category's chrome is 18px — 8px padding + 1px border, each
+  // side — and .rm-ae-row's gap between sibling boxes is 8px, so target
+  // grid width = 2*(cardW+18)+8 - 18), and justify-content: start (set on
+  // .rm-card-grid generally) packs the actual cards to its left edge,
+  // leaving the leftover as blank trailing space instead of a gap.
+  const gridWidthStyle = cols === 2 && rows === 1
+    ? ` width:calc(2 * (var(--rm-card-w) + 18px) + 8px - 18px);`
+    : '';
 
   return `
     <div class="rm-category${met ? ' is-met' : ''}">
       <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},var(--rm-card-w)); grid-template-rows:repeat(${rows},minmax(72px,auto)); gap:${gap};">${sortEntries(shown).map(cardHtml).join('')}</div>
+      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},var(--rm-card-w)); grid-template-rows:repeat(${rows},minmax(72px,auto));${gridWidthStyle}">${sortEntries(shown).map(cardHtml).join('')}</div>
     </div>
   `;
 }

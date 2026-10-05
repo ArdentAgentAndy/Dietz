@@ -1,9 +1,9 @@
-import './store.js?v=50';
-import { initRouter } from './router.js?v=50';
-import { initSync } from './sync.js?v=50';
-import { compactOldSessions } from './compaction.js?v=50';
-import { migrateCourseConfigs } from './migrations.js?v=50';
-import { initPush } from './push.js?v=50';
+import './store.js?v=52';
+import { initRouter } from './router.js?v=52';
+import { initSync } from './sync.js?v=52';
+import { compactOldSessions } from './compaction.js?v=52';
+import { migrateCourseConfigs } from './migrations.js?v=52';
+import { initPush } from './push.js?v=52';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project

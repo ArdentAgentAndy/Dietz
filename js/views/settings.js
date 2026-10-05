@@ -1,7 +1,7 @@
-import { store } from '../store.js?v=50';
-import { escapeHtml } from '../format.js?v=50';
-import { requestSync } from '../sync.js?v=50';
-import { notificationPermission, enableNotifications } from '../push.js?v=50';
+import { store } from '../store.js?v=52';
+import { escapeHtml } from '../format.js?v=52';
+import { requestSync } from '../sync.js?v=52';
+import { notificationPermission, enableNotifications } from '../push.js?v=52';
 
 const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
 
