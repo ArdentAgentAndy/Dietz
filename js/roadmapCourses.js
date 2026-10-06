@@ -33,11 +33,11 @@ export const COURSES = [
   // --- AE + ECE: Intro Computing (choose 1 of 2) -------------------------
   { id: 'CS101', subject: 'CS', number: 101, name: 'Intro Computing: Engrg & Sci', credits: 3,
     programs: [{ program: 'AE', category: 'Intro Computing (choose 1)' },
-               { program: 'ECE', category: 'Programming (choose 1)' }] },
+               { program: 'ECE', category: 'ECE Core' }] },
   { id: 'CS124', subject: 'CS', number: 124, name: 'Intro to Computer Science I', credits: 3,
     programs: [{ program: 'AE', category: 'Intro Computing (choose 1)' },
-               { program: 'ECE', category: 'Programming (choose 1)' },
-               { program: 'CS', category: 'Required' }] },
+               { program: 'ECE', category: 'ECE Core' },
+               { program: 'CS', category: 'CS Core' }] },
 
   // --- AE: Calculus I (choose 1 of 2) ------------------------------------
   { id: 'MATH220', subject: 'MATH', number: 220, name: 'Calculus', credits: 5,
@@ -54,13 +54,13 @@ export const COURSES = [
     programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
   { id: 'MATH241', subject: 'MATH', number: 241, name: 'Calculus III', credits: 4,
     programs: [{ program: 'AE', category: 'Foundational Math and Science' },
-               { program: 'MATH', category: 'Required' }] },
+               { program: 'MATH', category: 'MATH Core' }] },
   { id: 'MATH257', subject: 'MATH', number: 257, name: 'Linear Algebra w/ Computational Applications', credits: 3,
     programs: [{ program: 'AE', category: 'Foundational Math and Science' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'Linalg' }] },
   { id: 'MATH285', subject: 'MATH', number: 285, name: 'Intro Differential Equations', credits: 3,
     programs: [{ program: 'AE', category: 'Foundational Math and Science' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'DFQ' }] },
   { id: 'PHYS211', subject: 'PHYS', number: 211, name: 'University Physics: Mechanics', credits: 4,
     programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
   { id: 'PHYS212', subject: 'PHYS', number: 212, name: 'University Physics: Elec & Mag', credits: 4,
@@ -114,87 +114,67 @@ export const COURSES = [
     programs: [{ program: 'AE', category: 'Propulsion (choose 1)' }] },
 
   // --- AE: Technical Electives — AE-specific half (6 of 12 hrs) ---------
-  { id: 'AE402', subject: 'AE', number: 402, name: 'Aerodynamics', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE403', subject: 'AE', number: 403, name: 'Mechanics of Flight Vehicles', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE410', subject: 'AE', number: 410, name: 'Experimental Aerodynamics', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE412', subject: 'AE', number: 412, name: 'Rotorcraft Engineering', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE416', subject: 'AE', number: 416, name: 'Aerospace Component Design', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE419', subject: 'AE', number: 419, name: 'Flight Vehicle Performance', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE420', subject: 'AE', number: 420, name: 'Aeroelasticity', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE428', subject: 'AE', number: 428, name: 'Aerospace Structural Vibrations', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE435', subject: 'AE', number: 435, name: 'Hypersonic Aerothermodynamics', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE445', subject: 'AE', number: 445, name: 'Intro to Space Flight', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE451', subject: 'AE', number: 451, name: 'Aerospace Vehicle Vibrations', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE454', subject: 'AE', number: 454, name: 'Intelligent Flight Control Systems', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE456', subject: 'AE', number: 456, name: 'Optimal Control of Aerospace Systems', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE462', subject: 'AE', number: 462, name: 'Aerospace Plasmadynamics', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE468', subject: 'AE', number: 468, name: 'Applied Orbital Mechanics', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE482', subject: 'AE', number: 482, name: 'Intro to Flight Testing of Aircraft', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE484', subject: 'AE', number: 484, name: 'Intro to Air Traffic Management', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'AE485', subject: 'AE', number: 485, name: 'Intro to Air Transportation', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
+  // 18 entries removed here (and ENG491 below) after catalog verification
+  // found their stored titles didn't match the real course at that number
+  // (e.g. this file's old "AE420 Aeroelasticity" is really AE420 Finite
+  // Element Analysis; real Aeroelasticity is AE451) — fabricated/misattached
+  // data, not a current-catalog-edition drift. Needs a fresh research pass
+  // to repopulate with the real elective list; only AE497/AE498 (generic
+  // Advanced/Special Topics, title not tied to a specific real syllabus so
+  // nothing to mismatch) survived verification.
   { id: 'AE497', subject: 'AE', number: 497, name: 'Advanced Topics in AE', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
   { id: 'AE498', subject: 'AE', number: 498, name: 'Special Topics in AE', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
-  { id: 'ENG491', subject: 'ENG', number: 491, name: 'Topics in Engineering', credits: 3, programs: [{ program: 'AE', category: 'Technical Electives — AE' }] },
 
   // --- AE: Technical Electives — open half (6 of 12 hrs), confirmed to --
   // --- also count toward a minor ----------------------------------------
   { id: 'ECE210', subject: 'ECE', number: 210, name: 'Analog Signal Processing', credits: 4,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'ECE', category: 'EE Core' }] },
+               { program: 'ECE', category: 'ECE Core' }] },
   { id: 'ECE310', subject: 'ECE', number: 310, name: 'Digital Signal Processing', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'ECE', category: 'EE Electives (choose 2)' }] },
+               { program: 'ECE', category: 'ECE Upper Electives (choose 2)' }] },
   { id: 'ECE329', subject: 'ECE', number: 329, name: 'Fields and Waves I', credits: 4,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'ECE', category: 'EE Electives (choose 2)' }] },
+               { program: 'ECE', category: 'ECE Upper Electives (choose 2)' }] },
   { id: 'ECE330', subject: 'ECE', number: 330, name: 'Power Circuits and Electromechanics', credits: 4,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'ECE', category: 'EE Electives (choose 2)' }] },
+               { program: 'ECE', category: 'ECE Upper Electives (choose 2)' }] },
   { id: 'ECE342', subject: 'ECE', number: 342, name: 'Electronic Circuits (+ ECE 343 Lab)', credits: 4,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'ECE', category: 'EE Electives (choose 2)' }] },
+               { program: 'ECE', category: 'ECE Upper Electives (choose 2)' }] },
   { id: 'ECE385', subject: 'ECE', number: 385, name: 'Digital Systems Laboratory', credits: 4,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' }] },
   { id: 'MATH402', subject: 'MATH', number: 402, name: 'Non-Euclidean Geometry', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH413', subject: 'MATH', number: 413, name: 'Intro to Combinatorics', credits: 3,
-    programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH416', subject: 'MATH', number: 416, name: 'Abstract Linear Algebra', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH442', subject: 'MATH', number: 442, name: 'Intro Partial Differential Equations', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH446', subject: 'MATH', number: 446, name: 'Applied Complex Analysis', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH461', subject: 'MATH', number: 461, name: 'Probability Theory', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
                { program: 'ECE', category: 'Probability/Stats (choose 1)' },
-               { program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH482', subject: 'MATH', number: 482, name: 'Discrete Mathematics', credits: 3,
-    programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH484', subject: 'MATH', number: 484, name: 'Nonlinear Programming', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH489', subject: 'MATH', number: 489, name: 'Mathematical Theory of Optimization', credits: 3,
-    programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'MATH', category: 'Electives' }] },
+               { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'CS225', subject: 'CS', number: 225, name: 'Data Structures', credits: 4,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'CS', category: 'Required' }] },
-  { id: 'CS420', subject: 'CS', number: 420, name: 'Embedded Systems', credits: 4,
-    programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'CS', category: 'Upper Electives (choose 2)' }] },
-  { id: 'CS461', subject: 'CS', number: 461, name: 'Computer Security I', credits: 3,
-    programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'CS', category: 'Upper Electives (choose 2)' }] },
+               { program: 'CS', category: 'Data' }] },
+  // CS420 (titled "Embedded Systems" — real course is Parallel Progrmg:
+  // Sci & Engrg) and CS461 (prereqs CS241/341/233+340/ECE391, none of which
+  // are tracked in this catalog) removed — see js/roadmapCourses.js top
+  // note. CS's former Required/Upper-Electives split is now Coding (2
+  // courses)/Structures (2 courses)/Upper (CS465, the one surviving upper-
+  // level elective) — see CATEGORIES below.
   { id: 'CS465', subject: 'CS', number: 465, name: 'User Interface Design', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
-               { program: 'CS', category: 'Upper Electives (choose 2)' }] },
+               { program: 'CS', category: 'CS Upper Electives' }] },
 
   // --- ECE minor only: remaining required/elective slots -----------------
   { id: 'ECE110', subject: 'ECE', number: 110, name: 'Introduction to Electronics', credits: 4,
@@ -203,49 +183,43 @@ export const COURSES = [
     programs: [{ program: 'ECE', category: 'Probability/Stats (choose 1)' }] },
   { id: 'IE300', subject: 'IE', number: 300, name: 'Analysis of Data', credits: 3,
     programs: [{ program: 'ECE', category: 'Probability/Stats (choose 1)' }] },
-  { id: 'BIOE310', subject: 'BIOE', number: 310, name: 'Biomedical Data Analysis', credits: 3,
-    programs: [{ program: 'ECE', category: 'Probability/Stats (choose 1)' }] },
   { id: 'MATH463', subject: 'MATH', number: 463, name: 'Statistics and Probability I', credits: 3,
-    programs: [{ program: 'ECE', category: 'Probability/Stats (choose 1)' }] },
-  { id: 'CEE202', subject: 'CEE', number: 202, name: 'Probability and Statistics for Civil Engineers', credits: 3,
     programs: [{ program: 'ECE', category: 'Probability/Stats (choose 1)' }] },
   { id: 'CS361', subject: 'CS', number: 361, name: 'Probability and Statistics for Computer Science', credits: 3,
     programs: [{ program: 'ECE', category: 'Probability/Stats (choose 1)' }] },
   { id: 'ECE340', subject: 'ECE', number: 340, name: 'Semiconductor Electronics', credits: 3,
-    programs: [{ program: 'ECE', category: 'EE Electives (choose 2)' }] },
+    programs: [{ program: 'ECE', category: 'ECE Upper Electives (choose 2)' }] },
 
   // --- Math minor only: remaining elective options ------------------------
-  { id: 'ASRM406', subject: 'ASRM', number: 406, name: 'Mathematical Statistics II', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH415', subject: 'MATH', number: 415, name: 'Applied Linear Algebra', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH417', subject: 'MATH', number: 417, name: 'Intro to Abstract Algebra', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH418', subject: 'MATH', number: 418, name: 'Abstract Algebra', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH427', subject: 'MATH', number: 427, name: 'Number Theory', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH453', subject: 'MATH', number: 453, name: 'Elementary Theory of Numbers', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH412', subject: 'MATH', number: 412, name: 'Graph Theory', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH414', subject: 'MATH', number: 414, name: 'Theory of Games', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH424', subject: 'MATH', number: 424, name: 'Honors Real Analysis', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH425', subject: 'MATH', number: 425, name: 'Intro to Probability', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH441', subject: 'MATH', number: 441, name: 'Differential Equations', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH444', subject: 'MATH', number: 444, name: 'Elementary Real Analysis', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH447', subject: 'MATH', number: 447, name: 'Real Variables', credits: 4, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH448', subject: 'MATH', number: 448, name: 'Complex Analysis', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'CS450', subject: 'CS', number: 450, name: 'Numerical Analysis', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH487', subject: 'MATH', number: 487, name: 'Real Analysis', credits: 4, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH314', subject: 'MATH', number: 314, name: 'Theory of Numbers', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH403', subject: 'MATH', number: 403, name: 'Projective Geometry', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH423', subject: 'MATH', number: 423, name: 'Differential Geometry', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH428', subject: 'MATH', number: 428, name: 'Introductory Topology', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH432', subject: 'MATH', number: 432, name: 'Introductory Topology II', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'MATH481', subject: 'MATH', number: 481, name: 'Vector and Tensor Analysis', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'STAT400', subject: 'STAT', number: 400, name: 'Statistics and Probability I', credits: 4, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'STAT410', subject: 'STAT', number: 410, name: 'Statistics and Probability II', credits: 3, programs: [{ program: 'MATH', category: 'Electives' }] },
-  { id: 'STAT420', subject: 'STAT', number: 420, name: 'Methods of Applied Statistics', credits: 4, programs: [{ program: 'MATH', category: 'Electives' }] },
+  // ASRM406, MATH417/418/427/453/412/414/425/487/403/428/432 removed —
+  // ASRM406 title fabricated ("Mathematical Statistics II" doesn't exist in
+  // ASRM's catalog); 418/427/453/414/425/487/403/428/432 had mismatched
+  // titles (see top-of-file note); 417/412 had no catalog-listed prereq
+  // still present in this file. The former "Electives" category is now
+  // split into 200s/Transition/Upper (see CATEGORIES below) — 200s is
+  // MATH257/285 (genuinely 200-level, tagged above in the Foundational
+  // block, free overlap credit), Transition is MATH314 (re-added here with
+  // its real title, not the fabricated one it had before — a 300-level
+  // "intro to proofs" course), everything else here is Upper (400-level).
+  { id: 'MATH314', subject: 'MATH', number: 314, name: 'Introduction to Higher Mathematics', credits: 3, programs: [{ program: 'MATH', category: 'MATH Core' }] },
+  { id: 'MATH415', subject: 'MATH', number: 415, name: 'Applied Linear Algebra', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH441', subject: 'MATH', number: 441, name: 'Differential Equations', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH424', subject: 'MATH', number: 424, name: 'Honors Real Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH444', subject: 'MATH', number: 444, name: 'Elementary Real Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH447', subject: 'MATH', number: 447, name: 'Real Variables', credits: 4, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH448', subject: 'MATH', number: 448, name: 'Complex Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'CS450', subject: 'CS', number: 450, name: 'Numerical Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH423', subject: 'MATH', number: 423, name: 'Differential Geometry', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH481', subject: 'MATH', number: 481, name: 'Vector and Tensor Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'STAT400', subject: 'STAT', number: 400, name: 'Statistics and Probability I', credits: 4, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'STAT410', subject: 'STAT', number: 410, name: 'Statistics and Probability II', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'STAT420', subject: 'STAT', number: 420, name: 'Methods of Applied Statistics', credits: 4, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
 
   // --- CS minor only: remaining required courses --------------------------
   { id: 'CS128', subject: 'CS', number: 128, name: 'Introduction to Computer Science II', credits: 3,
-    programs: [{ program: 'CS', category: 'Required' }] },
+    programs: [{ program: 'CS', category: 'CS Core' }] },
   { id: 'CS173', subject: 'CS', number: 173, name: 'Discrete Structures', credits: 3,
-    programs: [{ program: 'CS', category: 'Required' }] },
+    programs: [{ program: 'CS', category: 'Discrete' }] },
 ];
 
 // Category definitions: how many of that category's tagged courses need to
@@ -260,20 +234,39 @@ export const CATEGORIES = [
   { program: 'AE', category: 'Foundational Math and Science', required: 8 },
   { program: 'AE', category: 'AE Technical Core', required: 19 },
   { program: 'AE', category: 'Propulsion (choose 1)', required: 1 },
+  // TODO: Technical Electives — AE only has AE497/AE498 left after the
+  // title-mismatch cleanup above (see that note) — technically still
+  // satisfiable (3+3=6cr) but with zero real choice. Needs a fresh
+  // research pass for the real elective list.
   { program: 'AE', category: 'Technical Electives — AE', requiredCredits: 6 },
   { program: 'AE', category: 'Technical Electives — Open', requiredCredits: 6 },
 
+  // ECE Core merges the former Programming (choose 1, CS101/CS124) and EE
+  // Core (ECE210) categories — need your 1 programming pick plus ECE210,
+  // so required: 2 out of the 3 tagged courses.
+  { program: 'ECE', category: 'ECE Core', required: 2 },
   { program: 'ECE', category: 'Circuits (choose 1)', required: 1 },
-  { program: 'ECE', category: 'Programming (choose 1)', required: 1 },
   { program: 'ECE', category: 'Probability/Stats (choose 1)', required: 1 },
-  { program: 'ECE', category: 'EE Core', required: 1 },
-  { program: 'ECE', category: 'EE Electives (choose 2)', required: 2 },
+  { program: 'ECE', category: 'ECE Upper Electives (choose 2)', required: 2 },
 
-  { program: 'MATH', category: 'Required', required: 1 },
-  { program: 'MATH', category: 'Electives', required: 5 },
+  // MATH Core merges the former Required (MATH241) and Transition
+  // (MATH314) categories — both mandatory, required: 2 of 2. Linalg/DFQ
+  // split out of the old "200s" (each exactly 1 real course); Upper is
+  // the wide (16-option) elective pool.
+  { program: 'MATH', category: 'MATH Core', required: 2 },
+  { program: 'MATH', category: 'Linalg', required: 1 },
+  { program: 'MATH', category: 'DFQ', required: 1 },
+  { program: 'MATH', category: 'MATH Upper Electives', required: 2 },
 
-  { program: 'CS', category: 'Required', required: 4 },
-  { program: 'CS', category: 'Upper Electives (choose 2)', required: 2 },
+  // CS Core renamed from the former "Coding" (CS124, CS128, both
+  // required). Discrete/Data split out of the old "Structures" (each
+  // exactly 1 real course); Upper is CS465, the one surviving real
+  // upper-level elective (needs a fresh research pass to add real choices
+  // back — see the note by CS465 above).
+  { program: 'CS', category: 'CS Core', required: 2 },
+  { program: 'CS', category: 'Discrete', required: 1 },
+  { program: 'CS', category: 'Data', required: 1 },
+  { program: 'CS', category: 'CS Upper Electives', required: 1 },
 ];
 
 // Credit-hour-only notes for open-ended slots with no fixed course list to
@@ -287,4 +280,16 @@ export const PROGRAM_LABELS = {
   ECE: 'ECE Minor (EE)',
   MATH: 'Math Minor',
   CS: 'CS Minor',
+};
+
+// Total credit hours for the full degree/minor (catalog.illinois.edu,
+// 2026-2027 edition — same research pass that produced this file's course
+// list). AE's 128 includes Gen Ed and Free Electives, neither of which is
+// tracked as cards here (see the scope note up top), so its live tally
+// will always read lower than 128 even at true completion.
+export const PROGRAM_TOTAL_HOURS = {
+  AE: 128,
+  ECE: 18,
+  MATH: 19,
+  CS: 19,
 };

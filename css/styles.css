@@ -1358,6 +1358,8 @@ details summary {
    program badges, everything scaled down accordingly. */
 .rm-card {
   position: relative;
+  width: var(--rm-card-w);
+  flex: 0 0 var(--rm-card-w);
   min-height: 72px;
   display: flex;
   flex-direction: column;
@@ -1449,17 +1451,20 @@ details summary {
   gap: 6px;
 }
 
+/* One semester per row (was one per column) — align-items:flex-start so
+   each row's box only takes the width its own (fixed, 8-card-max) content
+   needs instead of stretching to fill the section. */
 .rm-semesters-grid {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
 }
 
-.rm-semester-col {
+.rm-semester-row {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 140px;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1536,15 +1541,14 @@ details summary {
 .rm-ae-grid {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: stretch;
+  justify-content: flex-end;
   margin-top: 8px;
   flex-wrap: wrap;
 }
 
-/* Pushes Technical Core flush to the right edge of the section instead of
-   just sitting immediately next to the left column's own width. */
-.rm-ae-right {
-  margin-left: auto;
+.rm-ae-middle {
+  display: flex;
 }
 
 .rm-ae-left {
@@ -1559,13 +1563,143 @@ details summary {
   justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
+/* Separates each minor's row (and the first one from AE's grid above it)
+   now that AE + all 3 minors share one card instead of each getting its
+   own — same visual gap the old .card + .card margin used to give them. */
+.rm-minor-row {
+  margin-top: 16px;
+}
+
+/* Each minor row's Gen Ed requirement boxes — pushed to the row's far
+   right (margin-left:auto, same trick as .rm-tally-stack and the old
+   AERO ENG. label) so every row's group lands on the same right edge. */
+.rm-genEd-group {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* "Gen Ed" section-title box's label — bold like other section titles,
+   unlike the plain mono label every other box head uses. */
+.rm-genEd-title {
+  font-weight: 700;
+}
+
+/* CS row's "Gen Ed" section marker — plain text, no box/border, sitting
+   to the left of F. Lang. Vertically centered against the row like
+   .rm-row-label is on the row's own far-left end. */
+.rm-genEd-section-title {
+  align-self: center;
+  flex-shrink: 0;
+  margin-right: 8px;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+/* Program/minor tag for a row (AE's rm-ae-grid or a minor's rm-ae-row) —
+   rotated 90deg clockwise (vertical-rl reads top-to-bottom with glyphs on
+   their side, the standard "spine label" look) and vertically centered
+   against the row's full (stretched) height regardless of how tall its
+   tallest box ends up being. */
+.rm-row-label {
+  writing-mode: vertical-rl;
+  align-self: center;
+  flex-shrink: 0;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  /* Back to the first element in the row. The card's own padding+border
+     puts it 17px from the left edge; pull it in to the row's normal 8px
+     gap. Its right side (to the first box) is already that same 8px via
+     the row's own flex gap, so no adjustment needed there. */
+  margin-left: -9px;
+}
+
+/* AE Major's own section title — top-left, large, unlike the minors'
+   rotated sidebar tags (AE doesn't get one; it's the page's main focus).
+   A little top margin so it has room to breathe below the card's border
+   instead of sitting flush against it. */
+/* Now the first item inside .rm-tally-stack (a flex column) instead of a
+   block sibling above .rm-ae-grid, so its top edge lines up with every
+   other box's top edge in the row (align-items:stretch keeps everything
+   starting at the same place) instead of sticking out above them. Margin
+   reset to 0 so the stack's own 8px gap — not the heading's default
+   margin — sets the space before "To Graduate" below it. */
+.rm-ae-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+/* The 5 stacked "progress toward X total hours" boxes to the left of AE's
+   Foundational/stack/Technical Core cluster — small and narrow (not a
+   course card), each just a label + live completed/total hours tally, all
+   evenly spaced the same as the row's own minor-to-minor gap. */
+.rm-tally-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  /* Pins this to the left edge while .rm-ae-grid's justify-content:flex-end
+     keeps everything after it (Foundational/stack/Technical Core) pushed
+     to the right, same trick the old AERO ENG. label used. */
+  margin-right: auto;
+}
+
+/* Absorbs all the stack's leftover vertical space (it's stretched to
+   match Foundational Theory's height via .rm-ae-grid's align-items:
+   stretch, but the 5 tally boxes' own content is shorter) into a single
+   gap right under the AE Major title, pushing To Graduate through Gen Ed
+   Req. down as a block so Gen Ed Req.'s bottom edge lands exactly on
+   Foundational Theory's — same as every other box's bottom in the row. */
+.rm-ae-title + .rm-tally {
+  margin-top: auto;
+}
+
+.rm-tally {
+  width: 108px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.rm-tally-label {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rm-tally-value {
+  margin-top: 4px;
+  font-family: 'Space Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.rm-tally-value.is-placeholder {
+  color: var(--muted);
+}
+
+.rm-tally-value.is-placeholder {
+  color: var(--muted);
+}
 
 @media (max-width: 900px) {
-  .rm-semesters-grid {
-    grid-template-columns: repeat(8, minmax(110px, 1fr));
+  /* Each row's fixed 8-card width (762px) can exceed a phone viewport —
+     let the row itself scroll horizontally rather than shrinking cards or
+     wrapping early. */
+  .rm-semester-row {
+    max-width: 100%;
     overflow-x: auto;
   }
 }

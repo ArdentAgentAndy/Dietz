@@ -1,6 +1,6 @@
 import { store } from '../store.js?v=54';
 import { escapeHtml, hexToRgba } from '../format.js?v=54';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=54';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=54';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -137,20 +137,27 @@ function semestersViewHtml(entries, filterBar) {
     else unassigned.push(e);
   });
 
-  const columns = SEMESTERS.map((s) => {
+  // One row per semester instead of one column — each capped at a fixed
+  // 8-card-wide box (same "N * cardW + (N-1) * 6px" native-width formula
+  // Track's own fixed-size boxes use, see categoryBoxHtml) so the row
+  // never stretches to the page's full width no matter how narrow its
+  // content. A 9th+ card wraps to a second line within the box (height
+  // grows), same overflow behavior every other box on this page already
+  // has — it just never grows wider than 8 slots.
+  const rows = SEMESTERS.map((s) => {
     const list = sortEntries(bySemester[s.id]);
     const credits = list.reduce((sum, e) => sum + (e.credits || 0), 0);
     return `
-      <div class="rm-semester-col" data-semester="${s.id}">
+      <div class="rm-semester-row" data-semester="${s.id}">
         <div class="rm-semester-head"><span class="mono">${s.label}</span><span class="muted mono">${credits}cr</span></div>
-        <div class="rm-card-grid">${list.map(cardHtml).join('')}</div>
+        <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; width:calc(8 * var(--rm-card-w) + 7 * 6px); min-height:72px;">${list.map(cardHtml).join('')}</div>
       </div>
     `;
   }).join('');
 
   return `
     <section class="card">
-      <div class="rm-semesters-grid">${columns}</div>
+      <div class="rm-semesters-grid">${rows}</div>
     </section>
     ${filterBar}
     <section class="card rm-pool" data-semester="">
@@ -172,15 +179,39 @@ function categoryFulfillment(program, category, full) {
     const completedCredits = completed.reduce((sum, e) => sum + (e.credits || 0), 0);
     return {
       tagged,
+      def,
       met: completedCredits >= def.requiredCredits,
-      progressText: `${completedCredits}/${def.requiredCredits}cr`,
+      // Clamped so a slot that's been over-filled (e.g. two electives whose
+      // credits add up past what's needed) still reads as "met", not as a
+      // confusing numerator past the denominator.
+      progressText: `${Math.min(completedCredits, def.requiredCredits)}/${def.requiredCredits}cr`,
     };
   }
   return {
     tagged,
+    def,
     met: completed.length >= def.required,
-    progressText: `${completed.length}/${def.required}`,
+    progressText: `${Math.min(completed.length, def.required)}/${def.required}`,
   };
+}
+
+// Once a slot's requirement is already met by the cards before it (in sort
+// order), any further card for that same category is redundant — e.g. a
+// choose-1 category with two courses marked complete only needs the first;
+// a 6cr elective slot stops once cumulative credits reach 6, even if that
+// last card's own credits tip the running total past it. Track view only
+// (see call sites) — Possible must keep showing every real catalog option.
+function capShown(sortedShown, def) {
+  const capped = [];
+  let count = 0;
+  let credits = 0;
+  for (const e of sortedShown) {
+    if (def.requiredCredits != null ? credits >= def.requiredCredits : count >= def.required) break;
+    capped.push(e);
+    count += 1;
+    credits += e.credits || 0;
+  }
+  return capped;
 }
 
 // Category keys carry a "(choose N)" suffix internally (it has to match the
@@ -193,7 +224,12 @@ function categoryDisplayName(category) {
     .replace(/^Intro Computing$/, 'Intro CS')
     .replace(/^Technical Electives/, 'Tech Electives')
     .replace(/ — AE$/, ' (AE)')
-    .replace(/ — Open$/, ' (Open)');
+    .replace(/ — Open$/, ' (Open)')
+    // Kept to 10 chars so a 1x1 box's header never wraps to a 2nd line,
+    // which would make that box taller than its same-size siblings.
+    .replace(/^Programming$/, 'Coding')
+    .replace(/^Probability\/Stats$/, 'Prob/Stats')
+    .replace(/^Foundational Math and Science$/, 'Foundational Theory');
 }
 
 // One category box with an explicit (not auto-fit) grid of `cols` x `rows`
@@ -206,67 +242,211 @@ function categoryDisplayName(category) {
 // than that for an elective category with many real options (e.g. all ~20
 // Technical Electives — AE choices); the box just grows past its preset
 // instead of clipping or needing its own internal scroll.
-function aeCategoryBoxHtml(categoryKey, cols, rows, full, visibleIds, statusFilter) {
-  const { tagged, met, progressText } = categoryFulfillment('AE', categoryKey, full);
+function categoryBoxHtml(program, categoryKey, cols, rows, full, visibleIds, statusFilter, opts = {}) {
+  const { tagged, met, progressText, def } = categoryFulfillment(program, categoryKey, full);
   let shown = tagged.filter((e) => visibleIds.has(e.id));
-  if (statusFilter) shown = shown.filter((e) => statusFilter.includes(e.status));
+  shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def) : sortEntries(shown);
 
-  // A 2-col/1-row box (Orientation, Tech Electives (AE)/(Open)) should be
-  // exactly as wide as two separate 1x1 boxes side by side — but the extra
-  // width belongs AFTER the cards (left-aligned, trailing empty space),
-  // not as a wider gap between them. So the grid keeps its normal 6px
-  // gap; instead the grid's own box gets an explicit width wide enough to
-  // match (.rm-category's chrome is 18px — 8px padding + 1px border, each
-  // side — and .rm-ae-row's gap between sibling boxes is 8px, so target
-  // grid width = 2*(cardW+18)+8 - 18), and justify-content: start (set on
-  // .rm-card-grid generally) packs the actual cards to its left edge,
-  // leaving the leftover as blank trailing space instead of a gap.
-  const gridWidthStyle = cols === 2 && rows === 1
-    ? ` width:calc(2 * (var(--rm-card-w) + 18px) + 8px - 18px);`
-    : '';
+  // Every box's width is the grid's native N-column width (cols*cardW +
+  // (cols-1)*6, the shared 6px card gap) — same formula Foundational
+  // Theory's own 2-column box uses, so any 2x1 box (Orientation, Tech
+  // Electives, a minor's Core/Upper Electives, etc.) reads exactly as wide
+  // as Foundational Theory instead of a wider "N separate 1x1 boxes side
+  // by side" proportional width.
+  const nativeWidthOf = (n) => `calc(${n} * var(--rm-card-w) + ${Math.max(n - 1, 0)} * 6px)`;
+  const gridWidth = nativeWidthOf(cols);
+
+  // flex-wrap, not CSS Grid's explicit column tracks — a grid with
+  // grid-template-columns:repeat(cols,...) reserves `cols` cells on every
+  // row even when fewer cards are shown, leaving a dead gap between the
+  // last real card and the box's right border whenever the shown count
+  // isn't a clean multiple of `cols`. Flex just packs cards left-to-right
+  // and wraps, so a partial last row has no reserved empty cell. The box's
+  // overall footprint (width above, min-height here) still reserves the
+  // full `cols` x `rows` slots up front so the layout doesn't jump around
+  // as cards get marked — align-content:flex-start keeps any leftover
+  // reserved space trailing at the bottom instead of spreading between
+  // rows. `opts.center` is the one exception to that left-packed
+  // convention — Foundational Theory centers each row instead, so a
+  // partial row (e.g. one lone card) gets equal blank space on both sides
+  // rather than all of it trailing on the right.
+  const minHeight = `calc(${rows} * 72px + ${Math.max(rows - 1, 0)} * 6px)`;
+  const justify = opts.center ? 'center' : 'flex-start';
 
   return `
     <div class="rm-category${met ? ' is-met' : ''}">
       <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="grid-template-columns:repeat(${cols},var(--rm-card-w)); grid-template-rows:repeat(${rows},minmax(72px,auto));${gridWidthStyle}">${sortEntries(shown).map(cardHtml).join('')}</div>
+      <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; justify-content:${justify}; align-content:flex-start; width:${gridWidth}; min-height:${minHeight};">${shown.map(cardHtml).join('')}</div>
+    </div>
+  `;
+}
+
+// Sum of `credits` across every entry tagged to `program` (any category)
+// with status 'completed' — used by the 4 tally boxes below, not tied to
+// any single CATEGORIES entry the way a category box's progress is.
+function programCreditSum(program, full) {
+  return full
+    .filter((e) => e.status === 'completed' && e.programs.some((p) => p.program === program))
+    .reduce((sum, e) => sum + (e.credits || 0), 0);
+}
+
+function tallyBoxHtml(label, value, total) {
+  return `
+    <div class="rm-tally">
+      <div class="rm-tally-label">${escapeHtml(label)}</div>
+      <div class="rm-tally-value">${value}/${total}cr</div>
+    </div>
+  `;
+}
+
+// No single credit total is tracked for Gen Ed as a whole (it's broken
+// out into the per-minor-row requirement boxes instead) — just a
+// placeholder slot under the other 4 tallies, not a live tally.
+function placeholderTallyHtml(label) {
+  return `
+    <div class="rm-tally">
+      <div class="rm-tally-label">${escapeHtml(label)}</div>
+      <div class="rm-tally-value is-placeholder">—</div>
     </div>
   `;
 }
 
 // AE Major's own fixed layout for Track only (Possible reverts to the
-// generic flex-wrap rendering below, same as ECE/Math/CS) — Technical Core
-// on the right; on the left, Orientation/Intro CS/Propulsion stacked in a
-// column next to Foundational Math and Science (now 3x3 since Calculus I
-// merged into it), bottom-aligned with that stack via align-items:flex-end
-// on .rm-ae-subgrid, then Technical Electives (AE)/(Open) in a row below.
+// generic flex-wrap rendering below) — Technical Core on the right; on the
+// left, Orientation/Intro CS/Propulsion stacked in a column next to
+// Foundational Math and Science, bottom-aligned via align-items:stretch on
+// .rm-ae-grid, then Technical Electives (AE)/(Open) in a row below. The 4
+// tally boxes sit in the same left-pinned slot the old AERO ENG. label
+// used (see .rm-tally-stack's margin-right:auto) so nothing else in the
+// row has to move. The 3 groups (To Graduate | the 3 minors | Gen Ed) are
+// spread via justify-content:space-between (see .rm-tally-stack) so the
+// last group's bottom edge always lands on the row's bottom, same as
+// Foundational Theory's and every other column's.
 function aeMajorHtml(full, visibleIds, statusFilter) {
-  const box = (key, cols, rows) => aeCategoryBoxHtml(key, cols, rows, full, visibleIds, statusFilter);
+  const box = (key, cols, rows, opts) => categoryBoxHtml('AE', key, cols, rows, full, visibleIds, statusFilter, opts);
+
+  const tallies = [
+    tallyBoxHtml('To Graduate', programCreditSum('AE', full), PROGRAM_TOTAL_HOURS.AE),
+    tallyBoxHtml('CS Minor', programCreditSum('CS', full), PROGRAM_TOTAL_HOURS.CS),
+    tallyBoxHtml('ECE Minor', programCreditSum('ECE', full), PROGRAM_TOTAL_HOURS.ECE),
+    tallyBoxHtml('Math Minor', programCreditSum('MATH', full), PROGRAM_TOTAL_HOURS.MATH),
+    placeholderTallyHtml('Gen Ed Req.'),
+  ].join('');
 
   return `
-    <section class="card">
-      <div class="rm-ae-grid">
-        <div class="rm-ae-middle">
-          ${box('Foundational Math and Science', 2, 4)}
+    <div class="rm-ae-grid">
+      <div class="rm-tally-stack">
+        <h2 class="rm-ae-title">AE Major</h2>
+        ${tallies}
+      </div>
+      <div class="rm-ae-middle">
+        ${box('Foundational Math and Science', 2, 4, { center: true })}
+      </div>
+      <div class="rm-ae-left">
+        <div class="rm-ae-row">
+          ${box('Calculus I (choose 1)', 1, 1)}
+          ${box('Orientation', 2, 1)}
         </div>
-        <div class="rm-ae-left">
-          <div class="rm-ae-row">
-            ${box('Orientation', 2, 1)}
-            ${box('Calculus I (choose 1)', 1, 1)}
-          </div>
-          <div class="rm-ae-row">
-            ${box('Intro Computing (choose 1)', 1, 1)}
-            ${box('Technical Electives — AE', 2, 1)}
-          </div>
-          <div class="rm-ae-row">
-            ${box('Propulsion (choose 1)', 1, 1)}
-            ${box('Technical Electives — Open', 2, 1)}
-          </div>
+        <div class="rm-ae-row">
+          ${box('Intro Computing (choose 1)', 1, 1)}
+          ${box('Technical Electives — AE', 2, 1)}
         </div>
-        <div class="rm-ae-right">
-          ${box('AE Technical Core', 5, 4)}
+        <div class="rm-ae-row">
+          ${box('Propulsion (choose 1)', 1, 1)}
+          ${box('Technical Electives — Open', 2, 1)}
         </div>
       </div>
-    </section>
+      <div class="rm-ae-right">
+        ${box('AE Technical Core', 5, 4)}
+      </div>
+    </div>
+  `;
+}
+
+// One row per minor (ECE, Math, CS), Track-only like AE Major above — each
+// a single .rm-ae-row of fixed-size boxes (1x1s height-matched with any
+// wider siblings via align-items:stretch, same as AE's rows). Every minor
+// follows the same 4-box shape: Core (the minor's own required courses) →
+// 2 intermediate 1x1s → Upper Electives — so all three rows are built from
+// the same 2x1/1x1/1x1/2x1 unit sequence and land on the same total width.
+const MINOR_ROW_BOXES = {
+  ECE: [
+    { key: 'ECE Core', cols: 2, rows: 1 },
+    { key: 'Circuits (choose 1)', cols: 1, rows: 1 },
+    { key: 'Probability/Stats (choose 1)', cols: 1, rows: 1 },
+    { key: 'ECE Upper Electives (choose 2)', cols: 2, rows: 1 },
+  ],
+  MATH: [
+    { key: 'MATH Core', cols: 2, rows: 1 },
+    { key: 'Linalg', cols: 1, rows: 1 },
+    { key: 'DFQ', cols: 1, rows: 1 },
+    { key: 'MATH Upper Electives', cols: 2, rows: 1 },
+  ],
+  CS: [
+    { key: 'CS Core', cols: 2, rows: 1 },
+    { key: 'Discrete', cols: 1, rows: 1 },
+    { key: 'Data', cols: 1, rows: 1 },
+    { key: 'CS Upper Electives', cols: 2, rows: 1 },
+  ],
+};
+
+const MINOR_ROW_LABELS = { ECE: 'ECE Minor', MATH: 'MATH Minor', CS: 'CS Minor' };
+
+// Gen Ed has no fixed course list (same out-of-scope reason as FREE_NOTES
+// above), so these are plain label boxes, not real tallied categories —
+// just reserving where each requirement will eventually live (a manual
+// "+ add" button for these is planned separately). Right-aligned in each
+// minor's row via .rm-genEd-group's margin-left:auto. CS's row carries an
+// extra "Gen Ed" section-title box (bold, no progress) since it has one
+// fewer real requirement than ECE's/Math's — squashed to 88px (the exact
+// leftover: ECE/Math's total 2*108+204+2*8=436, minus F. Lang/Non-US/
+// Entrp's 3*108+3*8=348) so F. Lang still lines up under A. Rhet/Rhet and
+// all three groups land on the same width/right edge.
+const GEN_ED_GROUPS = {
+  ECE: [['A. Rhet', 1], ['WCC', 1], ['Humanities & Arts', 2]],
+  MATH: [['Rhet', 1], ['Non-W', 1], ['Social Sci', 2]],
+  CS: [['F. Lang', 1], ['Non-US', 1], ['Entrp', 1]],
+};
+
+// Matches a real category box's head markup (label + progress) — these
+// just have no card grid underneath since there's no fixed Gen Ed course
+// list to show cards for. The "Gen Ed" box is a section title, not a
+// requirement, so it skips the progress span and gets the squashed
+// leftover width instead of a normal cols-based one.
+function genEdBoxHtml(label, cols, isTitle) {
+  const width = isTitle ? 88 : (cols === 2 ? 204 : 108);
+  const progress = isTitle ? '' : `<span class="muted mono">0/${cols}</span>`;
+  return `
+    <div class="rm-category" style="width:${width}px;">
+      <div class="rm-category-head"><span class="mono${isTitle ? ' rm-genEd-title' : ''}">${escapeHtml(label)}</span>${progress}</div>
+    </div>
+  `;
+}
+
+// Plain text (no border, unlike genEdBoxHtml's boxes) — a section marker
+// for the whole Gen Ed breakdown, not a requirement itself, so it sits
+// before CS's first box rather than being one of the counted boxes.
+function genEdSectionTitleHtml() {
+  return `<div class="rm-genEd-section-title"><div>Gen</div><div>Ed</div></div>`;
+}
+
+function genEdGroupHtml(program) {
+  const boxes = GEN_ED_GROUPS[program].map(([label, cols, isTitle]) => genEdBoxHtml(label, cols, isTitle)).join('');
+  const title = program === 'CS' ? genEdSectionTitleHtml() : '';
+  return `<div class="rm-genEd-group">${title}${boxes}</div>`;
+}
+
+function minorRowHtml(program, full, visibleIds, statusFilter) {
+  const boxesHtml = MINOR_ROW_BOXES[program]
+    .map(({ key, cols, rows, opts }) => categoryBoxHtml(program, key, cols, rows, full, visibleIds, statusFilter, opts))
+    .join('');
+
+  return `
+    <div class="rm-ae-row rm-minor-row">
+      <div class="rm-row-label">${escapeHtml(MINOR_ROW_LABELS[program])}</div>
+      ${boxesHtml}
+      ${genEdGroupHtml(program)}
+    </div>
   `;
 }
 
@@ -281,20 +461,22 @@ function categoryViewHtml(full, visible, statusFilter) {
   const visibleIds = new Set(visible.map((e) => e.id));
 
   const programsHtml = PROGRAM_ORDER.map((program) => {
-    // AE's fixed box layout is Track-only (statusFilter truthy) — Possible
-    // uses the same generic flex-wrap rendering as every other program.
-    if (program === 'AE' && statusFilter) return aeMajorHtml(full, visibleIds, statusFilter);
+    // AE's fixed box layout and the minors' bespoke rows are Track-only
+    // (statusFilter truthy) — Possible uses the generic flex-wrap
+    // rendering here for every program. The Track versions are built
+    // below instead, all inside one shared card (see aeAndMinorsHtml).
+    if (statusFilter) return '';
 
     const categoriesHtml = CATEGORIES.filter((c) => c.program === program).map((cat) => {
-      const { tagged, met, progressText } = categoryFulfillment(program, cat.category, full);
+      const { tagged, met, progressText, def } = categoryFulfillment(program, cat.category, full);
       let shown = tagged.filter((e) => visibleIds.has(e.id));
-      if (statusFilter) shown = shown.filter((e) => statusFilter.includes(e.status));
+      shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def) : sortEntries(shown);
       if (!shown.length) return ''; // nothing to show — skip the whole category block
 
       return `
         <div class="rm-category${met ? ' is-met' : ''}">
           <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(cat.category))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-          <div class="rm-card-grid">${sortEntries(shown).map(cardHtml).join('')}</div>
+          <div class="rm-card-grid">${shown.map(cardHtml).join('')}</div>
         </div>
       `;
     }).join('');
@@ -317,10 +499,17 @@ function categoryViewHtml(full, visible, statusFilter) {
     `;
   }).join('');
 
-  if (statusFilter && !programsHtml) {
-    return '<section class="card"><p class="muted">Mark a course as taking or completed to see it here — this fills in as you plan out your schedule.</p></section>';
-  }
-  return programsHtml;
+  const aeAndMinorsHtml = statusFilter ? aeAndMinorsSectionHtml(full, visibleIds, statusFilter) : '';
+  return programsHtml + aeAndMinorsHtml;
+}
+
+// AE Major + the 3 minor rows, all inside one shared card instead of each
+// getting its own — ECE/Math/CS rows follow right after AE's grid, each
+// marked off with .rm-minor-row's own top margin.
+function aeAndMinorsSectionHtml(full, visibleIds, statusFilter) {
+  const ae = aeMajorHtml(full, visibleIds, statusFilter);
+  const minors = ['ECE', 'MATH', 'CS'].map((program) => minorRowHtml(program, full, visibleIds, statusFilter)).join('');
+  return `<section class="card">${ae}${minors}</section>`;
 }
 
 function headerHtml() {
