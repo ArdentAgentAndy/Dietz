@@ -39,13 +39,12 @@ export const COURSES = [
                { program: 'ECE', category: 'Programming (choose 1)' },
                { program: 'CS', category: 'Required' }] },
 
-  // --- AE: Calculus I (choose 1 of 2) ------------------------------------
+  // --- AE: Foundational Math and Science (8 required + choose 1 of 2 ----
+  // --- Calculus I options, so 9 total to complete) -----------------------
   { id: 'MATH220', subject: 'MATH', number: 220, name: 'Calculus', credits: 5,
-    programs: [{ program: 'AE', category: 'Calculus I (choose 1)' }] },
+    programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
   { id: 'MATH221', subject: 'MATH', number: 221, name: 'Calculus I', credits: 4,
-    programs: [{ program: 'AE', category: 'Calculus I (choose 1)' }] },
-
-  // --- AE: Foundational Math and Science (choose-all, 8 of 8) -----------
+    programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
   { id: 'CHEM102', subject: 'CHEM', number: 102, name: 'General Chemistry I', credits: 3,
     programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
   { id: 'CHEM103', subject: 'CHEM', number: 103, name: 'General Chemistry Lab I', credits: 1,
@@ -255,9 +254,9 @@ export const COURSES = [
 // count) sums each completed course's `credits` instead.
 export const CATEGORIES = [
   { program: 'AE', category: 'Orientation', required: 2 },
-  { program: 'AE', category: 'Calculus I (choose 1)', required: 1 },
   { program: 'AE', category: 'Intro Computing (choose 1)', required: 1 },
-  { program: 'AE', category: 'Foundational Math and Science', required: 8 },
+  // 8 always-required courses + 1 of the 2 Calculus I options = 9.
+  { program: 'AE', category: 'Foundational Math and Science', required: 9 },
   { program: 'AE', category: 'AE Technical Core', required: 19 },
   { program: 'AE', category: 'Propulsion (choose 1)', required: 1 },
   { program: 'AE', category: 'Technical Electives — AE', requiredCredits: 6 },

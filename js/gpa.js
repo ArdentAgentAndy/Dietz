@@ -1,5 +1,5 @@
 // Pure GPA math — no DOM/store access. See CLAUDE.md §6.
-import { computeGrade } from './grading.js?v=52';
+import { computeGrade } from './grading.js?v=53';
 
 export const GRADE_POINTS = {
   'A+': 4.0, 'A': 4.0, 'A-': 3.67,
