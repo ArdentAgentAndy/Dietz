@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=53';
-import { escapeHtml, hexToRgba } from '../format.js?v=53';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=53';
+import { store } from '../store.js?v=54';
+import { escapeHtml, hexToRgba } from '../format.js?v=54';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS } from '../roadmapCourses.js?v=54';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -244,25 +244,23 @@ function aeMajorHtml(full, visibleIds, statusFilter) {
 
   return `
     <section class="card">
-      <h2 class="mono">${escapeHtml(PROGRAM_LABELS.AE)}</h2>
       <div class="rm-ae-grid">
+        <div class="rm-ae-middle">
+          ${box('Foundational Math and Science', 2, 4)}
+        </div>
         <div class="rm-ae-left">
           <div class="rm-ae-row">
             ${box('Orientation', 2, 1)}
+            ${box('Calculus I (choose 1)', 1, 1)}
           </div>
           <div class="rm-ae-row">
             ${box('Intro Computing (choose 1)', 1, 1)}
-          </div>
-          <div class="rm-ae-row">
-            ${box('Propulsion (choose 1)', 1, 1)}
             ${box('Technical Electives — AE', 2, 1)}
           </div>
           <div class="rm-ae-row">
+            ${box('Propulsion (choose 1)', 1, 1)}
             ${box('Technical Electives — Open', 2, 1)}
           </div>
-        </div>
-        <div class="rm-ae-middle">
-          ${box('Foundational Math and Science', 3, 3)}
         </div>
         <div class="rm-ae-right">
           ${box('AE Technical Core', 5, 4)}
@@ -373,7 +371,10 @@ function rebuild() {
 
   const full = allEntries();
   const visible = sortEntries(full.filter((e) => (!activeSubjects.size || activeSubjects.has(e.subject)) && matchesSearch(e)));
-  const filterBar = filterBarHtml();
+  // Track has no Filter box at all — its fixed-size boxes are meant to be
+  // read as a whole dashboard, not filtered down (Semesters and Possible
+  // still get it).
+  const filterBar = view === 'track' ? '' : filterBarHtml();
 
   const bodyHtml = view === 'semesters'
     ? semestersViewHtml(visible, filterBar)
