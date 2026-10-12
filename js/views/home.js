@@ -2,6 +2,7 @@ import { store } from '../store.js?v=54';
 import { timerState, startTimer, stopTimer } from '../timer.js?v=54';
 import {
   GRAPH_SERIES,
+  GROUP_ALIASES,
   liveCategoriesByGroup,
   totalMinutesForCategory,
   totalMinutesForDay,
@@ -95,13 +96,16 @@ function archivedChipHtml(group, minutes) {
 
 // Sums minutes per group so duplicate underlying session rows for the same
 // (date, group) — e.g. left over from a sync merge — collapse into a single
-// chip instead of showing twice.
+// chip instead of showing twice. GROUP_ALIASES folds any old homework-group
+// rows into the Revision chip too, same as the graph does, rather than
+// showing a separate "Homework" chip for history predating that merge.
 function archivedDayBlockHtml(date, sessions) {
   const categories = store.table('Categories');
   const groupOf = (s) => categories.find((c) => c.id === s.categoryId)?.group;
   const minutesByGroup = new Map();
   for (const s of sessions) {
-    const group = groupOf(s);
+    const rawGroup = groupOf(s);
+    const group = GROUP_ALIASES[rawGroup] || rawGroup;
     minutesByGroup.set(group, (minutesByGroup.get(group) || 0) + s.minutes);
   }
   const chips = [...minutesByGroup.entries()]
@@ -168,7 +172,6 @@ function rebuild() {
   const todayISO = formatDateISO(new Date());
   const revisionCards = liveCategoriesByGroup('revision').map((c) => timerCardHtml(c, timer, todayISO)).join('');
   const otherCards = [
-    ...liveCategoriesByGroup('homework'),
     ...liveCategoriesByGroup('piano'),
     ...liveCategoriesByGroup('project'),
     ...liveCategoriesByGroup('research'),
@@ -199,7 +202,6 @@ function rebuild() {
       <h2 class="mono">Other</h2>
       <div class="timer-grid">${otherCards || '<p class="muted">No cards yet — add one below.</p>'}</div>
       <div class="add-row">
-        ${liveCategoriesByGroup('homework').length === 0 ? '<button data-action="add-default-category" data-group="homework">+ Add homework</button>' : ''}
         ${liveCategoriesByGroup('piano').length === 0 ? '<button data-action="add-default-category" data-group="piano">+ Add piano</button>' : ''}
         <button data-action="add-category" data-group="project">+ Add project</button>
         <button data-action="add-category" data-group="research">+ Add research</button>
@@ -314,7 +316,7 @@ function attachEvents() {
       const group = btn.dataset.group;
       store.upsert('Categories', {
         group,
-        name: group === 'homework' ? 'Homework' : 'Piano',
+        name: 'Piano',
         courseId: '',
         archived: false,
       });
@@ -482,7 +484,6 @@ function drawChart() {
 function categoryOptionsHtml(selectedId) {
   const groups = [
     ['revision', 'Revision'],
-    ['homework', 'Homework'],
     ['piano', 'Piano'],
     ['project', 'Project work'],
     ['research', 'Research'],

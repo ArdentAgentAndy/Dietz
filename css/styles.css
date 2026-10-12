@@ -1451,20 +1451,27 @@ details summary {
   gap: 6px;
 }
 
-/* One semester per row (was one per column) — align-items:flex-start so
-   each row's box only takes the width its own (fixed, 8-card-max) content
-   needs instead of stretching to fill the section. */
 .rm-semesters-grid {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 8px;
 }
 
-.rm-semester-row {
+.rm-semester-col {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 140px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* Summer/Winter and Transfer Credit — full-width rows below the 8
+   columns, open-ended (auto-fill wrap) rather than column-shaped, same
+   drag-drop [data-semester] zone mechanism as the columns above. */
+.rm-semester-fullrow {
+  margin-top: 8px;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1671,6 +1678,11 @@ details summary {
   border-radius: var(--radius-sm);
 }
 
+.rm-tally.is-met {
+  border-color: var(--green);
+  background: rgba(91, 200, 122, 0.08);
+}
+
 .rm-tally-label {
   font-size: 9px;
   color: var(--muted);
@@ -1695,11 +1707,8 @@ details summary {
 }
 
 @media (max-width: 900px) {
-  /* Each row's fixed 8-card width (762px) can exceed a phone viewport —
-     let the row itself scroll horizontally rather than shrinking cards or
-     wrapping early. */
-  .rm-semester-row {
-    max-width: 100%;
+  .rm-semesters-grid {
+    grid-template-columns: repeat(8, minmax(110px, 1fr));
     overflow-x: auto;
   }
 }

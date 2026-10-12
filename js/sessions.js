@@ -2,13 +2,21 @@ import { store } from './store.js?v=54';
 import { formatDateISO } from './format.js?v=54';
 
 // goalHours: daily target shown as a dashed reference line on the hours graph.
+// No dedicated Homework series — homework is logged against whichever
+// course's own Revision timer you're doing it for, same bucket as any
+// other revision work (see minutesByGroupForDates below for how past
+// homework-group minutes fold into this line too, retroactively).
 export const GRAPH_SERIES = [
   { key: 'revision', label: 'Revision', group: 'revision', color: '#3fb87f', goalHours: 6 },
-  { key: 'homework', label: 'Homework', group: 'homework', color: '#e8c547', goalHours: null },
   { key: 'project', label: 'Project work', group: 'project', color: '#3987e5', goalHours: 2 },
   { key: 'research', label: 'Research', group: 'research', color: '#9b59b6', goalHours: 4 },
   { key: 'piano', label: 'Piano', group: 'piano', color: '#ffffff', goalHours: 1 },
 ];
+
+// 'homework' no longer has its own card/series (see home.js) but old
+// sessions/compacted rows still carry that group — fold their minutes
+// into Revision's line instead of dropping them from the graph.
+export const GROUP_ALIASES = { homework: 'revision' };
 
 // Non-archived categories eligible for a timer card, in a given group.
 // Revision categories only show while their course is still active.
@@ -102,7 +110,7 @@ export function datesForRange(range) {
   return listDatesBetween(start, today);
 }
 
-// { date -> { revision: minutes, homework: minutes, ... } }
+// { date -> { revision: minutes, project: minutes, ... } }
 export function minutesByGroupForDates(dates) {
   const categories = store.table('Categories');
   const groupOf = new Map(categories.map((c) => [c.id, c.group]));
@@ -115,7 +123,8 @@ export function minutesByGroupForDates(dates) {
 
   for (const session of store.table('Sessions')) {
     if (!dateSet.has(session.date)) continue;
-    const group = groupOf.get(session.categoryId);
+    const rawGroup = groupOf.get(session.categoryId);
+    const group = GROUP_ALIASES[rawGroup] || rawGroup;
     const series = GRAPH_SERIES.find((s) => s.group === group);
     if (series) totals[session.date][series.key] += session.minutes;
   }

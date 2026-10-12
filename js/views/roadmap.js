@@ -8,6 +8,16 @@ const SEMESTERS = [
   { id: 'Y3F', label: 'Y3 Fall' }, { id: 'Y3S', label: 'Y3 Spring' },
   { id: 'Y4F', label: 'Y4 Fall' }, { id: 'Y4S', label: 'Y4 Spring' },
 ];
+// Two extra full-width rows below the 8 regular columns — Summer/Winter
+// (off-cycle terms with no column of their own) and Transfer Credit
+// (anything, catalog or custom-added, satisfied before enrolling here).
+// Both are just another semester value a card can be dragged to/from,
+// same [data-semester] drop-zone mechanism as the 8 columns — they just
+// render as a single open-ended row instead of a column.
+const EXTRA_ROWS = [
+  { id: 'SW', label: 'Summer/Winter' },
+  { id: 'TRANSFER', label: 'Transfer Credit' },
+];
 const PROGRAM_ORDER = ['AE', 'ECE', 'MATH', 'CS'];
 
 let container = null;
@@ -131,33 +141,39 @@ function assignSemester(id, semester) {
 function semestersViewHtml(entries, filterBar) {
   const bySemester = {};
   SEMESTERS.forEach((s) => (bySemester[s.id] = []));
+  EXTRA_ROWS.forEach((s) => (bySemester[s.id] = []));
   const unassigned = [];
   entries.forEach((e) => {
     if (e.semester && bySemester[e.semester]) bySemester[e.semester].push(e);
     else unassigned.push(e);
   });
 
-  // One row per semester instead of one column — each capped at a fixed
-  // 8-card-wide box (same "N * cardW + (N-1) * 6px" native-width formula
-  // Track's own fixed-size boxes use, see categoryBoxHtml) so the row
-  // never stretches to the page's full width no matter how narrow its
-  // content. A 9th+ card wraps to a second line within the box (height
-  // grows), same overflow behavior every other box on this page already
-  // has — it just never grows wider than 8 slots.
-  const rows = SEMESTERS.map((s) => {
+  const columns = SEMESTERS.map((s) => {
     const list = sortEntries(bySemester[s.id]);
     const credits = list.reduce((sum, e) => sum + (e.credits || 0), 0);
     return `
-      <div class="rm-semester-row" data-semester="${s.id}">
+      <div class="rm-semester-col" data-semester="${s.id}">
         <div class="rm-semester-head"><span class="mono">${s.label}</span><span class="muted mono">${credits}cr</span></div>
-        <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; width:calc(8 * var(--rm-card-w) + 7 * 6px); min-height:72px;">${list.map(cardHtml).join('')}</div>
+        <div class="rm-card-grid">${list.map(cardHtml).join('')}</div>
+      </div>
+    `;
+  }).join('');
+
+  const extraRows = EXTRA_ROWS.map((s) => {
+    const list = sortEntries(bySemester[s.id]);
+    const credits = list.reduce((sum, e) => sum + (e.credits || 0), 0);
+    return `
+      <div class="rm-semester-fullrow" data-semester="${s.id}">
+        <div class="rm-semester-head"><span class="mono">${s.label}</span><span class="muted mono">${credits}cr</span></div>
+        <div class="rm-card-grid">${list.map(cardHtml).join('')}</div>
       </div>
     `;
   }).join('');
 
   return `
     <section class="card">
-      <div class="rm-semesters-grid">${rows}</div>
+      <div class="rm-semesters-grid">${columns}</div>
+      ${extraRows}
     </section>
     ${filterBar}
     <section class="card rm-pool" data-semester="">
@@ -290,6 +306,35 @@ function programCreditSum(program, full) {
     .reduce((sum, e) => sum + (e.credits || 0), 0);
 }
 
+// Grainger Undergraduate Academic Advising rule: a minor needs ≥6 credit
+// hours of 300-/400-level coursework genuinely distinct from the major
+// (and any other minor) — not the same course double-counted toward both.
+// Conservative heuristic (no dedicated UI yet to override it per course):
+// a completed course only counts here if it's tagged to exactly this one
+// program — anything shared with AE or another minor (e.g. ECE205,
+// counted toward both AE and ECE elsewhere on this page) never counts
+// toward this, even though it freely double-counts for the plain
+// credit-hour tallies above.
+function distinctUpperCredits(program, full) {
+  return full
+    .filter((e) => e.status === 'completed' && e.number >= 300
+      && e.programs.length === 1 && e.programs[0].program === program)
+    .reduce((sum, e) => sum + (e.credits || 0), 0);
+}
+
+// One combined check for all 3 minors (not repeated per minor row) — sits
+// in AE's own tally stack since AE is first in the AE→ECE→MATH→CS
+// sequence.
+function grainger6hrTallyHtml(full) {
+  const metPrograms = ['ECE', 'MATH', 'CS'].filter((p) => distinctUpperCredits(p, full) >= 6);
+  return `
+    <div class="rm-tally${metPrograms.length === 3 ? ' is-met' : ''}">
+      <div class="rm-tally-label">300+/Distinct</div>
+      <div class="rm-tally-value">${metPrograms.length}/3 Met</div>
+    </div>
+  `;
+}
+
 function tallyBoxHtml(label, value, total) {
   return `
     <div class="rm-tally">
@@ -331,6 +376,7 @@ function aeMajorHtml(full, visibleIds, statusFilter) {
     tallyBoxHtml('ECE Minor', programCreditSum('ECE', full), PROGRAM_TOTAL_HOURS.ECE),
     tallyBoxHtml('Math Minor', programCreditSum('MATH', full), PROGRAM_TOTAL_HOURS.MATH),
     placeholderTallyHtml('Gen Ed Req.'),
+    grainger6hrTallyHtml(full),
   ].join('');
 
   return `

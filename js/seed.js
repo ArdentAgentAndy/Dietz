@@ -113,30 +113,6 @@ export const courseConfigs = {
     extraCredit: { max: 2, label: 'Spurlock/Krannert/play assignment', stateKey: 'extraCreditPoints' },
   },
 
-  afst112: {
-    type: 'points',
-    rounding: 'none',
-    totalPossible: 100,
-    cutoffs: STANDARD_CUTOFFS,
-    components: [
-      { id: 'participation', name: 'Class participation', possible: 10 },
-      { id: 'guidedResponse1', name: 'Guided response 1 (Things Fall Apart)', possible: 5 },
-      { id: 'guidedResponse2', name: "Guided response 2 (God's Bits of Wood)", possible: 5 },
-      { id: 'monitorAfricaLab', name: 'Monitor Africa Lab (group)', possible: 10 },
-      { id: 'mt1', name: 'Midterm 1', possible: 20 },
-      { id: 'mt2', name: 'Midterm 2', possible: 20 },
-      { id: 'final', name: 'Final exam', possible: 30 },
-    ],
-    penalty: {
-      label: 'Unexcused absences beyond 3', amountPerUnit: 0.5, freeUnits: 3, counter: true,
-      stateKey: 'unexcusedAbsences',
-    },
-    extraCredit: {
-      amountPerUnit: 1, counter: true, label: 'Extra-credit entries',
-      stateKey: 'extraCreditEntries',
-    },
-  },
-
   te200: {
     type: 'points',
     rounding: 'half-up',
@@ -167,8 +143,7 @@ const courses = [
   { id: 'ae100', code: 'AE 100', name: 'Intro to Aerospace Engineering', credits: 2, sortOrder: 3 },
   { id: 'eng100', code: 'ENG 100', name: 'Engineering Orientation', credits: 1, sortOrder: 4 },
   { id: 'clcv115', code: 'CLCV 115', name: 'Mythology of Greece and Rome', credits: 3, sortOrder: 5 },
-  { id: 'afst112', code: 'AFST 112', name: 'History of Africa from 1800', credits: 3, sortOrder: 6 },
-  { id: 'te200', code: 'TE 200', name: 'Introduction to Innovation', credits: 1, sortOrder: 7 },
+  { id: 'te200', code: 'TE 200', name: 'Introduction to Innovation', credits: 1, sortOrder: 6 },
 ].map((c) => ({
   ...c,
   term: TERM,
