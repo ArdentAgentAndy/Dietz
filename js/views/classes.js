@@ -1,6 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=54';
-import { hexForNotionColor } from '../notionColors.js?v=54';
-import { escapeHtml, hexToRgba } from '../format.js?v=54';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=55';
+import { hexForNotionColor } from '../notionColors.js?v=55';
+import { escapeHtml, hexToRgba } from '../format.js?v=55';
+import { store } from '../store.js?v=55';
 
 let container = null;
 
@@ -67,8 +68,20 @@ function classRowHtml(task) {
   `;
 }
 
+// Notion's Course field is a free-text select with no link back to Dietz's
+// Courses table, so an archived course only drops off this page if its code
+// (case/whitespace-insensitively) matches what was typed into Notion.
+function archivedCourseCodes() {
+  return new Set(
+    store.table('Courses')
+      .filter((c) => c.status === 'archived')
+      .map((c) => c.code.trim().toLowerCase())
+  );
+}
+
 function renderLessons(tasks) {
-  const lessons = tasks.filter((t) => t.category === 'Lesson');
+  const archived = archivedCourseCodes();
+  const lessons = tasks.filter((t) => t.category === 'Lesson' && !archived.has((t.course || '').trim().toLowerCase()));
 
   const WEEKDAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const byDay = {};
