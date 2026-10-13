@@ -1,10 +1,10 @@
-import './store.js?v=56';
-import { initRouter } from './router.js?v=56';
-import { initSync } from './sync.js?v=56';
-import { compactOldSessions } from './compaction.js?v=56';
-import { migrateCourseConfigs } from './migrations.js?v=56';
-import { initPush } from './push.js?v=56';
-import { initNav } from './nav.js?v=56';
+import './store.js?v=57';
+import { initRouter } from './router.js?v=57';
+import { initSync } from './sync.js?v=57';
+import { compactOldSessions } from './compaction.js?v=57';
+import { migrateCourseConfigs } from './migrations.js?v=57';
+import { initPush } from './push.js?v=57';
+import { initNav } from './nav.js?v=57';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project
@@ -16,6 +16,6 @@ if ('serviceWorker' in navigator) {
 migrateCourseConfigs();
 compactOldSessions();
 initPush();
-initNav(document.getElementById('top-nav'));
+initNav(document.getElementById('top-nav'), document.getElementById('top-nav-menu'));
 initRouter();
 initSync(document.getElementById('sync-status'), document.getElementById('sync-btn'));

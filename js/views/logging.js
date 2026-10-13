@@ -1,5 +1,5 @@
-import { store } from '../store.js?v=56';
-import { timerState, startTimer, stopTimer } from '../timer.js?v=56';
+import { store } from '../store.js?v=57';
+import { timerState, startTimer, stopTimer } from '../timer.js?v=57';
 import {
   GRAPH_SERIES,
   GROUP_ALIASES,
@@ -10,7 +10,7 @@ import {
   compactedSessions,
   datesForRange,
   minutesByGroupForDates,
-} from '../sessions.js?v=56';
+} from '../sessions.js?v=57';
 import {
   formatDateISO,
   formatDisplayDate,
@@ -20,8 +20,8 @@ import {
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
-} from '../format.js?v=56';
-import { archiveCourseById, deleteCourseById } from './courses.js?v=56';
+} from '../format.js?v=57';
+import { archiveCourseById, deleteCourseById } from './courses.js?v=57';
 
 let container = null;
 let tickIntervalId = null;
@@ -346,11 +346,10 @@ function updateLiveDisplays() {
   });
 }
 
-function drawChart() {
-  const canvas = container.querySelector('#hours-chart');
-  if (!canvas || typeof Chart === 'undefined') return;
-  if (chart) chart.destroy();
-
+// Exported for the Home dashboard's read-only mirror of this chart — pure
+// function of `range`, no DOM/module-state access, so it's safe to call
+// from anywhere; the caller owns its own Chart instance/canvas/lifecycle.
+export function hoursChartConfig(range) {
   const dates = datesForRange(range);
   const totals = minutesByGroupForDates(dates);
   const labels = dates.map(formatShortDate);
@@ -381,7 +380,7 @@ function drawChart() {
     isGoalLine: true,
   }));
 
-  chart = new Chart(canvas.getContext('2d'), {
+  return {
     type: 'line',
     data: {
       labels,
@@ -426,7 +425,14 @@ function drawChart() {
         },
       },
     },
-  });
+  };
+}
+
+function drawChart() {
+  const canvas = container.querySelector('#hours-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (chart) chart.destroy();
+  chart = new Chart(canvas.getContext('2d'), hoursChartConfig(range));
 }
 
 function categoryOptionsHtml(selectedId) {

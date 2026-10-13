@@ -1,18 +1,23 @@
-import { MENU, CHANNELS } from './channels.js?v=56';
+import { MENU, CHANNELS } from './channels.js?v=57';
 
-// Row 1 ("channels") is Menu + CHANNELS, one continuous strip:
-// ArrowLeft/ArrowRight always move across this strip. highlightIndex 0 is
-// Menu; index i+1 is CHANNELS[i]. Landing on a channel only highlights it
-// and reveals its dropdown — channels carry no content of their own, so
+// Menu is rendered separately from the channels row (see #top-nav-menu in
+// index.html, to the right of the Settings gear) and isn't part of the
+// arrow-key-cyclable strip at all — it's always reachable (click, or [M]
+// from anywhere), but while it's actually open (activePath === MENU.route)
+// the channels row itself renders empty and ArrowLeft/Right/Up/Down/Enter
+// are no-ops: channels are only reachable from the Menu page's own octagon
+// constellation while Menu is open, never from this row. highlightIndex is
+// a plain index into CHANNELS. Landing on a channel only highlights it and
+// reveals its dropdown — channels carry no content of their own, so
 // ArrowUp/ArrowDown (move within row 2) or a click is what actually
-// navigates to one of its subchannels. Menu is different: it's a page in
-// its own right, not a placeholder, so arrowing onto it navigates straight
-// there (see moveChannel) — same as the explicit [M] shortcut (goToMenu).
-// The dropdown auto-closes after a few seconds of inactivity, or
-// immediately on a click outside it.
+// navigates to one of its subchannels — except a channel that itself
+// carries a `route` (Records/Public, see channels.js), which navigates
+// immediately instead, same as Menu does. The dropdown auto-closes after a
+// few seconds of inactivity, or immediately on a click outside it.
 const DROPDOWN_TIMEOUT_MS = 4000;
 
 let mount = null;
+let menuMount = null;
 let highlightIndex = 0;
 let activePath = '/';
 let dropdownOpen = false;
@@ -22,8 +27,12 @@ let dismissTimerId = null;
 // subchannel on that first press instead of wrapping past it.
 const subHighlightByChannelId = new Map();
 
+function onMenuPage() {
+  return activePath === MENU.route;
+}
+
 function currentChannel() {
-  return highlightIndex === 0 ? null : CHANNELS[highlightIndex - 1];
+  return CHANNELS[highlightIndex];
 }
 
 function isTypingTarget() {
@@ -43,7 +52,7 @@ function scheduleAutoDismiss() {
   dismissTimerId = setTimeout(closeDropdown, DROPDOWN_TIMEOUT_MS);
 }
 
-// No-op (and no re-render) for a channel with nothing to show — Menu, or a
+// No-op (and no re-render) for a channel with nothing to show — a
 // not-yet-populated channel like Practice/Placeholder — so a popup never
 // flashes open just to display an empty dash.
 function openDropdown() {
@@ -63,13 +72,14 @@ function closeDropdown() {
 }
 
 function moveChannel(delta) {
-  const n = CHANNELS.length + 1; // + Menu
+  const n = CHANNELS.length;
   highlightIndex = ((highlightIndex + delta) % n + n) % n;
-  // Menu isn't a channel — it has no subchannel dropdown to reveal, it's a
-  // page in its own right, so arrowing onto it navigates immediately
+  // A channel that carries its own route (Records/Public — the exception
+  // to "channels have no content", see channels.js) navigates immediately
   // instead of leaving the highlighter sitting there showing nothing.
-  if (highlightIndex === 0) {
-    goToMenu();
+  const ch = currentChannel();
+  if (ch?.route) {
+    goToPage(ch);
     return;
   }
   openDropdown();
@@ -91,21 +101,30 @@ function moveSub(delta) {
   location.hash = '#' + ch.subchannels[next].route;
 }
 
-function goToMenu() {
+// Takes any {route} object — Menu, or a channel that carries its own route
+// (Records/Public).
+function goToPage(page) {
   closeDropdown();
-  location.hash = '#' + MENU.route;
+  location.hash = '#' + page.route;
 }
 
 function onKeyDown(e) {
   if (e.key === 'm' || e.key === 'M') {
     if (isBlocked(e)) return;
     e.preventDefault();
-    goToMenu();
+    goToPage(MENU);
     return;
   }
 
-  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) return;
+  const digit = Number(e.key);
+  const isDigit = e.key.length === 1 && Number.isInteger(digit) && digit >= 1 && digit <= 9;
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(e.key) && !isDigit) return;
   if (isBlocked(e)) return;
+  // Channels aren't shown (or reachable from here) while Menu is open —
+  // see onMenuPage(). Left as a no-op (not even preventDefault) so menu.js's
+  // own handling for the octagon constellation (including its own digit
+  // keys) gets the keypress untouched.
+  if (onMenuPage()) return;
   e.preventDefault();
 
   if (e.key === 'ArrowLeft') moveChannel(-1);
@@ -113,8 +132,11 @@ function onKeyDown(e) {
   else if (e.key === 'ArrowUp') moveSub(-1);
   else if (e.key === 'ArrowDown') moveSub(1);
   else if (e.key === 'Enter') {
-    if (highlightIndex === 0) goToMenu();
-    else confirmSub();
+    const ch = currentChannel();
+    if (ch?.route) { goToPage(ch); return; }
+    confirmSub();
+  } else if (isDigit) {
+    selectByNumber(digit);
   }
 }
 
@@ -130,11 +152,26 @@ function confirmSub() {
   location.hash = '#' + ch.subchannels[idx].route;
 }
 
-// Clicking the Menu link navigates (see the data-menu branch below).
-// Clicking a channel button only moves the highlighter and opens its
-// dropdown — it never navigates, since channels carry no content. Clicking
-// a subchannel inside the dropdown closes it (its own href handles the
-// actual navigation).
+// Same number-key convention as the Menu page's octagon constellation
+// (js/views/menu.js) — 1, 2, 3... in list order, only ever picking among
+// the currently highlighted channel's subchannels (ArrowLeft/Right is the
+// only way to move between channels themselves). Navigates immediately,
+// same as ArrowUp/ArrowDown — no Enter needed here, unlike the Menu page.
+function selectByNumber(n) {
+  const ch = currentChannel();
+  if (!ch || n > ch.subchannels.length) return;
+  const idx = n - 1;
+  subHighlightByChannelId.set(ch.id, idx);
+  openDropdown();
+  location.hash = '#' + ch.subchannels[idx].route;
+}
+
+// Clicking a channel button moves the highlighter and opens its dropdown —
+// unless the channel carries its own route (Records/Public), in which case
+// it navigates immediately instead. Clicking a subchannel inside the
+// dropdown closes it (its own href handles the actual navigation). Menu's
+// own click handling lives in onMenuClick below — it's a separate DOM
+// subtree now, not part of this row.
 function onClick(e) {
   // Stops here so onDocumentClick never sees this event — necessary, not
   // just tidy: a channel click calls render() synchronously below, which
@@ -144,25 +181,14 @@ function onClick(e) {
   // the openDropdown() this same click just triggered.
   e.stopPropagation();
 
-  // Driven explicitly, same as every other nav item, rather than left to
-  // the browser's native anchor-click default action — the Menu link is the
-  // only nav item that still had content inside #top-nav's own DOM subtree
-  // rely on that default action, and it proved unreliable once this click
-  // handler started doing synchronous DOM work (render()) on ancestors of
-  // the clicked element during the same click.
-  if (e.target.closest('[data-menu]')) {
-    e.preventDefault();
-    goToMenu();
-    return;
-  }
-
   const channelBtn = e.target.closest('[data-channel]');
   if (channelBtn) {
     const idx = CHANNELS.findIndex((c) => c.id === channelBtn.dataset.channel);
     if (idx !== -1) {
-      highlightIndex = idx + 1;
-      openDropdown();
-      render();
+      highlightIndex = idx;
+      const ch = CHANNELS[idx];
+      if (ch.route) goToPage(ch);
+      else { openDropdown(); render(); }
     }
     return;
   }
@@ -173,6 +199,14 @@ function onClick(e) {
   }
 }
 
+// Driven explicitly, same reliability reasoning as every other nav item —
+// relying on the native anchor-click default action proved fragile once
+// click handlers elsewhere started doing synchronous DOM work.
+function onMenuClick(e) {
+  e.preventDefault();
+  goToPage(MENU);
+}
+
 function onDocumentClick(e) {
   if (!dropdownOpen) return;
   if (mount?.contains(e.target)) return;
@@ -180,10 +214,9 @@ function onDocumentClick(e) {
 }
 
 function channelRowHtml() {
-  const menuClasses = ['nav-channel', highlightIndex === 0 ? 'is-current' : '', activePath === MENU.route ? 'active' : ''].filter(Boolean).join(' ');
   const channelsHtml = CHANNELS.map((c, i) => {
-    const isHighlighted = highlightIndex === i + 1;
-    const classes = ['nav-channel', isHighlighted ? 'is-current' : ''].filter(Boolean).join(' ');
+    const isHighlighted = highlightIndex === i;
+    const classes = ['nav-channel', isHighlighted ? 'is-current' : '', c.route && activePath === c.route ? 'active' : ''].filter(Boolean).join(' ');
     const dropdown = isHighlighted && dropdownOpen ? dropdownHtml(c) : '';
     return `
       <div class="nav-channel-wrap">
@@ -192,12 +225,7 @@ function channelRowHtml() {
       </div>
     `;
   }).join('');
-  return `
-    <div class="nav-channels">
-      <a href="#${MENU.route}" data-menu class="${menuClasses}">${MENU.label}</a>
-      ${channelsHtml}
-    </div>
-  `;
+  return `<div class="nav-channels">${channelsHtml}</div>`;
 }
 
 function dropdownHtml(channel) {
@@ -211,12 +239,22 @@ function dropdownHtml(channel) {
 
 function render() {
   if (!mount) return;
-  mount.innerHTML = channelRowHtml();
+  // Empty while Menu is open — channels are only reachable from the Menu
+  // page's own octagon constellation then, not from this row.
+  mount.innerHTML = onMenuPage() ? '' : channelRowHtml();
 }
 
-export function initNav(mountEl) {
+function renderMenuLink() {
+  if (!menuMount) return;
+  const classes = ['nav-channel', onMenuPage() ? 'active' : ''].filter(Boolean).join(' ');
+  menuMount.innerHTML = `<a href="#${MENU.route}" class="${classes}">${MENU.label}</a>`;
+}
+
+export function initNav(mountEl, menuMountEl) {
   mount = mountEl;
+  menuMount = menuMountEl;
   mount.addEventListener('click', onClick);
+  menuMount.addEventListener('click', onMenuClick);
   // Capture phase, not bubble — a few page elements elsewhere (e.g. a
   // card's manage-pencil button) call stopPropagation() on their own click,
   // which would otherwise stop this from ever seeing those clicks. Capture
@@ -224,29 +262,31 @@ export function initNav(mountEl) {
   document.addEventListener('click', onDocumentClick, true);
   window.addEventListener('keydown', onKeyDown);
   render();
+  renderMenuLink();
 }
 
 // Called by the router after every navigation so the nav's highlighted
 // channel/subchannel always reflects whatever page is actually on screen —
-// a route not owned by any channel (e.g. a course detail page, or Settings'
-// gear icon) leaves the highlight wherever it already was. Doesn't touch
-// dropdownOpen — a route change from outside the nav itself (a link on the
-// page, a direct URL) shouldn't pop a dropdown open on its own.
+// a route not owned by any channel (e.g. a course detail page, or
+// Settings' gear icon) leaves the highlight wherever it already was.
+// Doesn't touch dropdownOpen — a route change from outside the nav itself
+// (a link on the page, a direct URL) shouldn't pop a dropdown open on its
+// own.
 export function syncActiveRoute(path) {
   activePath = '/' + (path.split('/')[1] || '');
+  renderMenuLink();
 
-  if (activePath === MENU.route) {
-    highlightIndex = 0;
+  if (onMenuPage()) {
     render();
     return;
   }
 
-  const channelIndex = CHANNELS.findIndex((c) => c.subchannels.some((s) => s.route === activePath));
+  const channelIndex = CHANNELS.findIndex((c) => c.route === activePath || c.subchannels.some((s) => s.route === activePath));
   if (channelIndex !== -1) {
-    highlightIndex = channelIndex + 1;
+    highlightIndex = channelIndex;
     const ch = CHANNELS[channelIndex];
     const subIndex = ch.subchannels.findIndex((s) => s.route === activePath);
-    subHighlightByChannelId.set(ch.id, subIndex);
+    if (subIndex !== -1) subHighlightByChannelId.set(ch.id, subIndex);
   }
 
   render();

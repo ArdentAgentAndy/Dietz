@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=56';
-import { escapeHtml, hexToRgba } from '../format.js?v=56';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=56';
+import { store } from '../store.js?v=57';
+import { escapeHtml, hexToRgba } from '../format.js?v=57';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=57';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -556,6 +556,16 @@ function aeAndMinorsSectionHtml(full, visibleIds, statusFilter) {
   const ae = aeMajorHtml(full, visibleIds, statusFilter);
   const minors = ['ECE', 'MATH', 'CS'].map((program) => minorRowHtml(program, full, visibleIds, statusFilter)).join('');
   return `<section class="card">${ae}${minors}</section>`;
+}
+
+// Exported for the Home dashboard's read-only mirror of the Track view —
+// pure function of store state (via allEntries()/categoryViewHtml, neither
+// of which reads this module's UI state like view/markMode/searchQuery), so
+// it's safe to call from anywhere. Unfiltered (no subject/search filter)
+// since the mirror has no filter UI of its own to apply one with.
+export function trackViewHtml() {
+  const full = allEntries();
+  return categoryViewHtml(full, full, ['taking', 'completed']);
 }
 
 function headerHtml() {

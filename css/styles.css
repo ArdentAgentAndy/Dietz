@@ -10,6 +10,8 @@
   --accent-dim: rgba(195, 222, 232, 0.12);
   --red: #ff6b6b;
   --green: #5bc87a;
+  --yellow: #e8c547;
+  --orange: #e0a458;
   --radius: 12px;
   --radius-sm: 8px;
   --rm-card-w: 90px;
@@ -275,42 +277,264 @@ a {
   margin-top: 16px;
 }
 
-/* --- Menu hub (#/) ------------------------------------------------------ */
+/* --- Menu hub (#/) ------------------------------------------------------- */
 
-.menu-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+/* Fills exactly the viewport height left under the sticky topnav (see
+   --topnav-h, set from js/views/menu.js since that height isn't a fixed
+   constant) and clips anything that would otherwise make the page
+   scrollable — this page is meant to never scroll. body.menu-no-scroll
+   (below) belts-and-suspenders that at the document level too. */
+#app.app-no-scroll {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: calc(100vh - var(--topnav-h, 64px));
+  overflow: hidden;
 }
 
-.menu-card {
+body.menu-no-scroll {
+  overflow: hidden;
+}
+
+.menu-stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Fixed stage the octagon, its 8 spokes, and the 8 channel circles are all
+   absolutely positioned within — --octagon-r/--line-len/--circle-r/
+   --circle-dist are the one set of measurements everything below is built
+   from, so the whole layout only needs changing in one place. */
+.menu-constellation {
+  position: relative;
+  width: 640px;
+  height: 640px;
+  --octagon-r: 80px;
+  --line-len: 120px;
+  --circle-r: 50px;
+  --circle-dist: calc(var(--octagon-r) + var(--line-len) + var(--circle-r));
+  --sub-pill-width: 130px;
+  --sub-pill-height: 34px;
+}
+
+/* One spoke per channel, radiating from the octagon's center — positioned
+   at the stage center then rotated by --angle (0 = up, clockwise) and
+   pushed out by --octagon-r first so it starts right at the octagon's edge,
+   same way every "line"/"circle" position below is built: rotate first,
+   translate second, so the translate happens along the now-rotated axis. */
+.menu-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: var(--line-len);
+  margin-left: -1px;
+  background: var(--border-strong);
+  transform-origin: top center;
+  transform: rotate(var(--angle)) translateY(var(--octagon-r));
+}
+
+/* A plain `border` on a clip-path'd element only draws along the box's
+   rectangular edges — it gets clipped away entirely on the diagonal
+   corners, so the "border" would only show top/bottom/left/right, not
+   wrap the octagon. Two nested octagons instead: the outer one *is* the
+   border color, the inner one is inset by the border thickness (via
+   padding) and clipped to the same shape, so a ring of the outer color
+   shows all the way around, following every edge including the diagonals. */
+.menu-octagon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 160px;
+  height: 160px;
+  margin: -80px 0 0 -80px;
+  padding: 3px;
+  display: flex;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+  background: var(--border-strong);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.menu-octagon:hover {
+  /* A translucent tint, not the solid opaque --accent — reads as a
+     highlight on the ring, same idea as every other hover/active state in
+     this app (e.g. button.active's border + --accent-dim fill). */
+  background: rgba(195, 222, 232, 0.55);
+}
+
+.menu-octagon-inner {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
   background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px;
+  color: var(--text);
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
-.menu-card h2 {
-  font-size: 13px;
+.menu-octagon:hover .menu-octagon-inner {
+  /* Fill stays the normal dark surface — only the ring (above) and the
+     text pick up the highlight, so the ring actually reads as a ring
+     against a still-dark center instead of the whole shape going one flat
+     blue blob. */
+  color: var(--accent);
+}
+
+.menu-octagon-label {
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Positions a channel circle's center at --circle-dist out along --angle,
+   with no net rotation on the wrap itself — rotate(angle) then
+   translateY(dist) moves it out along that angle same as .menu-line above,
+   and the trailing rotate(-angle) cancels the rotation back out so the
+   label inside reads upright instead of sideways/upside-down depending on
+   which of the 8 directions it's in. */
+.menu-channel-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--angle)) translateY(var(--circle-dist)) rotate(calc(-1 * var(--angle)));
+}
+
+/* A real circle (border-radius, not clip-path) needs none of the
+   two-layer-ring trick the octagon above does — a plain border already
+   wraps a circle continuously with no corners to clip it away at. */
+.menu-channel-circle {
+  width: calc(var(--circle-r) * 2);
+  height: calc(var(--circle-r) * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+  padding: 8px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.menu-channel-circle:hover,
+.menu-channel-wrap.is-selected .menu-channel-circle {
+  border-color: rgba(195, 222, 232, 0.55);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.menu-channel-label {
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted);
+  line-height: 1.3;
 }
 
-.menu-sub-links {
+/* A subchannel's line + pill branch off the already-centered channel circle
+   (see .menu-channel-wrap) — both positioned top:50%/left:50% relative to
+   that wrap, i.e. anchored at the circle's own center, same pivot-point
+   convention as .menu-line/.menu-channel-wrap use off the octagon, just one
+   level further out. Hidden by default (see the .is-selected/:hover rule
+   further down) — a channel's branches only show once it's actually
+   highlighted or moused over, so the ring isn't cluttered with every
+   channel's subchannels at once.
+   Unlike .menu-line/.menu-channel-wrap, this doesn't share an angle with
+   the thing it connects to: the pill (.menu-subchannel below) sits at its
+   own fan angle (--sub-angle), but the line always runs straight to
+   whichever end of the pill faces the circle — its leftmost or rightmost
+   point (the midpoint of that end's rounded cap), not wherever the fan
+   angle's own ray happens to land. --sub-line-angle/--sub-line-dist are
+   that separately-computed angle and length (js/views/menu.js's
+   subchannelLine), set inline per subchannel. */
+.menu-sub-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: var(--sub-line-dist);
+  margin-left: -1px;
+  background: var(--border-strong);
+  transform-origin: top center;
+  transform: rotate(var(--sub-line-angle)) translateY(var(--circle-r));
+}
+
+/* No net rotation (rotate/translateY/counter-rotate, same trick as
+   .menu-channel-wrap) — centers the pill at --sub-dist out along
+   --sub-angle (set inline per subchannel, js/views/menu.js's subDist —
+   diagonal channels sit closer in than cardinal ones), with the pill itself
+   (below) always staying flat/horizontal, never rotated to face its own
+   line (see .menu-sub-line above for how the line connects to it instead). */
+.menu-subchannel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--sub-angle)) translateY(var(--sub-dist)) rotate(calc(-1 * var(--sub-angle)));
+}
+
+/* Same shape as the sub-value badges on the Today page (.cal-chip-sub-badge
+   in css/styles.css) — a short, wide, fully-rounded pill — just bigger and
+   with its own fixed size here (every subchannel pill is identical
+   regardless of channel or position, unlike that badge which sizes to its
+   text). */
+.menu-sub-pill {
+  width: var(--sub-pill-width);
+  height: var(--sub-pill-height);
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.menu-sub-link {
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 2px solid var(--border-strong);
+  background: var(--surface2);
   color: var(--text);
-  text-decoration: none;
-  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  padding: 0 12px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-.menu-sub-link:hover {
+.menu-sub-pill:hover,
+.menu-sub-pill.is-selected {
+  border-color: rgba(195, 222, 232, 0.55);
   color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.menu-sub-pill-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Default-hidden; a channel's subchannel branches only appear once that
+   channel is actually highlighted (Left/Right, see .is-selected on
+   .menu-channel-wrap) or moused over — keeps the ring from showing every
+   channel's subchannels at once. :hover on the wrap stays active while the
+   cursor is anywhere inside it, including over the pills themselves, so
+   nothing disappears out from under the pointer while interacting with it. */
+.menu-sub-line,
+.menu-subchannel {
+  display: none;
+}
+
+.menu-channel-wrap.is-selected .menu-sub-line,
+.menu-channel-wrap.is-selected .menu-subchannel,
+.menu-channel-wrap:hover .menu-sub-line,
+.menu-channel-wrap:hover .menu-subchannel {
+  display: block;
 }
 
 h1, h2, h3 {
@@ -480,6 +704,49 @@ h1, h2, h3 {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
+}
+
+/* --- Home (#/home) ------------------------------------------------------- */
+
+/* Same 7-column template as .cal-week-grid directly below it, so each total
+   card lines up with the day column it summarizes. */
+.home-day-totals {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.home-day-total {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 0 total: plain .home-day-total above, no tint. Thresholds are in HOURS —
+   under 5 = yellow, 5–10 = orange, over 10 = red (see home.js). */
+.home-day-total.level-yellow {
+  background: rgba(232, 197, 71, 0.18);
+  border-color: rgba(232, 197, 71, 0.6);
+  color: var(--yellow);
+}
+
+.home-day-total.level-orange {
+  background: rgba(224, 164, 88, 0.18);
+  border-color: rgba(224, 164, 88, 0.6);
+  color: var(--orange);
+}
+
+.home-day-total.level-red {
+  background: rgba(255, 107, 107, 0.18);
+  border-color: rgba(255, 107, 107, 0.6);
+  color: var(--red);
 }
 
 .cal-day-col {

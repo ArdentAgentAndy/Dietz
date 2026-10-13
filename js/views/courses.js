@@ -1,9 +1,9 @@
-import { store } from '../store.js?v=56';
-import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=56';
-import { clearCourseState, getCourseState } from '../courseState.js?v=56';
-import { escapeHtml } from '../format.js?v=56';
-import { computeGrade } from '../grading.js?v=56';
-import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=56';
+import { store } from '../store.js?v=57';
+import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=57';
+import { clearCourseState, getCourseState } from '../courseState.js?v=57';
+import { escapeHtml } from '../format.js?v=57';
+import { computeGrade } from '../grading.js?v=57';
+import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=57';
 
 let container = null;
 let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];
@@ -70,7 +70,9 @@ function courseGradeCardHtml(course, grade) {
   `;
 }
 
-function coursesAndGpaHtml() {
+// Exported for the Home dashboard's read-only mirror of this section — pure
+// function of store state, safe to call from anywhere with no side effects.
+export function coursesAndGpaHtml() {
   const allCourses = store.table('Courses');
   const allItems = store.table('Items');
   const courseStateByCourseId = {};

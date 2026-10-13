@@ -1,16 +1,18 @@
-import { syncActiveRoute } from './nav.js?v=56';
+import { syncActiveRoute } from './nav.js?v=57';
 
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/menu.js?v=56') },
-  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=56') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=56') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=56'), params: ['id'] },
-  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=56') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=56') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=56') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=56') },
-  { pattern: /^\/today$/, load: () => import('./views/today.js?v=56') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=56') },
+  { pattern: /^\/$/, load: () => import('./views/menu.js?v=57') },
+  { pattern: /^\/home$/, load: () => import('./views/home.js?v=57') },
+  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=57') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=57') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=57'), params: ['id'] },
+  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=57') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=57') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=57') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=57') },
+  { pattern: /^\/public$/, load: () => import('./views/public.js?v=57') },
+  { pattern: /^\/today$/, load: () => import('./views/today.js?v=57') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=57') },
 ];
 
 function currentPath() {
