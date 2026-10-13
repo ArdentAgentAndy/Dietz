@@ -1,5 +1,5 @@
-import { HOME, CHANNELS } from '../channels.js?v=57';
-import { escapeHtml } from '../format.js?v=57';
+import { HOME, CHANNELS } from '../channels.js?v=59';
+import { escapeHtml } from '../format.js?v=59';
 
 let container = null;
 // -1 = nothing selected yet (fresh page visit) — the first Left/Right press
@@ -286,18 +286,24 @@ function rebuild() {
     </div>
   `;
   container.querySelector('[data-action="home"]')?.addEventListener('click', goHome);
-  // A channel click only selects it — exactly what Left/Right landing on it
-  // does, never an immediate navigate, even for a channel that carries its
-  // own route (Records/Public) — those now need Enter afterward too, same
-  // as every other channel.
+  // A single click only selects a channel — exactly what Left/Right
+  // landing on it does, never an immediate navigate, even for a channel
+  // that carries its own route (Records/Public) — those need Enter
+  // afterward too, same as every other channel. A double-click on one of
+  // those route-carrying channels is a shortcut straight past that: select
+  // then immediately confirm, same as a quick select-then-Enter.
   container.querySelectorAll('[data-channel]').forEach((el) => {
     const idx = CHANNELS.findIndex((c) => c.id === el.dataset.channel);
     if (idx === -1) return;
+    const channel = CHANNELS[idx];
     el.addEventListener('click', () => {
       selectedIndex = idx;
       selectedSubIndex = -1;
       rebuild();
     });
+    if (channel.route) {
+      el.addEventListener('dblclick', () => goToChannel(channel));
+    }
   });
   container.querySelectorAll('[data-subchannel]').forEach((el) => {
     const [channelId, subId] = el.dataset.subchannel.split(':');

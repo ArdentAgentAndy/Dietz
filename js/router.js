@@ -1,18 +1,19 @@
-import { syncActiveRoute } from './nav.js?v=57';
+import { syncActiveRoute } from './nav.js?v=59';
+import { isConfigured } from './sync.js?v=59';
 
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/menu.js?v=57') },
-  { pattern: /^\/home$/, load: () => import('./views/home.js?v=57') },
-  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=57') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=57') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=57'), params: ['id'] },
-  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=57') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=57') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=57') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=57') },
-  { pattern: /^\/public$/, load: () => import('./views/public.js?v=57') },
-  { pattern: /^\/today$/, load: () => import('./views/today.js?v=57') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=57') },
+  { pattern: /^\/$/, load: () => import('./views/menu.js?v=59') },
+  { pattern: /^\/home$/, load: () => import('./views/home.js?v=59') },
+  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=59') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=59') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=59'), params: ['id'] },
+  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=59') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=59') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=59') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=59') },
+  { pattern: /^\/public$/, load: () => import('./views/public.js?v=59') },
+  { pattern: /^\/today$/, load: () => import('./views/today.js?v=59') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=59') },
 ];
 
 function currentPath() {
@@ -24,6 +25,17 @@ let activeModule = null;
 
 async function render() {
   const path = currentPath();
+
+  // A device with no Apps Script URL/token entered yet — a stranger's
+  // device never will have one — can't fetch anything the private pages
+  // need, so every route except Settings (to enter the token) and Public
+  // itself redirects there instead. Returning here (rather than falling
+  // through) leaves rendering to the hashchange this triggers.
+  if (!isConfigured() && path !== '/settings' && path !== '/public') {
+    location.hash = '#/public';
+    return;
+  }
+
   const app = document.getElementById('app');
   syncActiveRoute(path);
 

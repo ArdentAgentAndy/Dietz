@@ -12,6 +12,7 @@
   --green: #5bc87a;
   --yellow: #e8c547;
   --orange: #e0a458;
+  --blue: #5b9bd5;
   --radius: 12px;
   --radius-sm: 8px;
   --rm-card-w: 90px;
@@ -866,6 +867,69 @@ h1, h2, h3 {
   }
 }
 
+/* "))" / "((" marking a chip flagged public (see js/views/calendar.js's
+   'P' keybind) — spans the chip's full height on each side. A real element
+   (::before/::after are both already spoken for on .cal-chip, same
+   reasoning as .cal-chip-ants above), built the usual crescent-moon way: a
+   circle wider than its own narrow window, offset mostly outside it so only
+   its curved edge peeks through — overflow:hidden on the window (not just
+   inherited from .cal-chip, which only clips at the chip's own corners)
+   crops it down to a thin ")"/"(" sliver. Doubled up (::before *and*
+   ::after, each its own circle at a different offset/size within the same
+   window) for a bolder, layered echo instead of one thin line. */
+.cal-chip-public-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.cal-chip-public-mark::before,
+.cal-chip-public-mark::after {
+  content: '';
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  border-radius: 50%;
+  background: rgba(91, 155, 213, 0.45);
+}
+
+.cal-chip-public-mark::before {
+  width: 34px;
+}
+
+.cal-chip-public-mark::after {
+  width: 26px;
+  background: rgba(91, 155, 213, 0.3);
+}
+
+.cal-chip-public-mark-left {
+  left: 2px;
+}
+
+.cal-chip-public-mark-left::before {
+  left: -24px;
+}
+
+.cal-chip-public-mark-left::after {
+  left: -12px;
+}
+
+.cal-chip-public-mark-right {
+  right: 2px;
+}
+
+.cal-chip-public-mark-right::before {
+  right: -24px;
+}
+
+.cal-chip-public-mark-right::after {
+  right: -12px;
+}
+
 /* Static (non-animated) dotted border on cards already selected for the
    current highlight batch — outside the existing border, same idea as the
    urgent white outline, so it doesn't overlap it. Distinct from the
@@ -1421,6 +1485,92 @@ button.active, .btn.active {
 .chart-wrap {
   position: relative;
   width: 100%;
+}
+
+/* --- Public (#/public) ---------------------------------------------------- */
+
+/* One 7-column grid, 14 day-cards auto-wrapping into exactly 2 rows (same
+   grid-template-columns pattern as .cal-month-grid) — so each weekday's
+   column lines up directly under the one from the week before/after it,
+   the way a calendar month view repeats its own weekday header. Reuses
+   .cal-day-col/.cal-day-head/.cal-day-items (see those rules above) for
+   the per-day box/label/list styling. */
+.public-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+/* A floor, not a ceiling — min-height sized for 3 .public-item-card's
+   worth of space, so every day reads as the same height regardless of how
+   little is scheduled, but a day with more than 3 items just grows taller
+   past it instead of clipping anything. */
+.public-day-items {
+  min-height: 108px;
+  gap: 4px;
+}
+
+.public-item-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+/* Smaller than the card's own 12px, and forced to a single line (ellipsis
+   if it genuinely doesn't fit) rather than wrapping — a "time · duration"
+   string wrapping mid-phrase was landing the card on 3 lines instead of 2
+   (label + this), and in a narrow 7-column grid no font size reliably
+   avoids that on its own, so this guarantees it outright. */
+.public-item-card-meta {
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tighter than .cal-day-col's own padding/gap (6px/6px) — scoped to Public
+   specifically rather than changing that shared rule, which Calendar/Home
+   also use. Part of squeezing the whole page short enough to avoid
+   scrolling, alongside the denser card/grid spacing above. */
+.public-day-col {
+  padding: 4px;
+  gap: 4px;
+}
+
+.public-day-col .home-day-total {
+  padding: 3px;
+  font-size: 11px;
+}
+
+.public-day-col .cal-day-head {
+  font-size: 11px;
+  padding-bottom: 2px;
+}
+
+/* A day that's already passed (js/views/public.js's isPastDay) — same gray
+   diagonal-stripe idea as a completed task elsewhere in the app (e.g.
+   homeChipStyle's grayStripes), just applied to the whole day column rather
+   than one card, since an already-over day has nothing left to distinguish
+   within it. opacity dims every child (badge, label, cards) along with it;
+   the stripe itself only shows through wherever a card's own background
+   doesn't already cover it. */
+.public-day-col.is-past {
+  opacity: 0.55;
+  border-radius: var(--radius-sm);
+  background-image: repeating-linear-gradient(45deg, rgba(155, 154, 151, 0.12) 0 8px, transparent 8px 16px);
+}
+
+@media (max-width: 700px) {
+  .public-grid {
+    grid-template-columns: repeat(7, minmax(90px, 1fr));
+    overflow-x: auto;
+  }
 }
 
 dialog#modal-dialog {

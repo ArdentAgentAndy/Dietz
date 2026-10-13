@@ -1,5 +1,5 @@
-import { store } from './store.js?v=57';
-import { compactOldSessions } from './compaction.js?v=57';
+import { store } from './store.js?v=59';
+import { compactOldSessions } from './compaction.js?v=59';
 
 const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
@@ -20,6 +20,13 @@ function getConfig() {
   const url = settings.find((s) => s.key === 'appsScriptUrl')?.value;
   const token = settings.find((s) => s.key === 'appsScriptToken')?.value;
   return url && token ? { url, token } : null;
+}
+
+// Whether this device has its own Apps Script URL + token entered — see
+// js/router.js, which redirects every route except /settings and /public to
+// /public until this is true (a stranger's device never will be).
+export function isConfigured() {
+  return !!getConfig();
 }
 
 const STATUS_LABELS = {

@@ -1,4 +1,4 @@
-import { MENU, CHANNELS } from './channels.js?v=57';
+import { MENU, CHANNELS } from './channels.js?v=59';
 
 // Menu is rendered separately from the channels row (see #top-nav-menu in
 // index.html, to the right of the Settings gear) and isn't part of the
@@ -125,19 +125,25 @@ function onKeyDown(e) {
   // own handling for the octagon constellation (including its own digit
   // keys) gets the keypress untouched.
   if (onMenuPage()) return;
+  // Enter only ever confirms a subchannel the dropdown is already showing
+  // (opened by Left/Right/Up/Down — see moveChannel/moveSub, both of which
+  // call openDropdown()). With no dropdown open there's nothing to confirm:
+  // highlightIndex/activePath track whatever page is currently on screen
+  // (see syncActiveRoute), not just deliberate keyboard navigation, so
+  // without this guard pressing Enter for an unrelated reason anywhere in
+  // the app (submitting a form, confirming a dialog) was also hijacked into
+  // a same-page "confirm" that flashed this row's dropdown open. A
+  // route-carrying channel (Records/Public) doesn't need Enter at all —
+  // moveChannel already navigates to it immediately on arrow-key press.
+  if (e.key === 'Enter' && !dropdownOpen) return;
   e.preventDefault();
 
   if (e.key === 'ArrowLeft') moveChannel(-1);
   else if (e.key === 'ArrowRight') moveChannel(1);
   else if (e.key === 'ArrowUp') moveSub(-1);
   else if (e.key === 'ArrowDown') moveSub(1);
-  else if (e.key === 'Enter') {
-    const ch = currentChannel();
-    if (ch?.route) { goToPage(ch); return; }
-    confirmSub();
-  } else if (isDigit) {
-    selectByNumber(digit);
-  }
+  else if (e.key === 'Enter') confirmSub();
+  else if (isDigit) selectByNumber(digit);
 }
 
 // Enter on a channel — goes to whichever subchannel is already highlighted

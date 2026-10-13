@@ -1,6 +1,6 @@
-import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=57';
-import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration } from '../format.js?v=57';
-import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=57';
+import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=59';
+import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration } from '../format.js?v=59';
+import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=59';
 
 let container = null;
 let allTasks = [];

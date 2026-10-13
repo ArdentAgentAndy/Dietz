@@ -1,8 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=57';
-import { hexForNotionColor } from '../notionColors.js?v=57';
-import { escapeHtml, hexToRgba } from '../format.js?v=57';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=57';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=57';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=59';
+import { hexForNotionColor } from '../notionColors.js?v=59';
+import { escapeHtml, hexToRgba } from '../format.js?v=59';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=59';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=59';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -25,8 +25,12 @@ let searchQuery = '';
 const HIGHLIGHT_KINDS = {
   urgent: { field: 'urgent', property: 'Urgent', label: 'urgent' },
   completed: { field: 'mark', property: '?', label: 'completed' },
+  // Only ever applies to Meeting/Date chips — see taskChipHtml's
+  // isPublicCandidate — Examination is public unconditionally and nothing
+  // else ever is (see apps-script/Code.gs's publicPayload_).
+  public: { field: 'public', property: 'Public', label: 'public' },
 };
-let activeHighlight = null; // null | 'urgent' | 'completed'
+let activeHighlight = null; // null | 'urgent' | 'completed' | 'public'
 let pending = new Set();
 // Cards actually clicked during the current highlight-mode session — used to
 // draw the static dotted border only on newly-toggled cards, not on ones
@@ -246,6 +250,7 @@ function onKeyDown(e) {
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
+    case 'p': case 'P': if (!activeHighlight) toggleHighlight('public'); break;
     case 'x': case 'X': if (!deleteMode) toggleDeleteMode(); break;
     case 'w': case 'W': handleKeyNav('up'); break;
     case 'a': case 'A': handleKeyNav('left'); break;
@@ -592,7 +597,15 @@ function taskChipHtml(task) {
   const hasDeadline = Boolean(task.deadline?.start);
   const isMarked = deleteMode && markedForDelete.has(task.id);
   const canLinkTarget = schedulingItem && !schedulingBusy && !activeHighlight && !deleteMode;
-  const interactionClass = (activeHighlight || deleteMode) ? 'is-highlightable' : (canLinkTarget ? 'is-link-target' : 'is-editable');
+  // Unlike 'completed'/'urgent' (any task), 'public' only applies to
+  // Meeting/Date — Examination is public unconditionally with no flag, and
+  // nothing else is ever public — so every other category's chip stays
+  // non-interactive (just 'is-editable') during that mode instead of
+  // becoming clickable to no effect.
+  const isPublicCandidate = task.category === 'Meeting' || task.category === 'Date';
+  const isHighlightable = activeHighlight === 'public' ? isPublicCandidate : Boolean(activeHighlight);
+  const interactionClass = (isHighlightable || deleteMode) ? 'is-highlightable' : (canLinkTarget ? 'is-link-target' : 'is-editable');
+  const isPublicMarked = Boolean(task.public) && isPublicCandidate;
   // Selected-so-far indicator while marking for a highlight mode — a static
   // (non-animated) dotted border, distinct from the marching-ants hover
   // effect, so you can see at a glance which cards you've actively clicked
@@ -620,6 +633,7 @@ function taskChipHtml(task) {
     <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}" draggable="${(activeHighlight || deleteMode || schedulingItem) ? 'false' : 'true'}">
       ${isMarked ? '<div class="cal-chip-delete-mark">&#10006;</div>' : ''}
       <span class="cal-chip-ants"></span>
+      ${isPublicMarked ? '<span class="cal-chip-public-mark cal-chip-public-mark-left"></span><span class="cal-chip-public-mark cal-chip-public-mark-right"></span>' : ''}
       <span class="cal-chip-name">${escapeHtml(task.name || 'Untitled')}</span>
       ${hasDeadline ? `
         <div class="cal-chip-deadline-row mono">
@@ -720,11 +734,12 @@ function monthViewHtml(tasks) {
   `;
 }
 
-const HIGHLIGHT_KEYS = { completed: 'C', urgent: 'U' };
+const HIGHLIGHT_KEYS = { completed: 'C', urgent: 'U', public: 'P' };
 // Match the button's active highlight to what it actually marks — gray for
-// done, white for urgent (matching the white-striped urgent cards) —
-// instead of the generic blue.
-const HIGHLIGHT_COLORS = { completed: '#9b9a97', urgent: '#ffffff' };
+// done, white for urgent (matching the white-striped urgent cards), blue
+// for public (matching the blue ")(" chip decoration below) — instead of
+// the generic blue the active-button style defaults to otherwise.
+const HIGHLIGHT_COLORS = { completed: '#9b9a97', urgent: '#ffffff', public: '#5b9bd5' };
 
 function highlightButtonHtml(kind, idleLabel) {
   const isActive = activeHighlight === kind;
@@ -1145,6 +1160,7 @@ function rebuild() {
           <button data-action="hide-completed" class="${hideCompleted ? 'active' : ''}">[H] ${hideCompleted ? 'Showing active only' : 'Hide completed'}</button>
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
+          ${highlightButtonHtml('public', 'Mark public')}
           ${deleteButtonHtml()}
           ${cancelButtonHtml()}
         </div>

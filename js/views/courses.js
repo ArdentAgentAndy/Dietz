@@ -1,9 +1,9 @@
-import { store } from '../store.js?v=57';
-import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=57';
-import { clearCourseState, getCourseState } from '../courseState.js?v=57';
-import { escapeHtml } from '../format.js?v=57';
-import { computeGrade } from '../grading.js?v=57';
-import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=57';
+import { store } from '../store.js?v=59';
+import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=59';
+import { clearCourseState, getCourseState } from '../courseState.js?v=59';
+import { escapeHtml } from '../format.js?v=59';
+import { computeGrade } from '../grading.js?v=59';
+import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=59';
 
 let container = null;
 let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];

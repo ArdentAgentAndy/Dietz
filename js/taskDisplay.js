@@ -1,11 +1,11 @@
-import { hexForNotionColor } from './notionColors.js?v=57';
+import { hexForNotionColor } from './notionColors.js?v=59';
 
 // Display/sort order for categories, grouped with visual gaps between
 // groups. Anything not listed here (shouldn't happen) sorts after all of it.
 export const CATEGORY_GROUPS = [
   ['Examination', 'Revision', 'Homework'],
   ['Project', 'Research'],
-  ['Task', 'Date'],
+  ['Meeting', 'Date'],
   ['Application'],
 ];
 export const CATEGORY_ORDER = CATEGORY_GROUPS.flat();

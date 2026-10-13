@@ -47,6 +47,27 @@ function getSheet_(name) {
   return sheet;
 }
 
+// The 'ping' action's password (see doPost) — deliberately a plain cell in
+// its own sheet tab, read directly here, rather than a TABLES entry or a
+// Script Property. Not a TABLES entry: every table in TABLES round-trips to
+// the frontend via bootstrap/readTable_, which would put the password in
+// the browser's own localStorage right next to everything else — the whole
+// point is that it only ever lives server-side. Not a Script Property
+// either, by request: editing a Sheet cell (PingAuth!B1) is the easier
+// place for the owner to change it. Auto-creates the tab with a label on
+// first use, same as TABLES' own tabs do, just independent of that
+// mechanism.
+function getPingPassword_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('PingAuth');
+  if (!sheet) {
+    sheet = ss.insertSheet('PingAuth');
+    sheet.getRange('A1').setValue('Ping password (edit B1):');
+    sheet.getRange('B1').setValue('');
+  }
+  return String(sheet.getRange('B1').getValue() || '');
+}
+
 // Sheets auto-parses strings that look like dates into real Date values on
 // write — a pre-set plain-text column format is not reliable enough to stop
 // it. Prefixing with an apostrophe is Sheets' own documented way to force
@@ -138,6 +159,14 @@ function deleteRow_(tableName, id) {
 }
 
 function doGet(e) {
+  // Unauthenticated on purpose — see publicPayload_ below. Checked before
+  // the token gate (not after) since a stranger viewing #/public has no
+  // token to send at all; the endpoint itself is what keeps this safe,
+  // by only ever returning the already-redacted payload no matter who asks.
+  if (e.parameter.action === 'public') {
+    return jsonOut_(publicPayload_());
+  }
+
   var token = e.parameter.token;
   if (!checkToken_(token)) return jsonOut_({ error: 'unauthorized' });
 
@@ -299,6 +328,11 @@ function notionTaskFromPage_(page) {
     display: propCheckbox_(p.Display),
     mark: propCheckbox_(p['?']),
     urgent: propCheckbox_(p.Urgent),
+    // Manually flagged safe to show on #/public — see js/views/calendar.js's
+    // 'P' keybind. Only meaningful for Meeting/Date category tasks (checked
+    // client-side and again in publicPayload_ below); Examination is public
+    // unconditionally and doesn't use this flag at all.
+    public: propCheckbox_(p.Public),
   };
 }
 
@@ -306,7 +340,7 @@ function notionTaskFromPage_(page) {
 // Still gated by the frontend's own TOKEN (checked by the caller) — this
 // uses NOTION_TOKEN to talk to Notion, same as the read path. Property name
 // is whitelisted rather than trusted verbatim from the request body.
-var WRITABLE_CHECKBOX_PROPS_ = { Urgent: true, '?': true };
+var WRITABLE_CHECKBOX_PROPS_ = { Urgent: true, '?': true, Public: true };
 
 function notionUpdateCheckbox_(property, updates) {
   if (!WRITABLE_CHECKBOX_PROPS_[property]) return { error: 'property not writable: ' + property };
@@ -467,6 +501,22 @@ function doPost(e) {
     return jsonOut_({ error: 'invalid body' });
   }
 
+  // Unauthenticated on purpose, same reasoning as doGet's 'public' action —
+  // this is the #/public page's own "ping me" button, meant for friends/
+  // family (who never have the owner's token) to reach the owner when DND
+  // is on. Checked before the token gate below, and gated instead by its
+  // own, independent password (see getPingPassword_ — a cell in the
+  // Sheet's PingAuth tab, never synced to any browser). No lock needed, it
+  // doesn't touch any synced table.
+  if (body.action === 'ping') {
+    var expectedPassword = getPingPassword_();
+    if (!expectedPassword || body.password !== expectedPassword) {
+      return jsonOut_({ ok: false, error: 'Incorrect password' });
+    }
+    oneSignalSend_('Ping', 'Sent from Dietz.', CALENDAR_URL_);
+    return jsonOut_({ ok: true });
+  }
+
   if (!checkToken_(body.token)) return jsonOut_({ error: 'unauthorized' });
 
   if (body.action === 'notion-update-checkbox') {
@@ -520,6 +570,146 @@ function digestDateRange_() {
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   var tomorrow = Utilities.formatDate(tomorrowDate, tz, 'yyyy-MM-dd');
   return { today: today, tomorrow: tomorrow };
+}
+
+// --- Public page (#/public) -----------------------------------------------
+// Unauthenticated data for the page a stranger — someone who will never
+// have a token — sees (see doGet's 'public' action above). Everything here
+// is deliberately redacted before it ever leaves the server: an aggregate
+// per-day busy-time total (never which category, never which specific
+// tasks), and for individual tasks only a category-derived generic label's
+// worth of info (category + color + timing), never a real title/course/
+// location. See js/publicApi.js / js/views/public.js.
+
+// Two full Sunday-Saturday weeks — the one containing today, then the next
+// one — not a fixed "next 14 days" (which would start mid-week most of the
+// time). Rolls over to the next pair of weeks on its own once the first
+// week's Saturday has passed, since it's always computed fresh from
+// *today*, never stored.
+function publicWeekDays_() {
+  var tz = Session.getScriptTimeZone();
+  var today = new Date();
+  var dow = Number(Utilities.formatDate(today, tz, 'u')) % 7; // 0=Sun..6=Sat
+  var sunday = new Date(today);
+  sunday.setDate(sunday.getDate() - dow);
+  var days = [];
+  for (var i = 0; i < 14; i++) {
+    var d = new Date(sunday);
+    d.setDate(d.getDate() + i);
+    days.push(Utilities.formatDate(d, tz, 'yyyy-MM-dd'));
+  }
+  return days;
+}
+
+// Total scheduled minutes per day, *every* category included (unlike
+// publicItems_/publicClasses_, which only ever surface Examination/public
+// Meeting-Date/Lesson) — the point is purely "how booked is this day", a
+// single number with no breakdown, so folding in Homework/Revision/etc.
+// doesn't leak what they are, just that time is spoken for.
+function publicBusyTotals_(tasks, days) {
+  var totals = {};
+  days.forEach(function (d) { totals[d] = 0; });
+  tasks.forEach(function (t) {
+    var day = digestDay_(t.date);
+    if (day && Object.prototype.hasOwnProperty.call(totals, day)) {
+      totals[day] += Number(t.duration) || 0;
+    }
+  });
+  return days.map(function (d) { return { date: d, minutes: totals[d] }; });
+}
+
+// Examination tasks are always public; Meeting/Date tasks only when flagged
+// public (see WRITABLE_CHECKBOX_PROPS_/notionTaskFromPage_ above). Capped at
+// 3 per day (earliest 3, by start time). categoryColor is Notion's own color
+// keyword for Category (same field notionTaskFromPage_ already extracts) —
+// safe to pass through since it's tied to the category, already fully
+// exposed via the category name itself.
+function publicItems_(tasks, days) {
+  var windowSet = {};
+  days.forEach(function (d) { windowSet[d] = true; });
+
+  var byDay = {};
+  tasks.forEach(function (t) {
+    var eligible = t.category === 'Examination' || ((t.category === 'Meeting' || t.category === 'Date') && t.public);
+    if (!eligible) return;
+    var day = digestDay_(t.date);
+    if (!day || !windowSet[day]) return;
+    (byDay[day] = byDay[day] || []).push(t);
+  });
+
+  var items = [];
+  Object.keys(byDay).forEach(function (day) {
+    byDay[day]
+      .sort(function (a, b) {
+        var sa = (a.date && a.date.start) || '';
+        var sb = (b.date && b.date.start) || '';
+        return sa.localeCompare(sb);
+      })
+      .slice(0, 3)
+      .forEach(function (t) {
+        items.push({ category: t.category, categoryColor: t.categoryColor, start: t.date && t.date.start, duration: t.duration });
+      });
+  });
+  return items;
+}
+
+// A "Lesson" task's own date.start is *not* a specific upcoming occurrence
+// — lessons.js groups them by weekday (dayLabel), not by date, because
+// they're weekly-recurring and Notion only carries one representative
+// date+time per class (whatever day it happened to be entered on). Reusing
+// that date verbatim the way publicItems_/publicBusyTotals_ do for
+// one-off tasks would almost never land inside the current window — this
+// instead projects each lesson's weekday + time-of-day onto the requested
+// week's actual calendar date, the same way lessons.js's own grouping
+// implies: same weekday, same clock time, every week.
+function projectWeeklyOccurrence_(weekStartYmd, isoStart) {
+  var tz = Session.getScriptTimeZone();
+  var src = new Date(isoStart);
+  var isoDow = Number(Utilities.formatDate(src, tz, 'u')); // 1=Mon..7=Sun
+  var sundayBased = isoDow % 7; // 0=Sun..6=Sat
+  var hhmm = Utilities.formatDate(src, tz, 'HH:mm');
+  // No 'Z'/offset — per appsscript.json's timeZone, Apps Script's V8
+  // runtime parses a bare "yyyy-MM-ddTHH:mm:ss" string (and local Date
+  // methods generally) against the *script's* configured timezone, not
+  // UTC/system — exactly what's wanted here (the lesson's own clock time,
+  // re-stamped onto a different date, still in America/Chicago).
+  var target = new Date(weekStartYmd + 'T00:00:00');
+  target.setDate(target.getDate() + sundayBased);
+  var parts = hhmm.split(':');
+  target.setHours(Number(parts[0]), Number(parts[1]), 0, 0);
+  return target.toISOString();
+}
+
+// "Lesson" + start time + duration only, projected onto the first (current)
+// of the two weeks in `days` — no course/location/instructor/title. A
+// second week would just repeat the same schedule, so there's nothing to
+// gain showing it twice. End is the task's own date.end if set, else
+// start + duration minutes; duration is re-derived from start/end here too
+// so the client always has a plain minute count to show, not just a range
+// to compute it from itself.
+function publicClasses_(tasks, days) {
+  var weekStartYmd = days[0];
+  var classes = [];
+  tasks.forEach(function (t) {
+    if (t.category !== 'Lesson' || !t.date || !t.date.start) return;
+    var start = projectWeeklyOccurrence_(weekStartYmd, t.date.start);
+    var duration = t.duration;
+    if (!duration && t.date.end) {
+      duration = Math.round((new Date(t.date.end).getTime() - new Date(t.date.start).getTime()) / 60000);
+    }
+    classes.push({ start: start, duration: duration || null, categoryColor: t.categoryColor });
+  });
+  return classes;
+}
+
+function publicPayload_() {
+  var tasks = notionQueryTasks_().tasks || [];
+  var days = publicWeekDays_();
+  return {
+    busy: publicBusyTotals_(tasks, days),
+    items: publicItems_(tasks, days),
+    classes: publicClasses_(tasks, days),
+  };
 }
 
 // A Canvas deadline (plain yyyy-mm-dd or ISO string) or a Notion date/
