@@ -1,4 +1,4 @@
-import { MENU, CHANNELS } from './channels.js?v=59';
+import { MENU, CHANNELS } from './channels.js?v=60';
 
 // Menu is rendered separately from the channels row (see #top-nav-menu in
 // index.html, to the right of the Settings gear) and isn't part of the

@@ -513,7 +513,17 @@ function doPost(e) {
     if (!expectedPassword || body.password !== expectedPassword) {
       return jsonOut_({ ok: false, error: 'Incorrect password' });
     }
-    oneSignalSend_('Ping', 'Sent from Dietz.', CALENDAR_URL_);
+    // Five, 2 seconds apart — the whole point is getting through DND, so
+    // one single buzz (easy to sleep through/dismiss without looking) isn't
+    // enough. Synchronous (Utilities.sleep, not a trigger) since this is
+    // well within a web app request's execution time limit either way —
+    // the tradeoff is just that the HTTP response itself doesn't come back
+    // for ~8 seconds, which js/views/public.js's dialog already accounts
+    // for with its "Sending…" state.
+    for (var i = 0; i < 5; i++) {
+      oneSignalSend_('Ping', 'Sent from Dietz.', CALENDAR_URL_);
+      if (i < 4) Utilities.sleep(2000);
+    }
     return jsonOut_({ ok: true });
   }
 

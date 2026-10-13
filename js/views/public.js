@@ -6,9 +6,9 @@
 // server-side (apps-script/Code.gs's publicPayload_) — no task names,
 // courses, locations, or instructors, just category-derived generic labels,
 // their Notion color, and timing.
-import { fetchPublicData, getCachedPublicData, sendPublicPing } from '../publicApi.js?v=59';
-import { escapeHtml, hexToRgba } from '../format.js?v=59';
-import { hexForNotionColor } from '../notionColors.js?v=59';
+import { fetchPublicData, getCachedPublicData, sendPublicPing } from '../publicApi.js?v=60';
+import { escapeHtml, hexToRgba } from '../format.js?v=60';
+import { hexForNotionColor } from '../notionColors.js?v=60';
 
 const CHICAGO_TZ = 'America/Chicago';
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -48,6 +48,12 @@ async function load() {
   // keep showing what was cached/already rendered instead.
   if (data.error && getCachedPublicData()) return;
   state = { ...data, loading: false };
+  // rebuild() replaces the whole container, including #modal-dialog — if
+  // this background refresh resolves while the ping dialog is open, that
+  // would silently yank it (and whatever the user was mid-typing) out from
+  // under them. state is still updated either way; openPingDialog's own
+  // 'close' listener rebuilds once the dialog is actually done with.
+  if (container.querySelector('#modal-dialog')?.open) return;
   rebuild();
 }
 
@@ -288,7 +294,19 @@ function openPingDialog() {
 
     const result = await sendPublicPing(password);
     if (result.ok) {
-      dialog.close();
+      // Swap the form for a plain confirmation instead of just silently
+      // closing — the request already took a while (five sends, 2s apart,
+      // server-side — see Code.gs's doPost 'ping' branch), so the person
+      // sending it should see it actually went through, not just have the
+      // dialog vanish. Auto-closes shortly after; the dialog's own 'close'
+      // listener (below) still fires either way.
+      dialog.innerHTML = `
+        <div class="modal-form">
+          <h2 class="mono">Ping</h2>
+          <p>Ping sent.</p>
+        </div>
+      `;
+      setTimeout(() => dialog.close(), 1500);
       return;
     }
     submitBtn.disabled = false;
@@ -296,6 +314,11 @@ function openPingDialog() {
     errorEl.textContent = result.error || 'Failed';
     errorEl.style.display = '';
   });
+
+  // Catches up on anything load()'s background refresh held back while
+  // this was open (see load()'s own guard above) — fires on every close
+  // path alike (Cancel, a successful send auto-closing, or Escape).
+  dialog.addEventListener('close', () => rebuild(), { once: true });
 
   dialog.showModal();
 }

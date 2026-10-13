@@ -3,12 +3,12 @@
 // and the Roadmap Track view are pulled in with zero interactivity wired up
 // (no click handlers attached, no drag/drop), and the Hours chart/Courses
 // grades sections reuse the exact same rendering the real pages use.
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=59';
-import { escapeHtml, hexToRgba } from '../format.js?v=59';
-import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=59';
-import { hoursChartConfig } from './logging.js?v=59';
-import { coursesAndGpaHtml } from './courses.js?v=59';
-import { trackViewHtml } from './roadmap.js?v=59';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=60';
+import { escapeHtml, hexToRgba } from '../format.js?v=60';
+import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=60';
+import { hoursChartConfig } from './logging.js?v=60';
+import { coursesAndGpaHtml } from './courses.js?v=60';
+import { trackViewHtml } from './roadmap.js?v=60';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [

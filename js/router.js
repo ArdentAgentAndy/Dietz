@@ -1,19 +1,19 @@
-import { syncActiveRoute } from './nav.js?v=59';
-import { isConfigured } from './sync.js?v=59';
+import { syncActiveRoute } from './nav.js?v=60';
+import { isConfigured } from './sync.js?v=60';
 
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/menu.js?v=59') },
-  { pattern: /^\/home$/, load: () => import('./views/home.js?v=59') },
-  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=59') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=59') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=59'), params: ['id'] },
-  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=59') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=59') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=59') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=59') },
-  { pattern: /^\/public$/, load: () => import('./views/public.js?v=59') },
-  { pattern: /^\/today$/, load: () => import('./views/today.js?v=59') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=59') },
+  { pattern: /^\/$/, load: () => import('./views/menu.js?v=60') },
+  { pattern: /^\/home$/, load: () => import('./views/home.js?v=60') },
+  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=60') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=60') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=60'), params: ['id'] },
+  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=60') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=60') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=60') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=60') },
+  { pattern: /^\/public$/, load: () => import('./views/public.js?v=60') },
+  { pattern: /^\/today$/, load: () => import('./views/today.js?v=60') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=60') },
 ];
 
 function currentPath() {
