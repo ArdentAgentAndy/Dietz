@@ -263,6 +263,7 @@ function circlesHtml() {
   return CHANNELS.map((c, i) => `
     <div class="menu-channel-wrap${i === selectedIndex ? ' is-selected' : ''}" style="--angle:${channelAngle(i)}deg;">
       <div class="menu-channel-circle" data-channel="${escapeHtml(c.id)}">
+        <span class="menu-channel-icon" aria-hidden="true">${c.icon || ''}</span>
         <span class="menu-channel-label mono">${escapeHtml(c.label)}</span>
       </div>
       ${subchannelsHtml(c, i)}

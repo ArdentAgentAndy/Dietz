@@ -410,6 +410,7 @@ body.menu-no-scroll {
    two-layer-ring trick the octagon above does — a plain border already
    wraps a circle continuously with no corners to clip it away at. */
 .menu-channel-circle {
+  position: relative;
   width: calc(var(--circle-r) * 2);
   height: calc(var(--circle-r) * 2);
   display: flex;
@@ -423,7 +424,21 @@ body.menu-no-scroll {
   text-align: center;
   padding: 8px;
   box-sizing: border-box;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+/* Sits behind the label (earlier in source order, no z-index needed) as a
+   translucent watermark — big enough to actually read inside the circle,
+   but faint enough that the label stays the thing your eye lands on. */
+.menu-channel-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 36px;
+  line-height: 1;
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .menu-channel-circle:hover,
@@ -431,9 +446,12 @@ body.menu-no-scroll {
   border-color: rgba(195, 222, 232, 0.55);
   color: var(--accent);
   background: var(--accent-dim);
+  /* ~10% larger on hover/select, same treatment as .menu-sub-pill below. */
+  transform: scale(1.1);
 }
 
 .menu-channel-label {
+  position: relative;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -502,7 +520,7 @@ body.menu-no-scroll {
   box-sizing: border-box;
   white-space: nowrap;
   overflow: hidden;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .menu-sub-pill:hover,
@@ -510,6 +528,8 @@ body.menu-no-scroll {
   border-color: rgba(195, 222, 232, 0.55);
   color: var(--accent);
   background: var(--accent-dim);
+  /* ~10% larger on hover/select, same treatment as .menu-channel-circle above. */
+  transform: scale(1.1);
 }
 
 .menu-sub-pill-label {

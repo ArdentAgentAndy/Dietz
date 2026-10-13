@@ -22,16 +22,22 @@ export const MENU = { id: 'menu', label: 'Menu', route: '/' };
 // doubles as the existing Logging page; Public is its own stub) rather than
 // just a placeholder for subchannels. nav.js treats any channel with a
 // `route` as directly navigable (like a hub) instead of dropdown-only.
+// icon: a single emoji shown large/translucent inside the channel's circle
+// on the Menu page's constellation (js/views/menu.js's circlesHtml) —
+// purely decorative (aria-hidden there), so it carries no meaning the
+// label itself doesn't already.
 export const CHANNELS = [
   {
     id: 'records',
     label: 'Records',
+    icon: '🗂️',
     route: '/logging',
     subchannels: [],
   },
   {
     id: 'academics',
     label: 'Academics',
+    icon: '🎓',
     subchannels: [
       { id: 'courses', label: 'Courses', route: '/courses' },
       { id: 'lessons', label: 'Lessons', route: '/lessons' },
@@ -40,6 +46,7 @@ export const CHANNELS = [
   {
     id: 'schedule',
     label: 'Schedule',
+    icon: '📅',
     subchannels: [
       { id: 'today', label: 'Today', route: '/today' },
       { id: 'calendar', label: 'Calendar', route: '/calendar' },
@@ -49,6 +56,7 @@ export const CHANNELS = [
   {
     id: 'application',
     label: 'Application',
+    icon: '🚀',
     subchannels: [
       { id: 'roadmap', label: 'Roadmap', route: '/roadmap' },
     ],
@@ -56,22 +64,26 @@ export const CHANNELS = [
   {
     id: 'public',
     label: 'Public',
+    icon: '🌐',
     route: '/public',
     subchannels: [],
   },
   {
     id: 'resources',
     label: 'Resources',
+    icon: '📚',
     subchannels: [],
   },
   {
     id: 'practice',
     label: 'Practice',
+    icon: '🎹',
     subchannels: [],
   },
   {
     id: 'contacts',
     label: 'Contacts',
+    icon: '👥',
     subchannels: [],
   },
 ];
