@@ -22,7 +22,8 @@
 <header class="topnav">
   <div class="topnav-left">
     <a class="brand" href="#/">// Dietz</a>
-    <!-- Same number as the ?v= cache-bust query param below; bump both together. -->
+    <!-- Same number as every ?v= cache-bust query param across the app; bump
+         them all together, but only when explicitly asked to — not on every change. -->
     <span class="app-version mono">v=60</span>
     <button class="sync-btn" id="sync-btn" title="Sync now">&#8635;</button>
     <span class="sync-status" id="sync-status" data-status="unconfigured"></span>

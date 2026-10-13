@@ -1,4 +1,5 @@
 import { MENU, CHANNELS } from './channels.js?v=60';
+import { isConfigured } from './sync.js?v=60';
 
 // Menu is rendered separately from the channels row (see #top-nav-menu in
 // index.html, to the right of the Settings gear) and isn't part of the
@@ -31,8 +32,18 @@ function onMenuPage() {
   return activePath === MENU.route;
 }
 
+// An unconfigured device (a stranger who's never entered the Apps
+// Script URL/token — see router.js's redirect) can only ever reach
+// Public, so every other channel name/page would just be a dead end
+// that still leaks the app's structure to them. Shown channels (and the
+// Menu link, see renderMenuLink) collapse to just Public until that
+// changes.
+function visibleChannels() {
+  return isConfigured() ? CHANNELS : CHANNELS.filter((c) => c.id === 'public');
+}
+
 function currentChannel() {
-  return CHANNELS[highlightIndex];
+  return visibleChannels()[highlightIndex];
 }
 
 function isTypingTarget() {
@@ -72,7 +83,7 @@ function closeDropdown() {
 }
 
 function moveChannel(delta) {
-  const n = CHANNELS.length;
+  const n = visibleChannels().length;
   highlightIndex = ((highlightIndex + delta) % n + n) % n;
   // A channel that carries its own route (Records/Public — the exception
   // to "channels have no content", see channels.js) navigates immediately
@@ -189,10 +200,11 @@ function onClick(e) {
 
   const channelBtn = e.target.closest('[data-channel]');
   if (channelBtn) {
-    const idx = CHANNELS.findIndex((c) => c.id === channelBtn.dataset.channel);
+    const channels = visibleChannels();
+    const idx = channels.findIndex((c) => c.id === channelBtn.dataset.channel);
     if (idx !== -1) {
       highlightIndex = idx;
-      const ch = CHANNELS[idx];
+      const ch = channels[idx];
       if (ch.route) goToPage(ch);
       else { openDropdown(); render(); }
     }
@@ -220,7 +232,7 @@ function onDocumentClick(e) {
 }
 
 function channelRowHtml() {
-  const channelsHtml = CHANNELS.map((c, i) => {
+  const channelsHtml = visibleChannels().map((c, i) => {
     const isHighlighted = highlightIndex === i;
     const classes = ['nav-channel', isHighlighted ? 'is-current' : '', c.route && activePath === c.route ? 'active' : ''].filter(Boolean).join(' ');
     const dropdown = isHighlighted && dropdownOpen ? dropdownHtml(c) : '';
@@ -252,6 +264,14 @@ function render() {
 
 function renderMenuLink() {
   if (!menuMount) return;
+  // Menu's octagon constellation just links out to the same channels
+  // visibleChannels() already hides from an unconfigured device — so the
+  // link itself is hidden too rather than leading somewhere that would
+  // just show nothing useful.
+  if (!isConfigured()) {
+    menuMount.innerHTML = '';
+    return;
+  }
   const classes = ['nav-channel', onMenuPage() ? 'active' : ''].filter(Boolean).join(' ');
   menuMount.innerHTML = `<a href="#${MENU.route}" class="${classes}">${MENU.label}</a>`;
 }
@@ -287,10 +307,11 @@ export function syncActiveRoute(path) {
     return;
   }
 
-  const channelIndex = CHANNELS.findIndex((c) => c.route === activePath || c.subchannels.some((s) => s.route === activePath));
+  const channels = visibleChannels();
+  const channelIndex = channels.findIndex((c) => c.route === activePath || c.subchannels.some((s) => s.route === activePath));
   if (channelIndex !== -1) {
     highlightIndex = channelIndex;
-    const ch = CHANNELS[channelIndex];
+    const ch = channels[channelIndex];
     const subIndex = ch.subchannels.findIndex((s) => s.route === activePath);
     if (subIndex !== -1) subHighlightByChannelId.set(ch.id, subIndex);
   }
