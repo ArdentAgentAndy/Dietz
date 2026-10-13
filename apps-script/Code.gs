@@ -520,10 +520,16 @@ function doPost(e) {
     // the tradeoff is just that the HTTP response itself doesn't come back
     // for ~8 seconds, which js/views/public.js's dialog already accounts
     // for with its "Sending…" state.
+    // oneSignalSend_ reports failures instead of throwing (see its own
+    // comment), so one bad OneSignal response can't abort this loop
+    // partway through and leave the client hanging on a non-JSON error
+    // response — every one of the 5 attempts always runs.
+    var sent = 0;
     for (var i = 0; i < 5; i++) {
-      oneSignalSend_('Ping', 'Sent from Dietz.', CALENDAR_URL_);
+      if (oneSignalSend_('Ping', 'Sent from Dietz.', CALENDAR_URL_)) sent++;
       if (i < 4) Utilities.sleep(2000);
     }
+    if (!sent) return jsonOut_({ ok: false, error: 'Could not reach the notification service.' });
     return jsonOut_({ ok: true });
   }
 
@@ -833,16 +839,26 @@ function digestDueLists_(events, tasks, range, canvasDoneIds) {
 // external id "me" that the frontend assigns every subscribed device to in
 // push.js (single-user app,
 // so no per-device subscription storage is needed).
+// Returns whether OneSignal actually accepted it (true/false) rather than
+// throwing on a non-2xx response (muteHttpExceptions) — UrlFetchApp throws
+// by default, and an uncaught throw here would abort whatever called this
+// mid-work: the doPost 'ping' branch's whole 5-send loop (and the HTTP
+// response the client is waiting on) on a single bad OneSignal response, or
+// a digest trigger's run silently with no other symptom. Callers that care
+// (the ping loop) can check the return value; the digest functions below
+// don't need to — they're already fire-and-forget, now just no longer
+// fragile to it.
 function oneSignalSend_(subject, body, url) {
   var props = PropertiesService.getScriptProperties();
   var appId = props.getProperty('ONESIGNAL_APP_ID');
   var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
-  if (!appId || !apiKey) return;
+  if (!appId || !apiKey) return false;
 
-  UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+  var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
     method: 'post',
     contentType: 'application/json',
     headers: { Authorization: 'Key ' + apiKey },
+    muteHttpExceptions: true,
     payload: JSON.stringify({
       app_id: appId,
       target_channel: 'push',
@@ -852,6 +868,13 @@ function oneSignalSend_(subject, body, url) {
       url: url,
     }),
   });
+
+  var code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    Logger.log('oneSignalSend_ failed (%s): %s', code, res.getContentText());
+    return false;
+  }
+  return true;
 }
 
 // Opens straight to Calendar (not Canvas) since that's the merged
