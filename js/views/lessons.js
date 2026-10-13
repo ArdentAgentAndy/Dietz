@@ -1,7 +1,7 @@
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=55';
-import { hexForNotionColor } from '../notionColors.js?v=55';
-import { escapeHtml, hexToRgba } from '../format.js?v=55';
-import { store } from '../store.js?v=55';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=56';
+import { hexForNotionColor } from '../notionColors.js?v=56';
+import { escapeHtml, hexToRgba } from '../format.js?v=56';
+import { store } from '../store.js?v=56';
 
 let container = null;
 
@@ -9,7 +9,7 @@ export function render(rootEl) {
   container = rootEl;
   container.innerHTML = `
     <section class="card">
-      <h1 class="mono">Classes</h1>
+      <h1 class="mono">Lessons</h1>
       <p class="muted">Pulled from Notion (Category: Lesson).</p>
     </section>
     <section class="card"></section>
@@ -113,7 +113,7 @@ function renderLessons(tasks) {
         </div>
       </section>
     `
-    : '<section class="card"><p class="muted">No classes found.</p></section>';
+    : '<section class="card"><p class="muted">No lessons found.</p></section>';
 
   container.querySelector('.card + .card').outerHTML = html;
 }

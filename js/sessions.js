@@ -1,5 +1,5 @@
-import { store } from './store.js?v=55';
-import { formatDateISO } from './format.js?v=55';
+import { store } from './store.js?v=56';
+import { formatDateISO } from './format.js?v=56';
 
 // goalHours: daily target shown as a dashed reference line on the hours graph.
 // No dedicated Homework series — homework is logged against whichever
@@ -13,7 +13,7 @@ export const GRAPH_SERIES = [
   { key: 'piano', label: 'Piano', group: 'piano', color: '#ffffff', goalHours: 1 },
 ];
 
-// 'homework' no longer has its own card/series (see home.js) but old
+// 'homework' no longer has its own card/series (see logging.js) but old
 // sessions/compacted rows still carry that group — fold their minutes
 // into Revision's line instead of dropping them from the graph.
 export const GROUP_ALIASES = { homework: 'revision' };

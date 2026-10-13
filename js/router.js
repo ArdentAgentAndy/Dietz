@@ -1,12 +1,16 @@
+import { syncActiveRoute } from './nav.js?v=56';
+
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/home.js?v=55') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=55') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=55'), params: ['id'] },
-  { pattern: /^\/classes$/, load: () => import('./views/classes.js?v=55') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=55') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=55') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=55') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=55') },
+  { pattern: /^\/$/, load: () => import('./views/menu.js?v=56') },
+  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=56') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=56') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=56'), params: ['id'] },
+  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=56') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=56') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=56') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=56') },
+  { pattern: /^\/today$/, load: () => import('./views/today.js?v=56') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=56') },
 ];
 
 function currentPath() {
@@ -14,19 +18,12 @@ function currentPath() {
   return hash.startsWith('/') ? hash : '/' + hash;
 }
 
-function updateActiveTab(path) {
-  const top = '/' + (path.split('/')[1] || '');
-  document.querySelectorAll('.tabs a').forEach((a) => {
-    a.classList.toggle('active', a.dataset.route === top);
-  });
-}
-
 let activeModule = null;
 
 async function render() {
   const path = currentPath();
   const app = document.getElementById('app');
-  updateActiveTab(path);
+  syncActiveRoute(path);
 
   if (activeModule?.unmount) activeModule.unmount();
   activeModule = null;

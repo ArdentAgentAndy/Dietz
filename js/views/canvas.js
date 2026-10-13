@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=55';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=55';
-import { hexForCourse } from '../notionColors.js?v=55';
-import { escapeHtml, hexToRgba } from '../format.js?v=55';
-import { store } from '../store.js?v=55';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=56';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=56';
+import { hexForCourse } from '../notionColors.js?v=56';
+import { escapeHtml, hexToRgba } from '../format.js?v=56';
+import { store } from '../store.js?v=56';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -101,7 +101,7 @@ function isTypingTarget() {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
-// 'F' keybind — jumps focus into the search box and selects any existing
+// '/' keybind — jumps focus into the search box and selects any existing
 // text, so typing immediately replaces it (same idea as '/' search in a lot
 // of other apps).
 function focusSearch() {
@@ -195,8 +195,8 @@ function onKeyDown(e) {
   if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
     // Checked ahead of isTypingTarget() below so Escape still works while
     // the search box itself has focus — just hands focus back, leaving
-    // whatever was typed in place (mirrors the Enter/F flow, which is why
-    // this isn't gated the same way plain letter keybinds are).
+    // whatever was typed in place (mirrors the Enter and '/' flow, which is
+    // why this isn't gated the same way plain letter keybinds are).
     if (document.activeElement?.dataset?.action === 'search') { document.activeElement.blur(); return; }
     cancelActiveMode();
     return;
@@ -215,7 +215,7 @@ function onKeyDown(e) {
   }
 
   switch (e.key) {
-    case 'f': case 'F': e.preventDefault(); focusSearch(); break;
+    case '/': e.preventDefault(); focusSearch(); break;
     case 'h': case 'H': hideHandled = !hideHandled; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
@@ -224,7 +224,8 @@ function onKeyDown(e) {
     case 'a': case 'A': handleKeyNav('left'); break;
     case 's': case 'S': handleKeyNav('down'); break;
     case 'd': case 'D': handleKeyNav('right'); break;
-    case 'm': case 'M': viewMode = 'month'; rebuild(); break;
+    case 'i': case 'I': viewMode = 'week'; rebuild(); break;
+    case 'o': case 'O': viewMode = 'month'; rebuild(); break;
     case 't': case 'T': anchor = startOfDay(new Date()); rebuild(); break;
     case 'q': case 'Q': case '<': case ',': anchor = viewMode === 'week' ? addDays(anchor, -7) : addMonths(anchor, -1); rebuild(); break;
     case 'e': case 'E': case '>': case '.': anchor = viewMode === 'week' ? addDays(anchor, 7) : addMonths(anchor, 1); rebuild(); break;
@@ -694,8 +695,8 @@ function rebuild() {
 
       <div class="row-between" style="margin-top:12px;">
         <div class="range-toggle">
-          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">Week</button>
-          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">[M] Month</button>
+          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">[I] Week</button>
+          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">[O] Month</button>
         </div>
         <div class="cal-nav">
           <button data-action="prev">[Q]</button>
@@ -706,7 +707,7 @@ function rebuild() {
       </div>
 
       <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
-        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[F] Search assignments…" value="${escapeHtml(searchQuery)}">
+        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[/] Search assignments…" value="${escapeHtml(searchQuery)}">
       </div>
 
       <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">

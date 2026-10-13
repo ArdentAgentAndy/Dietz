@@ -1,58 +1,10 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=55';
-import { hexForNotionColor } from '../notionColors.js?v=55';
-import { escapeHtml, hexToRgba } from '../format.js?v=55';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=55';
-
-// Categories that get a course/project/lead sub-filter and two-tone
-// (border = category, fill = sub-value) chip styling. Everything else in
-// this list (minus Lesson, which lives on its own Classes page) just gets
-// a flat category-colored chip.
-const SUB_FILTER_BY_CATEGORY = {
-  Project: { prop: 'project', colorProp: 'projectColor', label: 'Project' },
-  Research: { prop: 'lead', colorProp: 'leadColor', label: 'Lead' },
-  Revision: { prop: 'course', colorProp: 'courseColor', label: 'Course' },
-  Homework: { prop: 'course', colorProp: 'courseColor', label: 'Course' },
-  Examination: { prop: 'course', colorProp: 'courseColor', label: 'Course' },
-};
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=56';
+import { hexForNotionColor } from '../notionColors.js?v=56';
+import { escapeHtml, hexToRgba } from '../format.js?v=56';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=56';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=56';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-// Display/sort order for categories, grouped with visual gaps between
-// groups. Anything not listed here (shouldn't happen) sorts after all of it.
-const CATEGORY_GROUPS = [
-  ['Examination', 'Revision', 'Homework'],
-  ['Project', 'Research'],
-  ['Task', 'Date'],
-  ['Application'],
-];
-const CATEGORY_ORDER = CATEGORY_GROUPS.flat();
-
-function categoryRank(category) {
-  const i = CATEGORY_ORDER.indexOf(category);
-  return i === -1 ? CATEGORY_ORDER.length : i;
-}
-
-// Midpoint-marker shape per category (unfiltered view only). Categories not
-// listed default to a plain circle.
-const SHAPE_BY_CATEGORY = {
-  Examination: 'circle',
-  Revision: 'square',
-  Homework: 'diamond',
-  Project: 'triangle',
-  Research: 'x',
-};
-
-// Notion's own color for Research is "default" (a muted slate-gray), which
-// reads too close to Project's gray and isn't very legible on the dark
-// background. Override with something in the same neutral family as
-// Project's gray, just lighter — distinguishable and legible.
-const CATEGORY_COLOR_OVERRIDES = {
-  Research: '#4a4844',
-};
-
-function categoryColorForTask(task) {
-  return CATEGORY_COLOR_OVERRIDES[task.category] || hexForNotionColor(task.categoryColor);
-}
 
 let container = null;
 let allTasks = [];
@@ -132,12 +84,6 @@ function isFieldActive(task, kind) {
   return activeHighlight === kind ? pending.has(task.id) : Boolean(task[cfg.field]);
 }
 
-function startOfDay(d) {
-  const copy = new Date(d);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
 function addDays(d, n) {
   const copy = new Date(d);
   copy.setDate(copy.getDate() + n);
@@ -156,18 +102,6 @@ function startOfWeek(d) {
   return addDays(copy, -copy.getDay());
 }
 
-function isoDay(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function taskDay(task) {
-  if (!task.date?.start) return null;
-  return task.date.start.slice(0, 10);
-}
-
 // Ignored while typing in a form field or with a modifier held, so the
 // shortcuts don't hijack normal typing or browser/OS shortcuts.
 function isTypingTarget() {
@@ -175,7 +109,7 @@ function isTypingTarget() {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
-// 'F' keybind — jumps focus into the search box and selects any existing
+// '/' keybind — jumps focus into the search box and selects any existing
 // text, so typing immediately replaces it (same idea as '/' search in a lot
 // of other apps).
 function focusSearch() {
@@ -271,7 +205,7 @@ function onKeyDown(e) {
   // dialog-open guard below.
   if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
     // Hands focus back from the search box specifically (mirrors the
-    // Enter/F flow, which is why this isn't gated like plain letter
+    // Enter and '/' flow, which is why this isn't gated like plain letter
     // keybinds below) — leaves whatever was typed in place.
     if (document.activeElement?.dataset?.action === 'search') { document.activeElement.blur(); return; }
     const dialog = container?.querySelector('#modal-dialog');
@@ -308,7 +242,7 @@ function onKeyDown(e) {
     // default action (typing the character) is still pending, so without
     // it the "=" (or "+") types itself straight into the field.
     case '+': case '=': e.preventDefault(); openTaskDialog(null, hoveredDate || undefined); break;
-    case 'f': case 'F': e.preventDefault(); focusSearch(); break;
+    case '/': e.preventDefault(); focusSearch(); break;
     case 'h': case 'H': hideCompleted = !hideCompleted; rebuild(); break;
     case 'c': case 'C': if (!activeHighlight) toggleHighlight('completed'); break;
     case 'u': case 'U': if (!activeHighlight) toggleHighlight('urgent'); break;
@@ -317,7 +251,8 @@ function onKeyDown(e) {
     case 'a': case 'A': handleKeyNav('left'); break;
     case 's': case 'S': handleKeyNav('down'); break;
     case 'd': case 'D': handleKeyNav('right'); break;
-    case 'm': case 'M': viewMode = 'month'; rebuild(); break;
+    case 'i': case 'I': viewMode = 'week'; rebuild(); break;
+    case 'o': case 'O': viewMode = 'month'; rebuild(); break;
     case 't': case 'T': anchor = startOfDay(new Date()); rebuild(); break;
     case 'q': case 'Q': case '<': case ',': anchor = viewMode === 'week' ? addDays(anchor, -7) : addMonths(anchor, -1); rebuild(); break;
     case 'e': case 'E': case '>': case '.': anchor = viewMode === 'week' ? addDays(anchor, 7) : addMonths(anchor, 1); rebuild(); break;
@@ -627,17 +562,6 @@ function chipStyle(task) {
   }
 
   return `border: 2px solid ${hexToRgba(catColor, borderAlpha)}; background-color: ${hexToRgba(catColor, 0.18)}; --chip-line-color: ${hexToRgba(subColor || catColor, 0.7)};`;
-}
-
-// The category-shaped emblem sits at the very bottom-left of the chip, in
-// the bottom row itself (not a floating decoration) — a colored glyph for
-// Research's "x" mark, otherwise a colored box shaped per SHAPE_BY_CATEGORY.
-function shapeEmblemHtml(task, catColor) {
-  const shape = SHAPE_BY_CATEGORY[task.category] || 'circle';
-  if (shape === 'x') {
-    return `<span class="cal-chip-shape shape-x" style="color:${catColor};">&#10005;</span>`;
-  }
-  return `<span class="cal-chip-shape shape-${shape}" style="background:${catColor};"></span>`;
 }
 
 function shortDate(dateStr) {
@@ -1236,8 +1160,8 @@ function rebuild() {
 
       <div class="row-between" style="margin-top:12px;">
         <div class="range-toggle">
-          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">Week</button>
-          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">[M] Month</button>
+          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">[I] Week</button>
+          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">[O] Month</button>
         </div>
         <div class="cal-nav">
           <button data-action="prev">[Q]</button>
@@ -1248,7 +1172,7 @@ function rebuild() {
       </div>
 
       <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
-        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[F] Search tasks…" value="${escapeHtml(searchQuery)}">
+        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[/] Search tasks…" value="${escapeHtml(searchQuery)}">
       </div>
 
       <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">

@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=55">
+<link rel="stylesheet" href="css/styles.css?v=56">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 </head>
@@ -23,23 +23,16 @@
   <div class="topnav-left">
     <a class="brand" href="#/">// Dietz</a>
     <!-- Same number as the ?v= cache-bust query param below; bump both together. -->
-    <span class="app-version mono">v=55</span>
+    <span class="app-version mono">v=56</span>
     <button class="sync-btn" id="sync-btn" title="Sync now">&#8635;</button>
     <span class="sync-status" id="sync-status" data-status="unconfigured"></span>
   </div>
   <div class="topnav-right">
-    <nav class="tabs">
-      <a href="#/" data-route="/">Home</a>
-      <a href="#/courses" data-route="/courses">Courses</a>
-      <a href="#/classes" data-route="/classes">Classes</a>
-      <a href="#/canvas" data-route="/canvas">Canvas</a>
-      <a href="#/calendar" data-route="/calendar">Calendar</a>
-      <a href="#/roadmap" data-route="/roadmap">Roadmap</a>
-      <a href="#/settings" data-route="/settings">Settings</a>
-    </nav>
+    <nav id="top-nav"></nav>
+    <a href="#/settings" class="icon-btn" title="Settings" aria-label="Settings">&#9881;</a>
   </div>
 </header>
 <main id="app"></main>
-<script type="module" src="js/app.js?v=55"></script>
+<script type="module" src="js/app.js?v=56"></script>
 </body>
 </html>

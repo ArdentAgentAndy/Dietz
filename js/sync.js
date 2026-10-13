@@ -1,5 +1,5 @@
-import { store } from './store.js?v=55';
-import { compactOldSessions } from './compaction.js?v=55';
+import { store } from './store.js?v=56';
+import { compactOldSessions } from './compaction.js?v=56';
 
 const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
@@ -27,13 +27,16 @@ const STATUS_LABELS = {
   offline: 'Offline',
   syncing: 'Syncing…',
   synced: 'Synced',
-  error: 'Sync error',
 };
 
 function setStatus(status, pending = 0) {
   buttonEl?.classList.toggle('is-syncing', status === 'syncing');
   if (!statusEl) return;
   statusEl.dataset.status = status;
+  if (status === 'error') {
+    statusEl.textContent = `ERROR (${pending})`;
+    return;
+  }
   let text = STATUS_LABELS[status] ?? '';
   if (pending > 0 && status !== 'syncing') text += ` (${pending} pending)`;
   statusEl.textContent = text;

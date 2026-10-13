@@ -102,11 +102,6 @@ a {
   }
 }
 
-.tabs {
-  display: flex;
-  gap: 4px;
-}
-
 .sync-status {
   font-family: 'Space Mono', monospace;
   font-size: 10px;
@@ -144,25 +139,123 @@ a {
   display: none;
 }
 
-.tabs a {
+/* Channel nav (see js/nav.js). Menu + the 6 channels sit in one row — plain
+   highlight-only buttons (never a destination on their own, except the Menu
+   link). Whichever channel is currently highlighted can show a dropdown of
+   its subchannels, anchored directly beneath it (each channel's own
+   position:relative wrapper, so no JS offset math is needed) — the actual
+   destinations. The dropdown auto-closes after a few seconds of inactivity
+   or on a click outside it (see nav.js). */
+#top-nav {
+  display: flex;
+}
+
+.nav-channels {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-channel-wrap {
+  position: relative;
+}
+
+.nav-channel {
+  /* Shared by the Menu <a> and the channel <button>s — explicit display so
+     the <a> (inline by default) gets the same full-padding-box hit-test
+     area as the buttons, instead of an inline element's narrower line-box
+     hit region. */
+  display: inline-flex;
+  align-items: center;
   font-family: 'Space Mono', monospace;
   text-transform: uppercase;
   font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--muted);
   text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
+  cursor: pointer;
 }
 
-.tabs a:hover {
+.nav-channel:hover {
   color: var(--text);
   background: var(--surface2);
 }
 
-.tabs a.active {
+/* The keyboard/mouse highlighter position — distinct from .active (the page
+   actually on screen), since arrowing across channels moves this without
+   navigating anywhere. */
+.nav-channel.is-current {
+  border-color: var(--border-strong);
+}
+
+.nav-channel.active {
   color: var(--accent);
   background: var(--accent-dim);
+}
+
+.nav-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+.nav-subchannel {
+  display: block;
+  font-family: 'Space Mono', monospace;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.nav-subchannel:hover {
+  color: var(--text);
+  background: var(--surface2);
+}
+
+.nav-subchannel.is-current {
+  border-color: var(--border-strong);
+}
+
+.nav-subchannel.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.icon-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 #app {
@@ -180,6 +273,44 @@ a {
 
 .card + .card {
   margin-top: 16px;
+}
+
+/* --- Menu hub (#/) ------------------------------------------------------ */
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.menu-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.menu-card h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.menu-sub-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.menu-sub-link {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.menu-sub-link:hover {
+  color: var(--accent);
 }
 
 h1, h2, h3 {
@@ -876,6 +1007,126 @@ button.active, .btn.active {
   font-size: 11px;
 }
 
+/* Grid on the list itself, with each row set to display:contents so its
+   cells become direct grid items — same approach as .class-list, so the
+   same column (shape, sub-value, name, ...) lines up across every row. */
+.today-list {
+  display: grid;
+  grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(56px, max-content) minmax(64px, max-content) minmax(118px, max-content);
+  gap: 6px 10px;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.today-row {
+  display: contents;
+}
+
+.today-cell {
+  padding: 10px 8px;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+}
+
+.today-cell-shape {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-left: 4px solid var(--cell-color, transparent);
+}
+
+.today-cell-sub {
+  display: flex;
+  justify-content: center;
+}
+
+/* Unlike Calendar's fixed-width chip, this column sizes itself to fit the
+   badge (see .today-list's grid-template-columns), so the 60%-of-parent cap
+   .cal-chip-sub-badge normally needs doesn't apply here — without this it
+   clips names like "MATH 241" down to "MAT…" for no reason. */
+.today-cell-sub .cal-chip-sub-badge {
+  max-width: none;
+}
+
+.today-cell-name {
+  font-weight: 500;
+}
+
+.today-cell-time {
+  text-align: center;
+  font-size: 12px;
+}
+
+.today-cell-duration {
+  display: flex;
+  justify-content: center;
+}
+
+.today-cell-duration input[type="number"] {
+  width: 56px;
+  font-size: 12px;
+  padding: 4px 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.today-cell-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.today-cell-actions button {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* Matches Calendar's urgent-highlight color (white) instead of the generic
+   accent, so an urgent task reads consistently across both pages. */
+.today-cell-actions button.is-urgent-active {
+  border-color: #fff;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.today-row.is-done .today-cell {
+  opacity: 0.5;
+}
+
+.today-row.is-done .today-cell-name {
+  text-decoration: line-through;
+}
+
+@media (max-width: 700px) {
+  .today-list {
+    grid-template-columns: 1fr;
+  }
+
+  .today-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .today-cell-shape,
+  .today-cell-actions {
+    border-radius: 0;
+  }
+
+  .today-cell-name {
+    flex: 1 1 100%;
+  }
+}
+
 .range-toggle {
   display: flex;
   gap: 4px;
@@ -1334,10 +1585,12 @@ details summary {
 
   .topnav {
     padding: 12px;
+    flex-wrap: wrap;
   }
 
   .topnav-right {
     gap: 8px;
+    width: 100%;
   }
 
   .sync-status {
@@ -1345,9 +1598,25 @@ details summary {
     gap: 0;
   }
 
-  .tabs a {
+  #top-nav {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nav-channels {
+    overflow-x: auto;
+  }
+
+  .nav-channel {
     padding: 6px 8px;
     font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .nav-dropdown {
+    right: auto;
+    left: 0;
   }
 }
 

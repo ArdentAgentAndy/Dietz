@@ -1,5 +1,5 @@
-import { store } from '../store.js?v=55';
-import { timerState, startTimer, stopTimer } from '../timer.js?v=55';
+import { store } from '../store.js?v=56';
+import { timerState, startTimer, stopTimer } from '../timer.js?v=56';
 import {
   GRAPH_SERIES,
   GROUP_ALIASES,
@@ -10,7 +10,7 @@ import {
   compactedSessions,
   datesForRange,
   minutesByGroupForDates,
-} from '../sessions.js?v=55';
+} from '../sessions.js?v=56';
 import {
   formatDateISO,
   formatDisplayDate,
@@ -20,11 +20,8 @@ import {
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
-} from '../format.js?v=55';
-import { computeGrade } from '../grading.js?v=55';
-import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=55';
-import { getCourseState } from '../courseState.js?v=55';
-import { archiveCourseById, deleteCourseById } from './courses.js?v=55';
+} from '../format.js?v=56';
+import { archiveCourseById, deleteCourseById } from './courses.js?v=56';
 
 let container = null;
 let tickIntervalId = null;
@@ -226,8 +223,6 @@ function rebuild() {
       <div class="chart-wrap"><canvas id="hours-chart" height="240"></canvas></div>
     </section>
 
-    ${coursesAndGpaHtml()}
-
     <section class="card">
       <details class="archived-details" ${archivedOpen ? 'open' : ''}>
         <summary>
@@ -247,53 +242,6 @@ function rebuild() {
 
   attachEvents();
   drawChart();
-}
-
-function courseGradeCardHtml(course, grade) {
-  const gradeText = course.finalLetter
-    ? `${course.finalLetter} (final)`
-    : grade.hasGradedWork
-      ? `${grade.percent.toFixed(1)}% (${grade.letter})`
-      : 'No grade yet';
-  return `
-    <a class="course-grade-card" href="#/course/${course.id}">
-      <span class="mono">${escapeHtml(course.code)}</span>
-      <span class="muted">${gradeText}</span>
-      <span class="muted">${course.credits} cr</span>
-    </a>
-  `;
-}
-
-function coursesAndGpaHtml() {
-  const allCourses = store.table('Courses');
-  const allItems = store.table('Items');
-  const courseStateByCourseId = {};
-  for (const c of allCourses) courseStateByCourseId[c.id] = getCourseState(c.id);
-
-  const activeCourses = allCourses.filter((c) => c.status === 'active').sort((a, b) => a.sortOrder - b.sortOrder);
-  const cards = activeCourses
-    .map((course) => {
-      const config = JSON.parse(course.configJson);
-      const items = allItems.filter((i) => i.courseId === course.id);
-      const grade = computeGrade(config, items, courseStateByCourseId[course.id]);
-      return courseGradeCardHtml(course, grade);
-    })
-    .join('');
-
-  const semester = computeSemesterGPA(activeCourses, allItems, courseStateByCourseId);
-  const finishedCourses = allCourses.filter((c) => c.status === 'archived' && c.finalLetter);
-  const cumulative = computeCumulativeGPA(store.table('PastTerms'), finishedCourses, semester);
-
-  return `
-    <section class="card">
-      <h2 class="mono">Courses</h2>
-      <div class="course-grade-grid">${cards || '<p class="muted">No active courses.</p>'}</div>
-      <div class="gpa-row">
-        <span class="muted">Semester GPA <span class="mono">${semester.gpa != null ? semester.gpa.toFixed(2) : '—'}</span></span>
-        <span class="muted">Cumulative GPA <span class="mono">${cumulative != null ? cumulative.toFixed(2) : '—'}</span></span>
-      </div>
-    </section>
-  `;
 }
 
 function attachEvents() {
@@ -597,7 +545,7 @@ function openManageCategoryDialog(cat) {
     if (isRevision) {
       return `Archiving ${escapeHtml(title)} hides its timer card and drops it from the Courses/GPA lists. All grades and logged time are kept — unarchive it later from the Courses page.`;
     }
-    return `Archiving "${escapeHtml(categoryLabel(cat))}" hides this card from the home page. All logged time is kept.`;
+    return `Archiving "${escapeHtml(categoryLabel(cat))}" hides this card from the Logging page. All logged time is kept.`;
   }
 
   function deleteMessage() {
