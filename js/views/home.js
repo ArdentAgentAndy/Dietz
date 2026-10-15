@@ -3,12 +3,17 @@
 // and the Roadmap Track view are pulled in with zero interactivity wired up
 // (no click handlers attached, no drag/drop), and the Hours chart/Courses
 // grades sections reuse the exact same rendering the real pages use.
+// The Today panel is the one exception: it's today.js's real `render`/
+// `unmount`, mounted into its own sub-container, so mark/urgent/delete/
+// duration all work here exactly as they do on the Today page itself
+// (both write through to the same Notion cache either way).
 import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=60';
 import { escapeHtml, hexToRgba } from '../format.js?v=60';
 import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=60';
 import { hoursChartConfig } from './logging.js?v=60';
 import { coursesAndGpaHtml } from './courses.js?v=60';
 import { trackViewHtml } from './roadmap.js?v=60';
+import { render as renderTodayPanel, unmount as unmountTodayPanel } from './today.js?v=60';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [
@@ -45,6 +50,7 @@ export function render(rootEl) {
 }
 
 export function unmount() {
+  unmountTodayPanel();
   container?.closest('#app')?.classList.remove('app-wide');
   if (chart) chart.destroy();
   chart = null;
@@ -192,6 +198,8 @@ function rebuild() {
   if (!container) return;
 
   container.innerHTML = `
+    <div id="home-today"></div>
+
     ${weekMirrorHtml()}
 
     ${hoursSectionHtml()}
@@ -203,6 +211,7 @@ function rebuild() {
 
   attachEvents();
   drawHoursChart();
+  renderTodayPanel(container.querySelector('#home-today'));
 }
 
 function attachEvents() {
