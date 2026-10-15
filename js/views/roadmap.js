@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=60';
-import { escapeHtml, hexToRgba } from '../format.js?v=60';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=60';
+import { store } from '../store.js?v=61';
+import { escapeHtml, hexToRgba } from '../format.js?v=61';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=61';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },
@@ -104,20 +104,79 @@ function stripeStyle(status) {
   return '';
 }
 
-function cardHtml(entry) {
+// Chronological index into SEMESTERS (not EXTRA_ROWS, which have no defined
+// order relative to it) — null for an unassigned semester or either of the
+// two EXTRA_ROWS ids, since neither can be compared "before/after".
+function semesterIndex(semId) {
+  const i = SEMESTERS.findIndex((s) => s.id === semId);
+  return i === -1 ? null : i;
+}
+
+// Unmet prereqs for `entry` — a listed prereq is satisfied if it's marked
+// completed, OR both courses have a semester inside SEMESTERS and the
+// prereq's index is strictly before entry's own (planned out ahead of time,
+// even if not actually done yet). Custom (Gen Ed) rows have no catalog
+// identity to carry prereqs and never reference one, so they're always
+// clear. Returns the unmet prereqs' own entries (for name/code display),
+// not just their ids.
+function prereqStatus(entry, full) {
+  if (entry.custom || !entry.prereqs?.length) return [];
+  const myIdx = semesterIndex(entry.semester);
+  return entry.prereqs
+    .map((id) => full.find((e) => e.id === id))
+    .filter((p) => p && p.status !== 'completed'
+      && !(myIdx != null && semesterIndex(p.semester) != null && semesterIndex(p.semester) < myIdx));
+}
+
+// A 300+ course tagged to more than one program is, by Grainger policy,
+// never "distinct" enough to count toward a minor's own requirements (it
+// may still count fully toward AE — see isExcludedForProgram). Reused by
+// both the real category/credit math below and the card's own "shared"
+// badge, so the two always agree on the same courses.
+function isDoubleCounted(entry) {
+  return entry.number >= 300 && entry.programs.length > 1;
+}
+
+// The restriction only ever applies to a minor's own totals, never AE's —
+// the rule is "the minor needs hours distinct from the major (and other
+// minors)", not the other way around, so AE always counts a tagged
+// completed course in full regardless of how many other programs share it.
+function isExcludedForProgram(entry, program) {
+  return program !== 'AE' && isDoubleCounted(entry);
+}
+
+// `ctx.program`, when given, is whichever program's box this card is being
+// rendered inside (Track's fixed boxes, Possible's per-program list) — used
+// only to decide whether THIS course counts toward THIS program's totals
+// (see isExcludedForProgram) and to show the "shared" badge accordingly.
+// Omitted in Semesters view/Unassigned, where a card isn't inside any single
+// category's context (it might exclude differently per program it's tagged
+// to), so it renders plain there rather than showing a potentially
+// misleading badge.
+function cardHtml(entry, full, ctx = {}) {
   const numStr = String(entry.number);
   const level = numStr.slice(0, 1);
   const rest = numStr.slice(1);
   const programs = [...new Set(entry.programs.map((p) => p.program))];
+  const unmetPrereqs = prereqStatus(entry, full);
+  const excluded = ctx.program ? isExcludedForProgram(entry, ctx.program) : false;
+
+  const excludedBadge = excluded
+    ? `<span class="rm-badge rm-badge-excluded" title="Shared with AE/another program — doesn't count toward ${escapeHtml(ctx.program)}'s totals (300+ level, 2+ programs)">shared</span>`
+    : '';
+  const prereqWarnHtml = unmetPrereqs.length
+    ? `<span class="rm-prereq-warn" title="Needs first: ${escapeHtml(unmetPrereqs.map((p) => `${p.subject}${p.number}`).join(', '))}">!</span>`
+    : '';
 
   return `
-    <div class="rm-card${entry.status ? ` is-${entry.status}` : ''}" style="${stripeStyle(entry.status)}" draggable="true" data-id="${escapeHtml(entry.id)}" title="${escapeHtml(entry.name)}">
+    <div class="rm-card${entry.status ? ` is-${entry.status}` : ''}${excluded ? ' is-excluded' : ''}" style="${stripeStyle(entry.status)}" draggable="true" data-id="${escapeHtml(entry.id)}" title="${escapeHtml(entry.name)}">
       <div class="rm-card-top">
         <span class="rm-subject">${escapeHtml(entry.subject)}</span><span class="rm-level">${escapeHtml(level)}</span><span class="rm-num">${escapeHtml(rest)}</span>
         <span class="rm-credits mono">${entry.credits}cr</span>
+        ${prereqWarnHtml}
       </div>
       <div class="rm-card-name">${escapeHtml(entry.name)}</div>
-      ${programs.length ? `<div class="rm-badges">${programs.map((p) => `<span class="rm-badge">${escapeHtml(p)}</span>`).join('')}</div>` : ''}
+      ${programs.length || excludedBadge ? `<div class="rm-badges">${programs.map((p) => `<span class="rm-badge">${escapeHtml(p)}</span>`).join('')}${excludedBadge}</div>` : ''}
     </div>
   `;
 }
@@ -138,7 +197,7 @@ function assignSemester(id, semester) {
   rebuild();
 }
 
-function semestersViewHtml(entries, filterBar) {
+function semestersViewHtml(entries, full, filterBar) {
   const bySemester = {};
   SEMESTERS.forEach((s) => (bySemester[s.id] = []));
   EXTRA_ROWS.forEach((s) => (bySemester[s.id] = []));
@@ -154,7 +213,7 @@ function semestersViewHtml(entries, filterBar) {
     return `
       <div class="rm-semester-col" data-semester="${s.id}">
         <div class="rm-semester-head"><span class="mono">${s.label}</span><span class="muted mono">${credits}cr</span></div>
-        <div class="rm-card-grid">${list.map(cardHtml).join('')}</div>
+        <div class="rm-card-grid">${list.map((e) => cardHtml(e, full)).join('')}</div>
       </div>
     `;
   }).join('');
@@ -165,7 +224,7 @@ function semestersViewHtml(entries, filterBar) {
     return `
       <div class="rm-semester-fullrow" data-semester="${s.id}">
         <div class="rm-semester-head"><span class="mono">${s.label}</span><span class="muted mono">${credits}cr</span></div>
-        <div class="rm-card-grid">${list.map(cardHtml).join('')}</div>
+        <div class="rm-card-grid">${list.map((e) => cardHtml(e, full)).join('')}</div>
       </div>
     `;
   }).join('');
@@ -178,7 +237,7 @@ function semestersViewHtml(entries, filterBar) {
     ${filterBar}
     <section class="card rm-pool" data-semester="">
       <h2 class="mono">Unassigned</h2>
-      <div class="rm-card-grid">${sortEntries(unassigned).map(cardHtml).join('')}</div>
+      <div class="rm-card-grid">${sortEntries(unassigned).map((e) => cardHtml(e, full)).join('')}</div>
     </section>
   `;
 }
@@ -189,7 +248,10 @@ function semestersViewHtml(entries, filterBar) {
 function categoryFulfillment(program, category, full) {
   const def = CATEGORIES.find((c) => c.program === program && c.category === category);
   const tagged = full.filter((e) => e.programs.some((p) => p.program === program && p.category === category));
-  const completed = tagged.filter((e) => e.status === 'completed');
+  // A double-counted 300+ course still shows as a (grayed, "shared") card
+  // here — tagged stays everything tagged to this category — it just
+  // doesn't count toward met/progress for a minor (see isExcludedForProgram).
+  const completed = tagged.filter((e) => e.status === 'completed' && !isExcludedForProgram(e, program));
 
   if (def.requiredCredits != null) {
     const completedCredits = completed.reduce((sum, e) => sum + (e.credits || 0), 0);
@@ -217,15 +279,21 @@ function categoryFulfillment(program, category, full) {
 // a 6cr elective slot stops once cumulative credits reach 6, even if that
 // last card's own credits tip the running total past it. Track view only
 // (see call sites) — Possible must keep showing every real catalog option.
-function capShown(sortedShown, def) {
+function capShown(sortedShown, def, program) {
   const capped = [];
   let count = 0;
   let credits = 0;
   for (const e of sortedShown) {
     if (def.requiredCredits != null ? credits >= def.requiredCredits : count >= def.required) break;
     capped.push(e);
-    count += 1;
-    credits += e.credits || 0;
+    // A double-counted entry stays visible (pushed above) but doesn't
+    // advance the running total that triggers the cutoff — otherwise a
+    // shared, non-counting card could cap off cards that would actually
+    // satisfy the requirement.
+    if (!isExcludedForProgram(e, program)) {
+      count += 1;
+      credits += e.credits || 0;
+    }
   }
   return capped;
 }
@@ -261,7 +329,7 @@ function categoryDisplayName(category) {
 function categoryBoxHtml(program, categoryKey, cols, rows, full, visibleIds, statusFilter, opts = {}) {
   const { tagged, met, progressText, def } = categoryFulfillment(program, categoryKey, full);
   let shown = tagged.filter((e) => visibleIds.has(e.id));
-  shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def) : sortEntries(shown);
+  shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def, program) : sortEntries(shown);
 
   // Every box's width is the grid's native N-column width (cols*cardW +
   // (cols-1)*6, the shared 6px card gap) — same formula Foundational
@@ -292,7 +360,7 @@ function categoryBoxHtml(program, categoryKey, cols, rows, full, visibleIds, sta
   return `
     <div class="rm-category${met ? ' is-met' : ''}">
       <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; justify-content:${justify}; align-content:flex-start; width:${gridWidth}; min-height:${minHeight};">${shown.map(cardHtml).join('')}</div>
+      <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; justify-content:${justify}; align-content:flex-start; width:${gridWidth}; min-height:${minHeight};">${shown.map((e) => cardHtml(e, full, { program })).join('')}</div>
     </div>
   `;
 }
@@ -302,37 +370,8 @@ function categoryBoxHtml(program, categoryKey, cols, rows, full, visibleIds, sta
 // any single CATEGORIES entry the way a category box's progress is.
 function programCreditSum(program, full) {
   return full
-    .filter((e) => e.status === 'completed' && e.programs.some((p) => p.program === program))
+    .filter((e) => e.status === 'completed' && e.programs.some((p) => p.program === program) && !isExcludedForProgram(e, program))
     .reduce((sum, e) => sum + (e.credits || 0), 0);
-}
-
-// Grainger Undergraduate Academic Advising rule: a minor needs ≥6 credit
-// hours of 300-/400-level coursework genuinely distinct from the major
-// (and any other minor) — not the same course double-counted toward both.
-// Conservative heuristic (no dedicated UI yet to override it per course):
-// a completed course only counts here if it's tagged to exactly this one
-// program — anything shared with AE or another minor (e.g. ECE205,
-// counted toward both AE and ECE elsewhere on this page) never counts
-// toward this, even though it freely double-counts for the plain
-// credit-hour tallies above.
-function distinctUpperCredits(program, full) {
-  return full
-    .filter((e) => e.status === 'completed' && e.number >= 300
-      && e.programs.length === 1 && e.programs[0].program === program)
-    .reduce((sum, e) => sum + (e.credits || 0), 0);
-}
-
-// One combined check for all 3 minors (not repeated per minor row) — sits
-// in AE's own tally stack since AE is first in the AE→ECE→MATH→CS
-// sequence.
-function grainger6hrTallyHtml(full) {
-  const metPrograms = ['ECE', 'MATH', 'CS'].filter((p) => distinctUpperCredits(p, full) >= 6);
-  return `
-    <div class="rm-tally${metPrograms.length === 3 ? ' is-met' : ''}">
-      <div class="rm-tally-label">300+/Distinct</div>
-      <div class="rm-tally-value">${metPrograms.length}/3 Met</div>
-    </div>
-  `;
 }
 
 function tallyBoxHtml(label, value, total) {
@@ -376,7 +415,6 @@ function aeMajorHtml(full, visibleIds, statusFilter) {
     tallyBoxHtml('ECE Minor', programCreditSum('ECE', full), PROGRAM_TOTAL_HOURS.ECE),
     tallyBoxHtml('Math Minor', programCreditSum('MATH', full), PROGRAM_TOTAL_HOURS.MATH),
     placeholderTallyHtml('Gen Ed Req.'),
-    grainger6hrTallyHtml(full),
   ].join('');
 
   return `
@@ -516,13 +554,13 @@ function categoryViewHtml(full, visible, statusFilter) {
     const categoriesHtml = CATEGORIES.filter((c) => c.program === program).map((cat) => {
       const { tagged, met, progressText, def } = categoryFulfillment(program, cat.category, full);
       let shown = tagged.filter((e) => visibleIds.has(e.id));
-      shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def) : sortEntries(shown);
+      shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def, program) : sortEntries(shown);
       if (!shown.length) return ''; // nothing to show — skip the whole category block
 
       return `
         <div class="rm-category${met ? ' is-met' : ''}">
           <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(cat.category))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-          <div class="rm-card-grid">${shown.map(cardHtml).join('')}</div>
+          <div class="rm-card-grid">${shown.map((e) => cardHtml(e, full, { program })).join('')}</div>
         </div>
       `;
     }).join('');
@@ -622,7 +660,7 @@ function rebuild() {
   const filterBar = view === 'track' ? '' : filterBarHtml();
 
   const bodyHtml = view === 'semesters'
-    ? semestersViewHtml(visible, filterBar)
+    ? semestersViewHtml(visible, full, filterBar)
     : filterBar + (view === 'track'
       ? categoryViewHtml(full, visible, ['taking', 'completed'])
       : categoryViewHtml(full, visible, null));

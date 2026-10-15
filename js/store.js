@@ -1,7 +1,7 @@
-import { seedData } from './seed.js?v=60';
+import { seedData } from './seed.js?v=61';
 
 const STORAGE_KEY = 'dietz:data';
-const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
+const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts'];
 
 function emptyData() {
   const data = { outbox: [] };

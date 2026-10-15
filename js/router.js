@@ -1,19 +1,20 @@
-import { syncActiveRoute } from './nav.js?v=60';
-import { isConfigured } from './sync.js?v=60';
+import { syncActiveRoute } from './nav.js?v=61';
+import { isConfigured } from './sync.js?v=61';
 
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/menu.js?v=60') },
-  { pattern: /^\/home$/, load: () => import('./views/home.js?v=60') },
-  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=60') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=60') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=60'), params: ['id'] },
-  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=60') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=60') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=60') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=60') },
-  { pattern: /^\/public$/, load: () => import('./views/public.js?v=60') },
-  { pattern: /^\/today$/, load: () => import('./views/today.js?v=60') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=60') },
+  { pattern: /^\/$/, load: () => import('./views/menu.js?v=61') },
+  { pattern: /^\/home$/, load: () => import('./views/home.js?v=61') },
+  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=61') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=61') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=61'), params: ['id'] },
+  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=61') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=61') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=61') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=61') },
+  { pattern: /^\/public$/, load: () => import('./views/public.js?v=61') },
+  { pattern: /^\/contacts$/, load: () => import('./views/contacts.js?v=61') },
+  { pattern: /^\/today$/, load: () => import('./views/today.js?v=61') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=61') },
 ];
 
 function currentPath() {

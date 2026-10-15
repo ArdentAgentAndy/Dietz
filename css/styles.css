@@ -278,6 +278,13 @@ a {
   margin-top: 16px;
 }
 
+/* #home-today wraps the Today panel's own card(s), so .card + .card above
+   doesn't apply between it and the next section (This week) — they aren't
+   direct siblings. */
+#home-today + .card {
+  margin-top: 16px;
+}
+
 /* --- Menu hub (#/) ------------------------------------------------------- */
 
 /* Fills exactly the viewport height left under the sticky topnav (see
@@ -336,6 +343,31 @@ body.menu-no-scroll {
   background: var(--border-strong);
   transform-origin: top center;
   transform: rotate(var(--angle)) translateY(var(--octagon-r));
+}
+
+/* One huge invisible hit-zone per channel, a 45deg wedge so hovering
+   anywhere in that general direction reveals the channel's subchannels —
+   not just hovering its small circle (see .is-sector-hover, set from
+   js/views/menu.js on mouseenter/mouseleave of [data-sector]). The wedge's
+   near edge sits at 300px (--octagon-r + --line-len + --circle-r, i.e.
+   exactly the outermost edge of the channel circles) so it never covers the
+   circles/pills/lines themselves — those keep their own precise hover.
+   Drawn as a fixed polygon pointing straight down (angle 0, matching every
+   other radial element's convention here) at a size (4000px, 2000px out to
+   each straight edge) that comfortably outlasts any real viewport, then
+   just rotated into place with no translate needed — the distance is
+   already baked into the polygon's own points. Sits earliest in the
+   constellation's DOM order (see sectorsHtml in menu.js) so everything
+   else — lines, octagon, circles, pills — naturally paints on top of it. */
+.menu-sector {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4000px;
+  height: 4000px;
+  margin: -2000px 0 0 -2000px;
+  clip-path: polygon(1885.2px 2277.16px, 1234.63px 3847.76px, 2765.37px 3847.76px, 2114.8px 2277.16px);
+  transform: rotate(var(--angle));
 }
 
 /* A plain `border` on a clip-path'd element only draws along the box's
@@ -411,6 +443,12 @@ body.menu-no-scroll {
    wraps a circle continuously with no corners to clip it away at. */
 .menu-channel-circle {
   position: relative;
+  /* Painted above its own .menu-sub-line/.menu-subchannel siblings (they
+     come later in source order, see subchannelsHtml in menu.js, so would
+     otherwise paint on top) — needed so the opaque fill actually hides the
+     sub-line's near end once the circle scales outward over it on hover,
+     same reasoning as the octagon-spoke-line fix above. */
+  z-index: 1;
   width: calc(var(--circle-r) * 2);
   height: calc(var(--circle-r) * 2);
   display: flex;
@@ -442,12 +480,21 @@ body.menu-no-scroll {
 }
 
 .menu-channel-circle:hover,
-.menu-channel-wrap.is-selected .menu-channel-circle {
+.menu-channel-wrap.is-selected .menu-channel-circle,
+.menu-channel-wrap.is-sector-hover .menu-channel-circle {
+  border-width: 3px;
   border-color: rgba(195, 222, 232, 0.55);
   color: var(--accent);
-  background: var(--accent-dim);
-  /* ~10% larger on hover/select, same treatment as .menu-sub-pill below. */
-  transform: scale(1.1);
+  /* Opaque, not var(--accent-dim) — same reasoning as .menu-octagon-inner's
+     fill staying solid on hover: a translucent fill here would let the
+     connecting .menu-line show through once the circle scales inward over
+     it (the line sits behind in DOM order but isn't actually covered
+     unless the fill on top of it is solid). */
+  background: var(--surface2);
+  /* ~20% larger on hover/select, same treatment as .menu-sub-pill below —
+     big enough that the fill visibly grows into the highlighted border
+     instead of just the thin border ring reading as "bigger". */
+  transform: scale(1.2);
 }
 
 .menu-channel-label {
@@ -525,11 +572,15 @@ body.menu-no-scroll {
 
 .menu-sub-pill:hover,
 .menu-sub-pill.is-selected {
+  border-width: 3px;
   border-color: rgba(195, 222, 232, 0.55);
   color: var(--accent);
-  background: var(--accent-dim);
-  /* ~10% larger on hover/select, same treatment as .menu-channel-circle above. */
-  transform: scale(1.1);
+  /* Opaque, not var(--accent-dim) — see .menu-channel-circle:hover's
+     comment: a translucent fill would let its .menu-sub-line show through
+     once the pill scales over it. */
+  background: var(--surface2);
+  /* ~20% larger on hover/select, same treatment as .menu-channel-circle above. */
+  transform: scale(1.2);
 }
 
 .menu-sub-pill-label {
@@ -540,22 +591,32 @@ body.menu-no-scroll {
   text-overflow: ellipsis;
 }
 
-/* Default-hidden; a channel's subchannel branches only appear once that
-   channel is actually highlighted (Left/Right, see .is-selected on
-   .menu-channel-wrap) or moused over — keeps the ring from showing every
-   channel's subchannels at once. :hover on the wrap stays active while the
-   cursor is anywhere inside it, including over the pills themselves, so
-   nothing disappears out from under the pointer while interacting with it. */
+/* Default-hidden (faded out, not display:none — needs to stay paintable for
+   the opacity transition below to actually animate) — a channel's
+   subchannel branches only appear once that channel is actually highlighted
+   (Left/Right/Up/Down, see .is-selected on .menu-channel-wrap), moused over
+   directly, or hovered via its outer .menu-sector (see .is-sector-hover,
+   set from js/views/menu.js) — keeps the ring from showing every channel's
+   subchannels at once. :hover on the wrap stays active while the cursor is
+   anywhere inside it, including over the pills themselves, so nothing
+   disappears out from under the pointer while interacting with it.
+   pointer-events:none while hidden so a faded-out pill sitting behind
+   another channel's sector can't steal its hover/click. */
 .menu-sub-line,
 .menu-subchannel {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 
 .menu-channel-wrap.is-selected .menu-sub-line,
 .menu-channel-wrap.is-selected .menu-subchannel,
 .menu-channel-wrap:hover .menu-sub-line,
-.menu-channel-wrap:hover .menu-subchannel {
-  display: block;
+.menu-channel-wrap:hover .menu-subchannel,
+.menu-channel-wrap.is-sector-hover .menu-sub-line,
+.menu-channel-wrap.is-sector-hover .menu-subchannel {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 h1, h2, h3 {
@@ -1005,6 +1066,17 @@ h1, h2, h3 {
   outline-offset: -2px;
 }
 
+.cal-day-col.is-today,
+.cal-month-cell.is-today {
+  /* Same baby-blue used for the "selected"/hover state elsewhere (see
+     .menu-channel-circle:hover, .menu-sub-pill:hover) — var(--accent) at
+     the same translucency, not the saturated var(--blue). Thicker than the
+     1px default border so it actually reads as a highlight, not just a
+     slightly different shade of the same hairline. */
+  border-width: 2px;
+  border-color: rgba(195, 222, 232, 0.55);
+}
+
 .cal-day-col.is-schedulable,
 .cal-month-cell.is-schedulable {
   cursor: pointer;
@@ -1317,6 +1389,19 @@ button.active, .btn.active {
   padding: 6px 12px;
 }
 
+/* #/contacts — same card shape as .timer-card (surface/border/radius/
+   padding/column layout), just its own class since it's a different kind
+   of thing, not a timer. */
+.contact-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .add-row {
   display: flex;
   gap: 8px;
@@ -1508,6 +1593,36 @@ button.active, .btn.active {
 }
 
 /* --- Public (#/public) ---------------------------------------------------- */
+
+/* Replaces the old plain "Public" title — date + viewer's own time +
+   Chicago time, red/green per whether the owner is busy right now (see
+   isBusyNow/clockBoxHtml in public.js). */
+.public-clock-box {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+}
+
+.public-clock-box.is-busy {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.public-clock-box.is-free {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Separates date/Local/Chicago from each other — without this they read as
+   one run-on line, especially once both times show the same digits. */
+.public-clock-segment {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+}
 
 /* One 7-column grid, 14 day-cards auto-wrapping into exactly 2 rows (same
    grid-template-columns pattern as .cal-month-grid) — so each weekday's
@@ -2082,6 +2197,14 @@ details summary {
   border-color: var(--accent);
 }
 
+/* A double-counted 300+ course shown inside a minor's own category box
+   (see isExcludedForProgram in roadmap.js) — same "shown but doesn't count"
+   treatment as a dropped grading item (course.js's .item-row-muted), just
+   a plain opacity dim since this card has no separate "dropped" tag spot. */
+.rm-card.is-excluded {
+  opacity: 0.55;
+}
+
 .rm-card-top {
   display: flex;
   align-items: baseline;
@@ -2117,6 +2240,17 @@ details summary {
   color: var(--muted);
 }
 
+/* The "!" unmet-prereq warning — see prereqStatus in roadmap.js. Sits right
+   after .rm-credits (which carries the margin-left:auto that pushes both
+   to the row's right edge), purely informational — no click handler. */
+.rm-prereq-warn {
+  margin-left: 4px;
+  color: var(--red);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+}
+
 /* Wraps instead of truncating to one line, so the title actually reads —
    clamped at 2 lines (with its own ellipsis past that) so one long name
    can't blow out the card indefinitely; .rm-card's height is min-height
@@ -2144,6 +2278,14 @@ details summary {
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   color: var(--muted);
+}
+
+/* Modifier on .rm-badge, same convention as course.js's .tag-dropped
+   modifying .tag — the "shared, doesn't count toward this program" badge
+   (see .rm-card.is-excluded above). */
+.rm-badge-excluded {
+  color: var(--red);
+  border-color: rgba(255, 107, 107, 0.4);
 }
 
 /* Fixed --rm-card-w columns, not minmax(...,1fr) — a sparse row (e.g. 2

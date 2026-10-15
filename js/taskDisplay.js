@@ -1,4 +1,4 @@
-import { hexForNotionColor } from './notionColors.js?v=60';
+import { hexForNotionColor } from './notionColors.js?v=61';
 
 // Display/sort order for categories, grouped with visual gaps between
 // groups. Anything not listed here (shouldn't happen) sorts after all of it.
@@ -80,7 +80,21 @@ export function isoDay(d) {
   return `${y}-${m}-${day}`;
 }
 
+const CHICAGO_TZ = 'America/Chicago';
+
+// This app has one canonical timezone (see CLAUDE.md) — every task's
+// calendar day goes through this, not a raw slice of its UTC ISO string, so
+// a task due late evening Chicago time (which crosses into the next UTC
+// calendar day) still lands on the day it was actually meant for. Same
+// technique js/views/public.js's chicagoDay already uses.
+function chicagoDay(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: CHICAGO_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 export function taskDay(task) {
   if (!task.date?.start) return null;
-  return task.date.start.slice(0, 10);
+  if (task.date.start.length <= 10) return task.date.start; // date-only — already unambiguous
+  return chicagoDay(new Date(task.date.start));
 }

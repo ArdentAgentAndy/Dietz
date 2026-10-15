@@ -1,6 +1,7 @@
-import { store } from './store.js?v=60';
+import { store } from './store.js?v=61';
 
 const CACHE_KEY = 'dietz:notionCache';
+const SCHEMA_CACHE_KEY = 'dietz:notionSchemaCache';
 
 function getConfig() {
   const settings = store.table('Settings');
@@ -59,6 +60,42 @@ export async function fetchNotionTasks() {
   if (data.error) return { tasks: [], error: data.error };
   setCachedNotionTasks(data.tasks || []);
   return { tasks: data.tasks || [], error: null };
+}
+
+// The real Course/Project/Lead select-option lists, straight from Notion's
+// schema — js/views/calendar.js uses this to reject a typo or brand-new
+// value before it's ever submitted (posting an unrecognized name to a
+// `select` property doesn't error, it silently creates a new option).
+// Read synchronously (like getCachedNotionTasks) so validation can run
+// without waiting on a fetch; undefined/null until the first successful
+// fetchNotionSchema() call, in which case validation is skipped rather than
+// blocking on a cache miss.
+export function getCachedNotionSchema() {
+  try {
+    const raw = localStorage.getItem(SCHEMA_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCachedNotionSchema(schema) {
+  try {
+    localStorage.setItem(SCHEMA_CACHE_KEY, JSON.stringify(schema));
+  } catch (e) {
+    // ignore (private mode, quota, etc.) — cache is a convenience only
+  }
+}
+
+export async function fetchNotionSchema() {
+  const config = getConfig();
+  if (!config) return { schema: null, error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(`${config.url}?action=notion-schema&token=${encodeURIComponent(config.token)}`);
+  const data = await res.json();
+  if (data.error) return { schema: null, error: data.error };
+  setCachedNotionSchema(data);
+  return { schema: data, error: null };
 }
 
 // property: 'Urgent' | '?' (whitelisted server-side too — see Code.gs).

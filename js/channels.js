@@ -84,6 +84,7 @@ export const CHANNELS = [
     id: 'contacts',
     label: 'Contacts',
     icon: '👥',
+    route: '/contacts',
     subchannels: [],
   },
 ];

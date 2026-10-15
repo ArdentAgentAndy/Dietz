@@ -1,5 +1,5 @@
-import { HOME, CHANNELS } from '../channels.js?v=60';
-import { escapeHtml } from '../format.js?v=60';
+import { HOME, CHANNELS } from '../channels.js?v=61';
+import { escapeHtml } from '../format.js?v=61';
 
 let container = null;
 // -1 = nothing selected yet (fresh page visit) — the first Left/Right press
@@ -7,11 +7,11 @@ let container = null;
 // point, see moveSelection.
 let selectedIndex = -1;
 // Index into the currently selected channel's subchannels, or -1 — set by a
-// number key (see selectByNumber), cleared whenever the channel selection
-// itself changes. Only ever meaningful alongside a non—-1 selectedIndex.
-// Selecting a subchannel this way doesn't navigate by itself; Enter commits
-// it (see confirmSelection) — same two-step select-then-confirm as the top
-// nav's ArrowUp/Down + Enter.
+// number key (see selectByNumber) or Up/Down (see moveSubSelection), cleared
+// whenever the channel selection itself changes. Only ever meaningful
+// alongside a non—-1 selectedIndex. Selecting a subchannel this way doesn't
+// navigate by itself; Enter commits it (see confirmSelection) — same
+// two-step select-then-confirm as the top nav's ArrowUp/Down + Enter.
 let selectedSubIndex = -1;
 
 export function render(rootEl) {
@@ -28,7 +28,7 @@ export function render(rootEl) {
   document.body.classList.add('menu-no-scroll');
 
   window.addEventListener('keydown', onKeyDown);
-  rebuild();
+  build();
 }
 
 export function unmount() {
@@ -68,7 +68,7 @@ function moveSelection(delta) {
     selectedIndex = ((selectedIndex + delta) % n + n) % n;
   }
   selectedSubIndex = -1;
-  rebuild();
+  applySelectionClasses();
 }
 
 // Number keys only ever pick among the *currently selected* channel's
@@ -81,7 +81,25 @@ function selectByNumber(n) {
   const current = selectedIndex !== -1 ? CHANNELS[selectedIndex] : null;
   if (!current || n > current.subchannels.length) return;
   selectedSubIndex = n - 1;
-  rebuild();
+  applySelectionClasses();
+}
+
+// Up/Down cycle through the *currently selected* channel's subchannels —
+// same top-to-bottom order the number keys and the pills' own layout use
+// (see subchannelsHtml's comment on why data order already matches visual
+// order), wrapping around same as Left/Right does for channels. A no-op
+// with no channel selected, or one with no subchannels at all.
+function moveSubSelection(delta) {
+  if (selectedIndex === -1) return;
+  const subs = CHANNELS[selectedIndex].subchannels;
+  if (!subs.length) return;
+  if (selectedSubIndex === -1) {
+    selectedSubIndex = delta > 0 ? 0 : subs.length - 1;
+  } else {
+    const n = subs.length;
+    selectedSubIndex = ((selectedSubIndex + delta) % n + n) % n;
+  }
+  applySelectionClasses();
 }
 
 // Enter commits whatever is currently selected: a chosen subchannel takes
@@ -118,6 +136,16 @@ function onKeyDown(e) {
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
     moveSelection(-1);
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    moveSubSelection(1);
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    moveSubSelection(-1);
     return;
   }
   if (e.key === 'Enter') {
@@ -246,12 +274,11 @@ function subchannelsHtml(channel, i) {
   const dist = subDist(parentAngle);
   return channel.subchannels.map((s, k) => {
     const angle = angles[k];
-    const isSelected = i === selectedIndex && k === selectedSubIndex;
     const line = subchannelLine(angle, dist);
     return `
       <div class="menu-sub-line" style="--sub-line-angle:${line.angleDeg.toFixed(2)}deg; --sub-line-dist:${line.length.toFixed(2)}px;"></div>
       <div class="menu-subchannel" style="--sub-angle:${angle}deg; --sub-dist:${dist}px;">
-        <div class="menu-sub-pill${isSelected ? ' is-selected' : ''}" data-subchannel="${escapeHtml(channel.id)}:${escapeHtml(s.id)}" title="[${k + 1}] ${escapeHtml(s.label)}">
+        <div class="menu-sub-pill" data-subchannel="${escapeHtml(channel.id)}:${escapeHtml(s.id)}" title="[${k + 1}] ${escapeHtml(s.label)}">
           <span class="menu-sub-pill-label mono">${escapeHtml(s.label)}</span>
         </div>
       </div>
@@ -261,7 +288,7 @@ function subchannelsHtml(channel, i) {
 
 function circlesHtml() {
   return CHANNELS.map((c, i) => `
-    <div class="menu-channel-wrap${i === selectedIndex ? ' is-selected' : ''}" style="--angle:${channelAngle(i)}deg;">
+    <div class="menu-channel-wrap" style="--angle:${channelAngle(i)}deg;">
       <div class="menu-channel-circle" data-channel="${escapeHtml(c.id)}">
         <span class="menu-channel-icon" aria-hidden="true">${c.icon || ''}</span>
         <span class="menu-channel-label mono">${escapeHtml(c.label)}</span>
@@ -271,11 +298,49 @@ function circlesHtml() {
   `).join('');
 }
 
-function rebuild() {
+// One big 45deg hover wedge per channel (see .menu-sector in styles.css for
+// the actual shape/geometry) — [data-sector] is matched up with the same
+// index's .menu-channel-wrap in build() below to toggle .is-sector-hover.
+function sectorsHtml() {
+  return CHANNELS.map((c, i) => `<div class="menu-sector" data-sector="${escapeHtml(c.id)}" style="--angle:${channelAngle(i)}deg;"></div>`).join('');
+}
+
+// Pushes the current selectedIndex/selectedSubIndex onto the already-built
+// DOM by toggling classes on the existing elements, rather than tearing the
+// whole constellation down and rebuilding it (what this used to do, back
+// when it was part of a single rebuild() called on every selection change).
+// That mattered once the subchannel reveal became a CSS opacity transition
+// (see .menu-sub-line/.menu-subchannel in styles.css): a transition only
+// plays when an existing element's style changes across two frames, not
+// when a brand-new element is inserted with its end-state already baked
+// into the HTML — which is exactly what innerHTML-replacing on every
+// keypress/click would do, uselessly flash-cutting straight to the end
+// state instead of fading.
+function applySelectionClasses() {
+  if (!container) return;
+  const wraps = container.querySelectorAll('.menu-channel-wrap');
+  wraps.forEach((wrap, idx) => {
+    wrap.classList.toggle('is-selected', idx === selectedIndex);
+  });
+  container.querySelectorAll('.menu-sub-pill').forEach((pill) => {
+    const [channelId, subId] = pill.dataset.subchannel.split(':');
+    const idx = CHANNELS.findIndex((c) => c.id === channelId);
+    const channel = idx !== -1 ? CHANNELS[idx] : null;
+    const subIdx = channel ? channel.subchannels.findIndex((s) => s.id === subId) : -1;
+    pill.classList.toggle('is-selected', idx === selectedIndex && subIdx === selectedSubIndex);
+  });
+}
+
+// Builds the constellation once (selectedIndex/selectedSubIndex are always
+// -1 at this point, nothing to re-render for) and wires up every listener —
+// selection changes afterward go through applySelectionClasses() instead,
+// not back through here. See that function's comment for why.
+function build() {
   if (!container) return;
   container.innerHTML = `
     <div class="menu-stage">
       <div class="menu-constellation">
+        ${sectorsHtml()}
         ${linesHtml()}
         <button type="button" class="menu-octagon" data-action="home" title="[H] Home">
           <span class="menu-octagon-inner">
@@ -300,7 +365,7 @@ function rebuild() {
     el.addEventListener('click', () => {
       selectedIndex = idx;
       selectedSubIndex = -1;
-      rebuild();
+      applySelectionClasses();
     });
     if (channel.route) {
       el.addEventListener('dblclick', () => goToChannel(channel));
@@ -311,5 +376,17 @@ function rebuild() {
     const channel = CHANNELS.find((c) => c.id === channelId);
     const sub = channel?.subchannels.find((s) => s.id === subId);
     if (sub) el.addEventListener('click', () => goToSubchannel(sub));
+  });
+  // Hovering a channel's outer sector shows its subchannels the same way
+  // hovering the circle itself does (see .is-sector-hover in styles.css) —
+  // purely a visual hover state, deliberately not touching selectedIndex,
+  // same as :hover on the circle doesn't either.
+  const wraps = container.querySelectorAll('.menu-channel-wrap');
+  container.querySelectorAll('[data-sector]').forEach((el) => {
+    const idx = CHANNELS.findIndex((c) => c.id === el.dataset.sector);
+    const wrap = idx !== -1 ? wraps[idx] : null;
+    if (!wrap) return;
+    el.addEventListener('mouseenter', () => wrap.classList.add('is-sector-hover'));
+    el.addEventListener('mouseleave', () => wrap.classList.remove('is-sector-hover'));
   });
 }

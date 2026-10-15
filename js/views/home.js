@@ -7,13 +7,13 @@
 // `unmount`, mounted into its own sub-container, so mark/urgent/delete/
 // duration all work here exactly as they do on the Today page itself
 // (both write through to the same Notion cache either way).
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=60';
-import { escapeHtml, hexToRgba } from '../format.js?v=60';
-import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=60';
-import { hoursChartConfig } from './logging.js?v=60';
-import { coursesAndGpaHtml } from './courses.js?v=60';
-import { trackViewHtml } from './roadmap.js?v=60';
-import { render as renderTodayPanel, unmount as unmountTodayPanel } from './today.js?v=60';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=61';
+import { escapeHtml, hexToRgba } from '../format.js?v=61';
+import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=61';
+import { hoursChartConfig } from './logging.js?v=61';
+import { coursesAndGpaHtml } from './courses.js?v=61';
+import { trackViewHtml } from './roadmap.js?v=61';
+import { render as renderTodayPanel, unmount as unmountTodayPanel } from './today.js?v=61';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [
@@ -156,8 +156,9 @@ function weekMirrorHtml() {
 
   const columnsHtml = days.map((d, i) => {
     const items = byDay[isoDay(d)] || [];
+    const isToday = isoDay(d) === isoDay(new Date());
     return `
-      <div class="cal-day-col">
+      <div class="cal-day-col${isToday ? ' is-today' : ''}">
         <div class="cal-day-head mono"><span>${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></span></div>
         <div class="cal-day-items">${items.map(homeChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
       </div>

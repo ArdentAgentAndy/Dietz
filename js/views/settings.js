@@ -1,9 +1,9 @@
-import { store } from '../store.js?v=60';
-import { escapeHtml } from '../format.js?v=60';
-import { requestSync } from '../sync.js?v=60';
-import { notificationPermission, enableNotifications } from '../push.js?v=60';
+import { store } from '../store.js?v=61';
+import { escapeHtml } from '../format.js?v=61';
+import { requestSync } from '../sync.js?v=61';
+import { notificationPermission, enableNotifications } from '../push.js?v=61';
 
-const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
+const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts'];
 
 let container = null;
 
@@ -51,6 +51,13 @@ function rebuild() {
   container.innerHTML = `
     <section class="card">
       <h1 class="mono">Settings</h1>
+    </section>
+
+    <section class="card">
+      <h2 class="mono">Me</h2>
+      <label>Phone
+        <input type="text" data-setting="phone" value="${escapeHtml(getSetting('phone'))}" placeholder="(217) 555-0123">
+      </label>
     </section>
 
     <section class="card">

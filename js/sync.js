@@ -1,7 +1,7 @@
-import { store } from './store.js?v=60';
-import { compactOldSessions } from './compaction.js?v=60';
+import { store } from './store.js?v=61';
+import { compactOldSessions } from './compaction.js?v=61';
 
-const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom'];
+const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
 const RETRY_BASE_MS = 3000;
 const RETRY_MAX_MS = 60000;
@@ -95,6 +95,25 @@ async function pullBootstrap(config) {
   for (const table of TABLE_NAMES) {
     store.data[table] = data[table] || [];
   }
+
+  // Re-apply anything still queued in the outbox on top of what the server
+  // just returned — a change made while this pull was in flight (or one
+  // the server hasn't caught up to serving back yet) is still correct and
+  // still pending; the wholesale overwrite above must not silently drop it
+  // (it would otherwise persist in its reverted state below, and a refresh
+  // before the next sync cycle re-pushes it would make the change look lost).
+  for (const op of store.data.outbox) {
+    const rows = store.data[op.table];
+    if (!rows) continue;
+    if (op.op === 'upsert') {
+      const idx = rows.findIndex((r) => r.id === op.row.id);
+      if (idx >= 0) rows[idx] = { ...rows[idx], ...op.row };
+      else rows.push(op.row);
+    } else if (op.op === 'delete') {
+      store.data[op.table] = rows.filter((r) => r.id !== op.id);
+    }
+  }
+
   store.persist();
   // Freshly-pulled data can include old sessions this device hasn't seen
   // yet (e.g. entered from elsewhere) — sweep them into daily totals too.

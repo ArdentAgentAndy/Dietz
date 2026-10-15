@@ -26,6 +26,11 @@ var TABLES = {
   // its own name/credits rather than just referencing a catalog id.
   RoadmapStatus: { columns: ['id', 'status', 'semester'], key: ['id'] },
   RoadmapCustom: { columns: ['id', 'subject', 'number', 'name', 'credits', 'status', 'semester'], key: ['id'] },
+  // Contacts (#/contacts): category is one of 'Professors', 'Projects',
+  // 'Advisors/Staff' (js/views/contacts.js's CONTACT_CATEGORIES) — a
+  // Projects entry is still a person (whoever you'd contact about that
+  // project), same shape as every other box.
+  Contacts: { columns: ['id', 'category', 'name', 'email', 'building', 'room', 'notes'], key: ['id'] },
 };
 
 function checkToken_(token) {
@@ -178,6 +183,10 @@ function doGet(e) {
 
   if (e.parameter.action === 'notion-tasks') {
     return jsonOut_(notionQueryTasks_());
+  }
+
+  if (e.parameter.action === 'notion-schema') {
+    return jsonOut_(notionSchema_());
   }
 
   if (e.parameter.action === 'canvas-events') {
@@ -491,6 +500,32 @@ function notionQueryTasks_() {
   }
 
   return { tasks: tasks };
+}
+
+// Course/Project/Lead's real, authoritative select-option lists straight
+// from Notion's own schema — the frontend uses this to reject a typo or a
+// brand-new value before it's ever submitted (see calendar.js's
+// openTaskDialog), since posting an unrecognized name to a `select`
+// property doesn't error, it silently creates a new option every time.
+function notionSchema_() {
+  var props = PropertiesService.getScriptProperties();
+  var notionToken = props.getProperty('NOTION_TOKEN');
+  var databaseId = props.getProperty('NOTION_DATABASE_ID');
+  if (!notionToken || !databaseId) return { error: 'notion not configured' };
+
+  var response = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + databaseId, {
+    method: 'get',
+    headers: { Authorization: 'Bearer ' + notionToken, 'Notion-Version': '2022-06-28' },
+    muteHttpExceptions: true,
+  });
+  if (response.getResponseCode() !== 200) return { error: 'notion api error: ' + response.getContentText() };
+
+  var properties = JSON.parse(response.getContentText()).properties;
+  function optionsFor(name) {
+    var p = properties[name];
+    return (p && p.select && p.select.options) ? p.select.options.map(function (o) { return o.name; }) : [];
+  }
+  return { course: optionsFor('Course'), project: optionsFor('Project'), lead: optionsFor('Lead') };
 }
 
 function doPost(e) {

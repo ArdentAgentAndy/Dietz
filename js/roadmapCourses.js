@@ -22,6 +22,26 @@
 // an AE requirement and a valid Math-minor elective) lists every program
 // it applies to — Track view sums fulfillment per program independently,
 // so marking it complete counts toward both at once.
+//
+// `prereqs: ['ID', ...]` (js/views/roadmap.js's prereqStatus) is AND-only —
+// every listed id must itself be satisfied, there's no way to express an
+// "either A or B" prereq. Populated deliberately conservatively: only where
+// there's a single, confident, in-this-catalog chain (same-subject
+// sequential courses like Calc II->III, Statics->Dynamics, Intro CS I->II —
+// paired/numbered course families where the dependency is unambiguous even
+// without the current catalog text in hand). Left blank — not guessed —
+// wherever the real prerequisite is a choice between 2+ catalog courses
+// (e.g. Calc I is MATH220 or MATH221; marking just one as "the" prereq
+// would falsely warn students who took the other), or where the real
+// prerequisite is a course this catalog doesn't track at all (same
+// standard this file already applies to course inclusion — see CS420/
+// CS461's removal note below). A few cross-subject chains (AE202->AE311,
+// MATH285->441->442) are included with a comment flagging them as somewhat
+// less certain than the same-family sequences — worth a verification pass
+// against the live catalog before leaning on them for anything important.
+// Everything else (AE's design-capstone lead-ins, ECE's circuits/fields
+// chain, most 400-level MATH/CS electives, the foundational intro courses)
+// is intentionally left without prereqs rather than guessed at.
 
 export const COURSES = [
   // --- AE: Orientation (choose-all, 2 of 2) ------------------------------
@@ -52,13 +72,13 @@ export const COURSES = [
     programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
   { id: 'MATH231', subject: 'MATH', number: 231, name: 'Calculus II', credits: 3,
     programs: [{ program: 'AE', category: 'Foundational Math and Science' }] },
-  { id: 'MATH241', subject: 'MATH', number: 241, name: 'Calculus III', credits: 4,
+  { id: 'MATH241', subject: 'MATH', number: 241, name: 'Calculus III', credits: 4, prereqs: ['MATH231'],
     programs: [{ program: 'AE', category: 'Foundational Math and Science' },
                { program: 'MATH', category: 'MATH Core' }] },
-  { id: 'MATH257', subject: 'MATH', number: 257, name: 'Linear Algebra w/ Computational Applications', credits: 3,
+  { id: 'MATH257', subject: 'MATH', number: 257, name: 'Linear Algebra w/ Computational Applications', credits: 3, prereqs: ['MATH231'],
     programs: [{ program: 'AE', category: 'Foundational Math and Science' },
                { program: 'MATH', category: 'Linalg' }] },
-  { id: 'MATH285', subject: 'MATH', number: 285, name: 'Intro Differential Equations', credits: 3,
+  { id: 'MATH285', subject: 'MATH', number: 285, name: 'Intro Differential Equations', credits: 3, prereqs: ['MATH231'],
     programs: [{ program: 'AE', category: 'Foundational Math and Science' },
                { program: 'MATH', category: 'DFQ' }] },
   { id: 'PHYS211', subject: 'PHYS', number: 211, name: 'University Physics: Mechanics', credits: 4,
@@ -71,23 +91,25 @@ export const COURSES = [
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'AE202', subject: 'AE', number: 202, name: 'Aerospace Flight Mechanics', credits: 3,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
-  { id: 'AE311', subject: 'AE', number: 311, name: 'Incompressible Flow', credits: 3,
+  // AE202->AE311: cross-subject, flagged as somewhat less certain than the
+  // same-numbered-family chains below — see the prereqs policy note above.
+  { id: 'AE311', subject: 'AE', number: 311, name: 'Incompressible Flow', credits: 3, prereqs: ['AE202'],
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
-  { id: 'AE312', subject: 'AE', number: 312, name: 'Compressible Flow', credits: 3,
+  { id: 'AE312', subject: 'AE', number: 312, name: 'Compressible Flow', credits: 3, prereqs: ['AE311'],
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'AE321', subject: 'AE', number: 321, name: 'Mechanics of Aerospace Structures', credits: 3,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
-  { id: 'AE323', subject: 'AE', number: 323, name: 'Applied Aerospace Structures', credits: 3,
+  { id: 'AE323', subject: 'AE', number: 323, name: 'Applied Aerospace Structures', credits: 3, prereqs: ['AE321'],
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'AE352', subject: 'AE', number: 352, name: 'Aerospace Dynamical Systems', credits: 3,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
-  { id: 'AE353', subject: 'AE', number: 353, name: 'Aerospace Control Systems', credits: 3,
+  { id: 'AE353', subject: 'AE', number: 353, name: 'Aerospace Control Systems', credits: 3, prereqs: ['AE352'],
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'AE370', subject: 'AE', number: 370, name: 'Aerospace Numerical Methods', credits: 3,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'AE442', subject: 'AE', number: 442, name: 'Aerospace Systems Design I', credits: 3,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
-  { id: 'AE443', subject: 'AE', number: 443, name: 'Aerospace Systems Design II', credits: 3,
+  { id: 'AE443', subject: 'AE', number: 443, name: 'Aerospace Systems Design II', credits: 3, prereqs: ['AE442'],
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'AE460', subject: 'AE', number: 460, name: 'Aerodynamics & Propulsion Lab', credits: 2,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
@@ -104,7 +126,7 @@ export const COURSES = [
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
   { id: 'TAM210', subject: 'TAM', number: 210, name: 'Introduction to Statics', credits: 2,
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
-  { id: 'TAM212', subject: 'TAM', number: 212, name: 'Introductory Dynamics', credits: 3,
+  { id: 'TAM212', subject: 'TAM', number: 212, name: 'Introductory Dynamics', credits: 3, prereqs: ['TAM210'],
     programs: [{ program: 'AE', category: 'AE Technical Core' }] },
 
   // --- AE: Propulsion (choose 1 of 2) ------------------------------------
@@ -150,7 +172,9 @@ export const COURSES = [
   { id: 'MATH416', subject: 'MATH', number: 416, name: 'Abstract Linear Algebra', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
                { program: 'MATH', category: 'MATH Upper Electives' }] },
-  { id: 'MATH442', subject: 'MATH', number: 442, name: 'Intro Partial Differential Equations', credits: 3,
+  // MATH285->441->442: cross-subject-sequence chain, flagged as somewhat
+  // less certain than the same-numbered-family chains — see policy note.
+  { id: 'MATH442', subject: 'MATH', number: 442, name: 'Intro Partial Differential Equations', credits: 3, prereqs: ['MATH441'],
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
                { program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH446', subject: 'MATH', number: 446, name: 'Applied Complex Analysis', credits: 3,
@@ -163,7 +187,7 @@ export const COURSES = [
   { id: 'MATH484', subject: 'MATH', number: 484, name: 'Nonlinear Programming', credits: 3,
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
                { program: 'MATH', category: 'MATH Upper Electives' }] },
-  { id: 'CS225', subject: 'CS', number: 225, name: 'Data Structures', credits: 4,
+  { id: 'CS225', subject: 'CS', number: 225, name: 'Data Structures', credits: 4, prereqs: ['CS128', 'CS173'],
     programs: [{ program: 'AE', category: 'Technical Electives — Open' },
                { program: 'CS', category: 'Data' }] },
   // CS420 (titled "Embedded Systems" — real course is Parallel Progrmg:
@@ -203,7 +227,7 @@ export const COURSES = [
   // "intro to proofs" course), everything else here is Upper (400-level).
   { id: 'MATH314', subject: 'MATH', number: 314, name: 'Introduction to Higher Mathematics', credits: 3, programs: [{ program: 'MATH', category: 'MATH Core' }] },
   { id: 'MATH415', subject: 'MATH', number: 415, name: 'Applied Linear Algebra', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
-  { id: 'MATH441', subject: 'MATH', number: 441, name: 'Differential Equations', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'MATH441', subject: 'MATH', number: 441, name: 'Differential Equations', credits: 3, prereqs: ['MATH285'], programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH424', subject: 'MATH', number: 424, name: 'Honors Real Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH444', subject: 'MATH', number: 444, name: 'Elementary Real Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH447', subject: 'MATH', number: 447, name: 'Real Variables', credits: 4, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
@@ -212,11 +236,11 @@ export const COURSES = [
   { id: 'MATH423', subject: 'MATH', number: 423, name: 'Differential Geometry', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'MATH481', subject: 'MATH', number: 481, name: 'Vector and Tensor Analysis', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'STAT400', subject: 'STAT', number: 400, name: 'Statistics and Probability I', credits: 4, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
-  { id: 'STAT410', subject: 'STAT', number: 410, name: 'Statistics and Probability II', credits: 3, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
+  { id: 'STAT410', subject: 'STAT', number: 410, name: 'Statistics and Probability II', credits: 3, prereqs: ['STAT400'], programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
   { id: 'STAT420', subject: 'STAT', number: 420, name: 'Methods of Applied Statistics', credits: 4, programs: [{ program: 'MATH', category: 'MATH Upper Electives' }] },
 
   // --- CS minor only: remaining required courses --------------------------
-  { id: 'CS128', subject: 'CS', number: 128, name: 'Introduction to Computer Science II', credits: 3,
+  { id: 'CS128', subject: 'CS', number: 128, name: 'Introduction to Computer Science II', credits: 3, prereqs: ['CS124'],
     programs: [{ program: 'CS', category: 'CS Core' }] },
   { id: 'CS173', subject: 'CS', number: 173, name: 'Discrete Structures', credits: 3,
     programs: [{ program: 'CS', category: 'Discrete' }] },

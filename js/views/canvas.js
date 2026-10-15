@@ -1,8 +1,8 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=60';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=60';
-import { hexForCourse } from '../notionColors.js?v=60';
-import { escapeHtml, hexToRgba } from '../format.js?v=60';
-import { store } from '../store.js?v=60';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=61';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=61';
+import { hexForCourse } from '../notionColors.js?v=61';
+import { escapeHtml, hexToRgba } from '../format.js?v=61';
+import { store } from '../store.js?v=61';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -434,8 +434,9 @@ function weekViewHtml(events) {
       ${days.map((d, i) => {
         const key = isoDay(d);
         const items = byDay[key] || [];
+        const isToday = key === isoDay(new Date());
         return `
-          <div class="cal-day-col">
+          <div class="cal-day-col${isToday ? ' is-today' : ''}">
             <div class="cal-day-head mono">${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></div>
             <div class="cal-day-items">${items.map(eventChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
           </div>
@@ -466,10 +467,11 @@ function monthViewHtml(events) {
         const key = isoDay(d);
         const items = byDay[key] || [];
         const inMonth = d.getMonth() === anchor.getMonth();
+        const isToday = key === isoDay(new Date());
         const shown = items.slice(0, MAX_PER_CELL);
         const extra = items.length - shown.length;
         return `
-          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}">
+          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}">
             <div class="cal-month-daynum mono">${d.getDate()}</div>
             ${shown.map(eventChipHtml).join('')}
             ${extra > 0 ? `<p class="muted cal-more">+${extra} more</p>` : ''}

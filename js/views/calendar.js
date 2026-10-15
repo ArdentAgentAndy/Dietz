@@ -1,8 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=60';
-import { hexForNotionColor } from '../notionColors.js?v=60';
-import { escapeHtml, hexToRgba } from '../format.js?v=60';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=60';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=60';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=61';
+import { hexForNotionColor } from '../notionColors.js?v=61';
+import { escapeHtml, hexToRgba } from '../format.js?v=61';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=61';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=61';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -295,6 +295,10 @@ export function render(rootEl) {
     `;
   }
   load();
+  // Background-only, non-blocking — getCachedNotionSchema() just reads
+  // whatever's already cached (or null) until this resolves; validation in
+  // openTaskDialog skips itself on a cache miss rather than waiting on it.
+  fetchNotionSchema();
 }
 
 export function unmount() {
@@ -680,8 +684,9 @@ function weekViewHtml(tasks) {
       ${days.map((d, i) => {
         const key = isoDay(d);
         const items = byDay[key] || [];
+        const isToday = key === isoDay(new Date());
         return `
-          <div class="cal-day-col" data-date="${key}">
+          <div class="cal-day-col${isToday ? ' is-today' : ''}" data-date="${key}">
             <div class="cal-day-head mono">
               <span>${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></span>
               ${dayPlusButtonHtml(key)}
@@ -717,10 +722,11 @@ function monthViewHtml(tasks) {
         const key = isoDay(d);
         const items = byDay[key] || [];
         const inMonth = d.getMonth() === anchor.getMonth();
+        const isToday = key === isoDay(new Date());
         const shown = items.slice(0, MAX_PER_CELL);
         const extra = items.length - shown.length;
         return `
-          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}" data-date="${key}">
+          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}" data-date="${key}">
             <div class="cal-month-daynum mono">
               <span>${d.getDate()}</span>
               ${dayPlusButtonHtml(key)}
@@ -900,6 +906,10 @@ function openTaskDialog(existing, defaultDate) {
         ${datalistFor(category).map((v) => `<option value="${escapeHtml(v)}">`).join('')}
       </datalist>
     `;
+    // Clears a previous submit's "not a real Course/Project/Lead" error
+    // (see the submit handler below) the moment they start correcting it,
+    // instead of leaving the native validation bubble up until next submit.
+    wrap.querySelector('[name="subValue"]')?.addEventListener('input', (e) => e.target.setCustomValidity(''));
   }
 
   dialog.innerHTML = `
@@ -978,6 +988,22 @@ function openTaskDialog(existing, defaultDate) {
     const data = new FormData(form);
     const category = data.get('category');
     const prop = subFieldProp(category);
+    const subValue = data.get('subValue');
+
+    // Course/Project/Lead are real Notion select properties — posting an
+    // unrecognized name doesn't error, it silently creates a new option
+    // every time, slowly polluting the schema. Reject it here instead,
+    // against the real option list fetched from Notion (see notion.js's
+    // fetchNotionSchema). Only enforced once that's actually been fetched
+    // at least once (validOptions undefined on a cache miss) — never blocks
+    // on first-ever load or while offline.
+    const validOptions = getCachedNotionSchema()?.[prop];
+    if (prop && subValue && validOptions && !validOptions.includes(subValue)) {
+      const subInput = form.querySelector('[name="subValue"]');
+      subInput.setCustomValidity(`"${subValue}" isn't a real ${subFieldLabel(category)} — pick one from the list.`);
+      form.reportValidity();
+      return;
+    }
 
     const fields = {
       name: data.get('name'),

@@ -6,9 +6,9 @@
 // server-side (apps-script/Code.gs's publicPayload_) — no task names,
 // courses, locations, or instructors, just category-derived generic labels,
 // their Notion color, and timing.
-import { fetchPublicData, getCachedPublicData, sendPublicPing } from '../publicApi.js?v=60';
-import { escapeHtml, hexToRgba } from '../format.js?v=60';
-import { hexForNotionColor } from '../notionColors.js?v=60';
+import { fetchPublicData, getCachedPublicData, sendPublicPing } from '../publicApi.js?v=61';
+import { escapeHtml, hexToRgba } from '../format.js?v=61';
+import { hexForNotionColor } from '../notionColors.js?v=61';
 
 const CHICAGO_TZ = 'America/Chicago';
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -20,8 +20,12 @@ const PUBLIC_ITEM_LABELS = {
 };
 
 let container = null;
-let useLocalTz = false;
+// Local by default — the viewer's own clock, not the owner's — switched to
+// Chicago only when they explicitly ask for it (see headerHtml's toggle
+// button).
+let useLocalTz = true;
 let state = { busy: [], items: [], classes: [], error: null, loading: true };
+let clockInterval = null;
 
 export function render(rootEl) {
   container = rootEl;
@@ -35,10 +39,21 @@ export function render(rootEl) {
   }
   rebuild();
   load();
+  // Keeps the clock box and busy/free color live without a manual refresh —
+  // tick() mirrors load()'s own guard so it never yanks an open ping dialog
+  // out from under someone mid-type.
+  clockInterval = setInterval(tick, 30000);
 }
 
 export function unmount() {
+  clearInterval(clockInterval);
+  clockInterval = null;
   container = null;
+}
+
+function tick() {
+  if (!container || container.querySelector('#modal-dialog')?.open) return;
+  rebuild();
 }
 
 async function load() {
@@ -105,19 +120,49 @@ function dateLabel(dayStr) {
 // refetch, since the server already sent real ISO instants either way.
 function formatTime(date) {
   return date.toLocaleTimeString(undefined, {
-    hour: 'numeric',
+    hour: '2-digit',
     minute: '2-digit',
-    hour12: true,
+    hour12: false,
     timeZone: useLocalTz ? undefined : CHICAGO_TZ,
   });
+}
+
+// "Busy" = this instant falls inside any scheduled item or class's
+// [start, start+duration] window — a zero-duration entry (no `duration`)
+// only matches at the exact start minute, which is fine/expected.
+function isBusyNow(now) {
+  const t = now.getTime();
+  return [...state.items, ...state.classes].some((e) => {
+    if (!e.start) return false;
+    const start = new Date(e.start).getTime();
+    const end = start + (e.duration ? e.duration * 60000 : 0);
+    return t >= start && t <= end;
+  });
+}
+
+// Replaces the old plain "Public" title — the date, the viewer's own
+// current time, and Chicago time (the owner's), red/green per isBusyNow so
+// a visitor can tell at a glance whether now's a good time to reach out.
+function clockBoxHtml() {
+  const now = new Date();
+  const today = chicagoDay(now);
+  const fmt = (tz) => now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz });
+  const busy = isBusyNow(now);
+  return `
+    <div class="public-clock-box ${busy ? 'is-busy' : 'is-free'}">
+      <span class="public-clock-segment mono">${weekdayName(today)} ${dateLabel(today)}</span>
+      <span class="public-clock-segment mono"><span class="muted">Local</span> ${fmt(undefined)}</span>
+      <span class="public-clock-segment mono"><span class="muted">Chicago</span> ${fmt(CHICAGO_TZ)}</span>
+    </div>
+  `;
 }
 
 function headerHtml() {
   return `
     <div class="row-between" style="margin-bottom: 8px;">
-      <h1 class="mono">Public</h1>
+      ${clockBoxHtml()}
       <div style="display: flex; gap: 8px;">
-        <button type="button" class="btn" data-action="toggle-tz">${useLocalTz ? 'Local time' : 'Chicago time'}</button>
+        <button type="button" class="btn${useLocalTz ? '' : ' active'}" data-action="toggle-tz">${useLocalTz ? 'Display Chicago time' : 'Displaying Chicago time'}</button>
         <button type="button" class="btn" data-action="send-ping">Ping</button>
       </div>
     </div>
@@ -197,12 +242,16 @@ function classCardHtml(cls) {
 // "done" treatment used elsewhere for a completed task (.is-past below),
 // applied to the whole column rather than per-card since there's nothing
 // left to distinguish within an already-over day.
+function isToday(day) {
+  return day === chicagoDay(new Date());
+}
+
 function dayCardHtml(day, busyByDay, itemsByDay) {
   const minutes = busyByDay[day] || 0;
   const cards = (itemsByDay[day] || []).slice(0, 3).map(itemCardHtml).join('') || '<p class="muted cal-empty">—</p>';
 
   return `
-    <div class="cal-day-col public-day-col${isPastDay(day) ? ' is-past' : ''}">
+    <div class="cal-day-col public-day-col${isPastDay(day) ? ' is-past' : ''}${isToday(day) ? ' is-today' : ''}">
       <div class="home-day-total ${busyLevelClass(minutes)}"><span class="mono">${minutes > 0 ? `${(minutes / 60).toFixed(1)}h` : '—'}</span></div>
       <div class="cal-day-head mono"><span>${weekdayName(day)} <span class="muted">${dateLabel(day)}</span></span></div>
       <div class="cal-day-items public-day-items">${cards}</div>
@@ -237,7 +286,7 @@ function classesSectionHtml(weekDays) {
   const cells = weekDays.map((day) => {
     const cards = (classesByDay[day] || []).map(classCardHtml).join('') || '<p class="muted cal-empty">—</p>';
     return `
-      <div class="cal-day-col public-day-col${isPastDay(day) ? ' is-past' : ''}">
+      <div class="cal-day-col public-day-col${isPastDay(day) ? ' is-past' : ''}${isToday(day) ? ' is-today' : ''}">
         <div class="cal-day-head mono"><span>${weekdayName(day)} <span class="muted">${dateLabel(day)}</span></span></div>
         <div class="cal-day-items public-day-items">${cards}</div>
       </div>
@@ -269,37 +318,68 @@ function attachEvents() {
 function openPingDialog() {
   const dialog = container.querySelector('#modal-dialog');
 
-  dialog.innerHTML = `
-    <form method="dialog" class="modal-form">
-      <h2 class="mono">Ping</h2>
-      <label>Password <input type="password" name="password" required autocomplete="off"></label>
-      <p class="muted" data-ping-error style="color: var(--red); display: none;"></p>
-      <div class="modal-actions">
-        <button type="button" data-action="cancel">Cancel</button>
-        <button type="submit" class="btn-primary">Send</button>
-      </div>
-    </form>
-  `;
+  // Three swappable screens inside the one dialog element (same convention
+  // js/views/logging.js's openManageCategoryDialog uses) rather than a
+  // second native <dialog> — renderForm (the password prompt, optionally
+  // pre-filled/showing an error after a failed send) -> renderBusyWarning
+  // (only when isBusyNow, see below) -> doSend (Sending… / Ping sent.).
+  function renderForm(prefillPassword, error) {
+    dialog.innerHTML = `
+      <form method="dialog" class="modal-form">
+        <h2 class="mono">Ping</h2>
+        <label>Password <input type="password" name="password" value="${escapeHtml(prefillPassword || '')}" required autocomplete="off"></label>
+        <p class="muted" data-ping-error style="color: var(--red); display: ${error ? '' : 'none'};">${escapeHtml(error || '')}</p>
+        <div class="modal-actions">
+          <button type="button" data-action="cancel">Cancel</button>
+          <button type="submit" class="btn-primary">Send</button>
+        </div>
+      </form>
+    `;
+    const form = dialog.querySelector('form');
+    form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const password = new FormData(form).get('password');
+      if (isBusyNow(new Date())) {
+        renderBusyWarning(password);
+        return;
+      }
+      doSend(password);
+    });
+  }
 
-  const form = dialog.querySelector('form');
-  const errorEl = dialog.querySelector('[data-ping-error]');
-  const submitBtn = form.querySelector('[type="submit"]');
-  form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const password = new FormData(form).get('password');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Sending…';
-    errorEl.style.display = 'none';
+  // Shown instead of sending immediately when isBusyNow — an explicit
+  // extra confirm step, not a blocker: "Send anyway" still goes through.
+  function renderBusyWarning(password) {
+    dialog.innerHTML = `
+      <div class="modal-form">
+        <h2 class="mono">Ping</h2>
+        <p>The individual is currently busy. Are you sure?</p>
+        <div class="modal-actions">
+          <button type="button" data-action="back">Go back</button>
+          <button type="button" class="btn-primary" data-action="confirm-busy">Send anyway</button>
+        </div>
+      </div>
+    `;
+    dialog.querySelector('[data-action="back"]').addEventListener('click', () => renderForm(password));
+    dialog.querySelector('[data-action="confirm-busy"]').addEventListener('click', () => doSend(password));
+  }
+
+  async function doSend(password) {
+    dialog.innerHTML = `
+      <div class="modal-form">
+        <h2 class="mono">Ping</h2>
+        <p class="muted">Sending…</p>
+      </div>
+    `;
 
     const result = await sendPublicPing(password);
     if (result.ok) {
-      // Swap the form for a plain confirmation instead of just silently
-      // closing — the request already took a while (five sends, 2s apart,
-      // server-side — see Code.gs's doPost 'ping' branch), so the person
-      // sending it should see it actually went through, not just have the
-      // dialog vanish. Auto-closes shortly after; the dialog's own 'close'
-      // listener (below) still fires either way.
+      // Swap for a plain confirmation instead of just silently closing —
+      // the request already took a while (five sends, 2s apart, server-side
+      // — see Code.gs's doPost 'ping' branch), so the person sending it
+      // should see it actually went through. Auto-closes shortly after; the
+      // dialog's own 'close' listener (below) still fires either way.
       dialog.innerHTML = `
         <div class="modal-form">
           <h2 class="mono">Ping</h2>
@@ -309,15 +389,14 @@ function openPingDialog() {
       setTimeout(() => dialog.close(), 1500);
       return;
     }
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Send';
-    errorEl.textContent = result.error || 'Failed';
-    errorEl.style.display = '';
-  });
+    renderForm(password, result.error || 'Failed');
+  }
 
-  // Catches up on anything load()'s background refresh held back while
-  // this was open (see load()'s own guard above) — fires on every close
-  // path alike (Cancel, a successful send auto-closing, or Escape).
+  renderForm();
+
+  // Catches up on anything load()'s background refresh (or the clock tick)
+  // held back while this was open — fires on every close path alike
+  // (Cancel, a successful send auto-closing, or Escape).
   dialog.addEventListener('close', () => rebuild(), { once: true });
 
   dialog.showModal();
