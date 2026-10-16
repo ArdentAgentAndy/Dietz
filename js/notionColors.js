@@ -43,3 +43,16 @@ const COURSE_COLOR_NAME = {
 export function hexForCourse(course) {
   return hexForNotionColor(COURSE_COLOR_NAME[course]);
 }
+
+const PALETTE_NAMES = Object.keys(NOTION_COLOR_HEX).filter((name) => name !== 'default');
+
+// Deterministic color for a label with no fixed mapping of its own (a
+// Project/Research category's name — the "project/lead" sub-identity on
+// the Sessions list) — same palette as hexForCourse, picked by hashing the
+// string so a given name always lands on the same color across reloads.
+export function hexForLabel(label) {
+  if (!label) return NOTION_COLOR_HEX.default;
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0;
+  return NOTION_COLOR_HEX[PALETTE_NAMES[Math.abs(hash) % PALETTE_NAMES.length]];
+}

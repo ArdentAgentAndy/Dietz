@@ -46,11 +46,24 @@ export function totalMinutesForDay(dateISO) {
     .reduce((sum, s) => sum + s.minutes, 0);
 }
 
+// A timer-stopped session has a real start timestamp ("2026-10-13T14:30:00
+// .000Z"); a manual entry has only a plain date ("2026-10-13"), no
+// time-of-day. Comparing those two string shapes directly (the old
+// `b.start || b.date`) always sorted a manual entry *before* every timed
+// session on the same day, regardless of which one was actually logged
+// more recently — a bare date is a string-prefix of any datetime on that
+// same day, so it always sorts "less than" one. Padding a dateless entry
+// out to the end of its day puts it in with the rest of that day's
+// sessions instead of always jumping the queue.
+function sessionSortKey(s) {
+  return s.start || `${s.date}T23:59:59`;
+}
+
 export function recentSessions(limit = 10) {
   return store
     .table('Sessions')
     .filter((s) => s.source !== 'compacted')
-    .sort((a, b) => (b.start || b.date).localeCompare(a.start || a.date))
+    .sort((a, b) => sessionSortKey(b).localeCompare(sessionSortKey(a)))
     .slice(0, limit);
 }
 

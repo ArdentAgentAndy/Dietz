@@ -1,9 +1,10 @@
 import { store } from '../store.js?v=61';
 import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=61';
 import { clearCourseState, getCourseState } from '../courseState.js?v=61';
-import { escapeHtml } from '../format.js?v=61';
+import { escapeHtml, hexToRgba } from '../format.js?v=61';
 import { computeGrade } from '../grading.js?v=61';
 import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=61';
+import { hexForCourse } from '../notionColors.js?v=61';
 
 let container = null;
 let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];
@@ -17,18 +18,40 @@ export function unmount() {
   container = null;
 }
 
+// Same column-grid technique css/styles.css's .class-list already uses for
+// Lessons (grid on the list, each row display:contents so its cells become
+// direct grid items and line up across rows) — Course/Name/Credits/
+// Archive/Delete, with the course's own color (hexForCourse, same as
+// everywhere else in the app) as a left-border accent on the first cell.
 function courseRowHtml(course) {
+  const color = hexForCourse(course.code);
+  const bg = hexToRgba(color, 0.08);
   return `
-    <li class="course-list-item${course.status === 'archived' ? ' is-archived' : ''}">
-      <a href="#/course/${course.id}">${escapeHtml(course.code)}</a> — ${escapeHtml(course.name)}
-      <span class="muted">(${course.credits} cr, ${escapeHtml(course.term)}${course.status === 'archived' ? ', archived' : ''})</span>
-      <span class="course-row-actions">
+    <div class="course-row${course.status === 'archived' ? ' is-archived' : ''}">
+      <a class="course-cell course-cell-code mono" href="#/course/${course.id}" style="background:${bg}; color:${color}; --cell-color:${color};">${escapeHtml(course.code)}</a>
+      <span class="course-cell course-cell-name" style="background:${bg};">${escapeHtml(course.name)}</span>
+      <span class="course-cell course-cell-credits muted mono" style="background:${bg};">${course.credits} cr</span>
+      <span class="course-cell course-cell-archive" style="background:${bg};">
         ${course.status === 'active'
           ? `<button data-action="archive" data-id="${course.id}">Archive</button>`
           : `<button data-action="unarchive" data-id="${course.id}">Unarchive</button>`}
+      </span>
+      <span class="course-cell course-cell-delete" style="background:${bg};">
         <button data-action="delete" data-id="${course.id}">Delete</button>
       </span>
-    </li>
+    </div>
+  `;
+}
+
+function courseTableHeadHtml() {
+  return `
+    <div class="course-row course-row-head">
+      <span class="course-cell course-cell-code muted mono">Course</span>
+      <span class="course-cell course-cell-name muted mono">Name</span>
+      <span class="course-cell course-cell-credits muted mono">Credits</span>
+      <span class="course-cell course-cell-archive"></span>
+      <span class="course-cell course-cell-delete"></span>
+    </div>
   `;
 }
 
@@ -43,8 +66,8 @@ function rebuild() {
         <h1 class="mono">Courses</h1>
         <button data-action="add-course">+ Add course</button>
       </div>
-      <ul class="course-list">${active.map(courseRowHtml).join('')}</ul>
-      ${archived.length ? `<h2 class="mono" style="margin-top:16px;">Archived</h2><ul class="course-list">${archived.map(courseRowHtml).join('')}</ul>` : ''}
+      <div class="course-table">${courseTableHeadHtml()}${active.map(courseRowHtml).join('')}</div>
+      ${archived.length ? `<h2 class="mono" style="margin-top:16px;">Archived</h2><div class="course-table">${courseTableHeadHtml()}${archived.map(courseRowHtml).join('')}</div>` : ''}
     </section>
 
     ${coursesAndGpaHtml()}
@@ -61,9 +84,14 @@ function courseGradeCardHtml(course, grade) {
     : grade.hasGradedWork
       ? `${grade.percent.toFixed(1)}% (${grade.letter})`
       : 'No grade yet';
+  // Same color every other page already uses for this course (Calendar/
+  // Canvas/Lessons, via hexForCourse — see notionColors.js) so a course
+  // reads as one consistent color everywhere in the app, not a new one
+  // invented just for this card.
+  const color = hexForCourse(course.code);
   return `
-    <a class="course-grade-card" href="#/course/${course.id}">
-      <span class="mono">${escapeHtml(course.code)}</span>
+    <a class="course-grade-card" href="#/course/${course.id}" style="border-color:${hexToRgba(color, 0.5)}; background:${hexToRgba(color, 0.1)};">
+      <span class="mono" style="color:${color};">${escapeHtml(course.code)}</span>
       <span class="muted">${gradeText}</span>
       <span class="muted">${course.credits} cr</span>
     </a>

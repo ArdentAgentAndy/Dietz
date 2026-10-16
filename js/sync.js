@@ -1,5 +1,5 @@
 import { store } from './store.js?v=61';
-import { compactOldSessions } from './compaction.js?v=61';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=61';
 
 const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
@@ -115,6 +115,11 @@ async function pullBootstrap(config) {
   }
 
   store.persist();
+  // A pull can merge in another device's compacted rows for a day this one
+  // also already compacted independently (see dedupeCompactedSessions'
+  // comment) — clean those up before compacting anything new, same as on
+  // startup (js/app.js).
+  dedupeCompactedSessions();
   // Freshly-pulled data can include old sessions this device hasn't seen
   // yet (e.g. entered from elsewhere) — sweep them into daily totals too.
   compactOldSessions();

@@ -627,45 +627,76 @@ h1, h2, h3 {
   color: var(--muted);
 }
 
-.course-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.course-list li {
-  padding: 10px 12px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  display: flex;
+/* Course/Name/Credits/Archive/Delete, same column-grid technique as Lessons'
+   .class-list below (grid on the list, each row display:contents so its
+   cells become direct grid items and line up across rows) — see
+   js/views/courses.js's courseRowHtml. */
+.course-table {
+  display: grid;
+  grid-template-columns: minmax(90px, max-content) 1fr minmax(64px, max-content) minmax(90px, max-content) minmax(70px, max-content);
+  gap: 6px 12px;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
 }
 
-.course-list a {
-  font-family: 'Space Mono', monospace;
+.course-row {
+  display: contents;
+}
+
+.course-row-head .course-cell {
+  padding: 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: none !important;
+}
+
+.course-cell {
+  padding: 8px 10px;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+}
+
+.course-cell-code {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-left: 3px solid var(--cell-color, transparent);
   text-decoration: none;
-  color: var(--accent);
 }
 
-.course-list-item.is-archived {
+.course-cell-delete {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.course-cell-archive button,
+.course-cell-delete button {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.course-row.is-archived .course-cell {
   opacity: 0.55;
 }
 
-.course-row-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 6px;
-}
+@media (max-width: 700px) {
+  .course-table {
+    grid-template-columns: 1fr;
+  }
 
-.course-row-actions button {
-  padding: 4px 10px;
-  font-size: 11px;
+  .course-row:not(.course-row-head) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .course-row-head {
+    display: none;
+  }
+
+  .course-cell-code,
+  .course-cell-delete {
+    border-radius: 0;
+  }
 }
 
 /* Grid on the list itself, with each row set to display:contents so its
@@ -1408,39 +1439,98 @@ button.active, .btn.active {
   margin-top: 10px;
 }
 
-.session-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* Session/Date/Duration/Note/Actions, same column-grid technique as
+   .course-table/.class-list — see js/views/logging.js's sessionRowHtml. */
+.session-table {
+  display: grid;
+  grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) minmax(84px, max-content) minmax(64px, max-content) 1fr minmax(120px, max-content);
+  gap: 6px 12px;
+  align-items: center;
 }
 
-.session-item {
+.session-row {
+  display: contents;
+}
+
+.session-row-head .session-cell {
+  padding: 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: none !important;
+}
+
+.session-cell {
+  padding: 8px 10px;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  /* .session-table centers grid items by default, which lets every cell
+     shrink-wrap to its own content height instead of filling the row —
+     stretch them all back out so every column's background reaches the
+     same top/bottom edge, same convention as .class-list/.course-table.
+     display:flex then re-centers each cell's own content vertically now
+     that its box is taller than that content. */
+  align-self: stretch;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  flex-wrap: wrap;
 }
 
-.session-item .mono {
-  margin-right: 8px;
+.session-cell-shape {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  border-left: 3px solid var(--cell-color, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.session-actions {
+.session-cell-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Calendar's own .cal-chip-sub-badge caps itself at 60% of its chip so a
+   long course/project/lead name never crowds out that chip's title —
+   there's no such neighbor text in this column, so let it size to its
+   content instead of truncating. */
+.session-cell-label .cal-chip-sub-badge {
+  max-width: none;
+  font-size: 13px;
+  padding: 3px 10px;
+}
+
+.session-cell-actions {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   display: flex;
   gap: 6px;
 }
 
-.session-actions button {
+.session-cell-actions button {
   padding: 4px 10px;
   font-size: 11px;
+}
+
+@media (max-width: 700px) {
+  .session-table {
+    grid-template-columns: 1fr;
+  }
+
+  .session-row:not(.session-row-head) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .session-row-head {
+    display: none;
+  }
+
+  .session-cell-shape,
+  .session-cell-actions {
+    border-radius: 0;
+  }
 }
 
 /* Grid on the list itself, with each row set to display:contents so its

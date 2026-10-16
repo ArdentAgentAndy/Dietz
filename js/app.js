@@ -1,7 +1,7 @@
 import './store.js?v=61';
 import { initRouter } from './router.js?v=61';
 import { initSync } from './sync.js?v=61';
-import { compactOldSessions } from './compaction.js?v=61';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=61';
 import { migrateCourseConfigs } from './migrations.js?v=61';
 import { initPush } from './push.js?v=61';
 import { initNav } from './nav.js?v=61';
@@ -14,6 +14,7 @@ if ('serviceWorker' in navigator) {
 }
 
 migrateCourseConfigs();
+dedupeCompactedSessions();
 compactOldSessions();
 initPush();
 initNav(document.getElementById('top-nav'), document.getElementById('top-nav-menu'));

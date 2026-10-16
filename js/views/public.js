@@ -130,14 +130,23 @@ function formatTime(date) {
 // "Busy" = this instant falls inside any scheduled item or class's
 // [start, start+duration] window — a zero-duration entry (no `duration`)
 // only matches at the exact start minute, which is fine/expected.
-function isBusyNow(now) {
+function isBlockingNow(entry, now) {
+  if (!entry.start) return false;
   const t = now.getTime();
-  return [...state.items, ...state.classes].some((e) => {
-    if (!e.start) return false;
-    const start = new Date(e.start).getTime();
-    const end = start + (e.duration ? e.duration * 60000 : 0);
-    return t >= start && t <= end;
-  });
+  const start = new Date(entry.start).getTime();
+  const end = start + (entry.duration ? entry.duration * 60000 : 0);
+  return t >= start && t <= end;
+}
+
+function isBusyNow(now) {
+  return [...state.items, ...state.classes].some((e) => isBlockingNow(e, now));
+}
+
+// Same bright red as the clock box's own is-busy border — appended after
+// cardStyle's border-color so it wins the cascade within this one inline
+// style attribute, without needing a separate stylesheet rule/class.
+function blockingStyle(entry) {
+  return isBlockingNow(entry, new Date()) ? 'border-color:var(--red); border-width:2px;' : '';
 }
 
 // Replaces the old plain "Public" title — the date, the viewer's own
@@ -213,7 +222,7 @@ function itemCardHtml(item) {
   const end = start && item.duration ? new Date(start.getTime() + item.duration * 60000) : null;
   const range = start ? `${formatTime(start)}${end ? `–${formatTime(end)}` : ''}` : '';
   return `
-    <div class="public-item-card" style="${cardStyle(item.categoryColor)}">
+    <div class="public-item-card" style="${cardStyle(item.categoryColor)}${blockingStyle(item)}">
       <span class="mono">${escapeHtml(PUBLIC_ITEM_LABELS[item.category] || '')}</span>
       <span class="muted mono public-item-card-meta">${escapeHtml(range)}</span>
     </div>
@@ -228,7 +237,7 @@ function classCardHtml(cls) {
   const time = start ? formatTime(start) : '';
   const meta = [time, cls.duration ? `${cls.duration}m` : ''].filter(Boolean).join(' · ');
   return `
-    <div class="public-item-card" style="${cardStyle(cls.categoryColor)}">
+    <div class="public-item-card" style="${cardStyle(cls.categoryColor)}${blockingStyle(cls)}">
       <span class="mono">Lesson</span>
       <span class="muted mono public-item-card-meta">${escapeHtml(meta)}</span>
     </div>

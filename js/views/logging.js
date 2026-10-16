@@ -22,6 +22,7 @@ import {
   hexToRgba,
 } from '../format.js?v=61';
 import { archiveCourseById, deleteCourseById } from './courses.js?v=61';
+import { hexForCourse, hexForLabel } from '../notionColors.js?v=61';
 
 let container = null;
 let tickIntervalId = null;
@@ -146,21 +147,89 @@ function timerCardHtml(cat, timer, todayISO) {
   `;
 }
 
-function sessionItemHtml(session) {
+// Same shape vocabulary as the Today/Calendar chip emblem (taskDisplay.js's
+// SHAPE_BY_CATEGORY) — Revision=square, Homework=diamond, Project=triangle,
+// Research=x — so a category reads the same way everywhere in the app.
+// Piano has no Notion-task equivalent there; circle (the shared default)
+// is unused by any other Sessions group, so it's free to reuse here.
+const GROUP_SHAPE = {
+  revision: 'square',
+  homework: 'diamond',
+  project: 'triangle',
+  research: 'x',
+  piano: 'circle',
+};
+
+// The group's own chart color (groupColor — same as the Hours chart legend
+// and the Archived chips) — always the group's color, never a more
+// specific course/project color, so the category itself (symbol +
+// background) never depends on a hash that can coincidentally collide with
+// another group's color (e.g. CS 124/CS 101's course purple vs Research's
+// series purple, PHYS 211's course blue vs Project's series blue).
+function sessionGroupColor(cat) {
+  return groupColor(GROUP_ALIASES[cat?.group] || cat?.group);
+}
+
+// The finer "project/course/lead" sub-identity — only exists for groups
+// that actually have one: a revision session's specific course
+// (hexForCourse, same as Courses/Grades/Calendar/Lessons), or a
+// Project/Research category's own name (hexForLabel, hashed since there's
+// no fixed map like courses have). Homework/Piano have no sub-identity.
+function sessionSubColor(cat) {
+  if (!cat) return null;
+  if (cat.group === 'revision' && cat.courseId) {
+    const course = store.table('Courses').find((c) => c.id === cat.courseId);
+    if (course) return hexForCourse(course.code);
+  }
+  if (cat.group === 'project' || cat.group === 'research') return hexForLabel(cat.name);
+  return null;
+}
+
+// The sub-identity's own text — the course code, or the project/research
+// category's name with its categoryLabel() [P]/[R] prefix dropped (the
+// shape column already says which group it is, so the prefix would be
+// redundant here).
+function sessionSubText(cat) {
+  if (!cat) return '';
+  if (cat.group === 'revision' || cat.group === 'project' || cat.group === 'research') return cat.name;
+  return '';
+}
+
+function sessionShapeHtml(group, color) {
+  const shape = GROUP_SHAPE[group] || 'circle';
+  if (shape === 'x') return `<span class="cal-chip-shape shape-x" style="color:${color};">&#10005;</span>`;
+  return `<span class="cal-chip-shape shape-${shape}" style="background:${color};"></span>`;
+}
+
+// Same column-grid technique as .course-table/.class-list — Shape/Session/
+// Date/Duration/Note/Actions. The shape column is a left-border-accented
+// cell on its own, colored by the group (always one of the few fixed group
+// colors, so it's never ambiguous). The Session column then shows the
+// finer course/project/lead identity as a translucent pill — same
+// .cal-chip-sub-badge style as Calendar/Today's own sub-value badge — in
+// its own, more specific color; Homework/Piano (no sub-identity) fall back
+// to their plain category name instead.
+function sessionRowHtml(session) {
   const cat = store.table('Categories').find((c) => c.id === session.categoryId);
-  const label = cat ? categoryLabel(cat) : 'Unknown';
-  const note = session.note ? ` &middot; ${escapeHtml(session.note)}` : '';
+  const color = sessionGroupColor(cat);
+  const subColor = sessionSubColor(cat);
+  const subText = sessionSubText(cat);
+  const bg = hexToRgba(color, 0.08);
+  const labelContent = subColor && subText
+    ? `<span class="cal-chip-sub-badge" style="border-color:${hexToRgba(subColor, 0.6)}; background:${hexToRgba(subColor, 0.18)}; color:${subColor};">${escapeHtml(subText)}</span>`
+    : escapeHtml(cat ? categoryLabel(cat) : 'Unknown');
   return `
-    <li class="session-item" data-session-id="${session.id}">
-      <div>
-        <span class="mono">${escapeHtml(label)}</span>
-        <span class="muted">${session.date} &middot; ${formatHMS(session.minutes * 60)}${note}</span>
-      </div>
-      <div class="session-actions">
+    <div class="session-row" data-session-id="${session.id}">
+      <span class="session-cell session-cell-shape" style="background:${bg}; --cell-color:${color};">${sessionShapeHtml(cat?.group, color)}</span>
+      <span class="session-cell session-cell-label mono" style="background:${bg};">${labelContent}</span>
+      <span class="session-cell session-cell-date muted mono" style="background:${bg};">${session.date}</span>
+      <span class="session-cell session-cell-duration muted mono" style="background:${bg};">${formatHMS(session.minutes * 60)}</span>
+      <span class="session-cell session-cell-note muted" style="background:${bg};">${escapeHtml(session.note || '')}</span>
+      <span class="session-cell session-cell-actions" style="background:${bg};">
         <button data-action="edit-session" data-session-id="${session.id}">Edit</button>
         <button data-action="delete-session" data-session-id="${session.id}">Delete</button>
-      </div>
-    </li>
+      </span>
+    </div>
   `;
 }
 
@@ -175,7 +244,7 @@ function rebuild() {
   ]
     .map((c) => timerCardHtml(c, timer, todayISO))
     .join('');
-  const sessions = recentSessions(10).map(sessionItemHtml).join('');
+  const sessions = recentSessions(10).map(sessionRowHtml).join('');
   const headerMinutes = totalMinutesForDay(todayISO);
   const archived = compactedSessions();
   const archiveDateSet = new Set(datesForRange(archiveRange));
@@ -210,7 +279,19 @@ function rebuild() {
         <h2 class="mono">Recent sessions</h2>
         <button data-action="manual-entry">+ Manual entry</button>
       </div>
-      <ul class="session-list">${sessions || '<p class="muted">No sessions logged yet.</p>'}</ul>
+      ${sessions ? `
+        <div class="session-table">
+          <div class="session-row session-row-head">
+            <span class="session-cell"></span>
+            <span class="session-cell muted mono">Session</span>
+            <span class="session-cell muted mono">Date</span>
+            <span class="session-cell muted mono">Duration</span>
+            <span class="session-cell muted mono">Note</span>
+            <span class="session-cell"></span>
+          </div>
+          ${sessions}
+        </div>
+      ` : '<p class="muted">No sessions logged yet.</p>'}
     </section>
 
     <section class="card">

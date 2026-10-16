@@ -31,6 +31,18 @@ var TABLES = {
   // Projects entry is still a person (whoever you'd contact about that
   // project), same shape as every other box.
   Contacts: { columns: ['id', 'category', 'name', 'email', 'building', 'room', 'notes'], key: ['id'] },
+  // Practice (#/practice): deckId groups questions into a deck;
+  // deckName/type are duplicated onto every row (not normalized into a
+  // separate Decks table) so a deck with zero questions left after
+  // deletions doesn't just disappear — same tradeoff Courses/Items make
+  // elsewhere in this schema. type is 'flashcard' or 'quiz'. For a
+  // flashcard, prompt/answer are the Word/Definition pair; for a quiz,
+  // prompt is the question text, optionsJson is a JSON-encoded {A,B,C,D,E}
+  // map (keys present only for options that exist), and answer is the
+  // correct option letter. correctStreak/mastered mirror the old app's
+  // mastery-count mechanic; lastReviewed is unused today but reserved for
+  // a future real spaced-repetition scheduler.
+  Questions: { columns: ['id', 'deckId', 'deckName', 'type', 'prompt', 'answer', 'optionsJson', 'correctStreak', 'mastered', 'lastReviewed'], key: ['id'] },
 };
 
 function checkToken_(token) {
