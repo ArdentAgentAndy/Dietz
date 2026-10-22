@@ -6,8 +6,9 @@
 // "compacted"), so it still shows up in the sheet and counts toward the
 // hours graph; the raw rows it replaces are deleted (locally and, once
 // synced, from the sheet) since their minutes now live in that row.
-import { store } from './store.js?v=62';
-import { formatDateISO } from './format.js?v=62';
+import { store } from './store.js?v=63';
+import { formatDateISO } from './format.js?v=63';
+import { addCourseRevisionMinutes } from './courseState.js?v=63';
 
 const GROUP_LABELS = {
   revision: 'Revision',
@@ -98,6 +99,7 @@ export function compactOldSessions() {
 
   const categories = store.table('Categories');
   const groupOf = new Map(categories.map((c) => [c.id, c.group]));
+  const courseIdOf = new Map(categories.map((c) => [c.id, c.courseId]));
 
   const toCompact = store
     .table('Sessions')
@@ -105,10 +107,23 @@ export function compactOldSessions() {
   if (!toCompact.length) return;
 
   const sums = new Map(); // "date|group" -> minutes
+  const courseSums = new Map(); // courseId -> minutes, revision-group only — see below
   for (const s of toCompact) {
-    const key = `${s.date}|${groupOf.get(s.categoryId)}`;
+    const group = groupOf.get(s.categoryId);
+    const key = `${s.date}|${group}`;
     sums.set(key, (sums.get(key) || 0) + s.minutes);
+    if (group === 'revision') {
+      const courseId = courseIdOf.get(s.categoryId);
+      if (courseId) courseSums.set(courseId, (courseSums.get(courseId) || 0) + s.minutes);
+    }
   }
+
+  // Flush each course's compacted-away minutes into its running total
+  // (js/courseState.js) BEFORE the raw rows (and their courseId) are
+  // deleted below — otherwise that per-course detail would be lost forever,
+  // since the compacted daily-total row that replaces them only tracks
+  // (date, group), not which course within the group it came from.
+  for (const [courseId, minutes] of courseSums) addCourseRevisionMinutes(courseId, minutes);
 
   for (const [key, minutes] of sums) {
     const [date, group] = key.split('|');

@@ -1,5 +1,5 @@
-import { MENU, CHANNELS } from './channels.js?v=62';
-import { isConfigured } from './sync.js?v=62';
+import { MENU, CHANNELS } from './channels.js?v=63';
+import { isConfigured } from './sync.js?v=63';
 
 // Menu is rendered separately from the channels row (see #top-nav-menu in
 // index.html, to the right of the Settings gear) and isn't part of the
@@ -10,11 +10,16 @@ import { isConfigured } from './sync.js?v=62';
 // constellation while Menu is open, never from this row. highlightIndex is
 // a plain index into CHANNELS. Landing on a channel only highlights it and
 // reveals its dropdown — channels carry no content of their own, so
-// ArrowUp/ArrowDown (move within row 2) or a click is what actually
-// navigates to one of its subchannels — except a channel that itself
-// carries a `route` (Records/Public, see channels.js), which navigates
-// immediately instead, same as Menu does. The dropdown auto-closes after a
-// few seconds of inactivity, or immediately on a click outside it.
+// ArrowUp/ArrowDown (move within row 2) is what walks a channel's own
+// subchannel dropdown (moveSub, below — it only checks for subchannels,
+// never for a channel's own `route`, so this works identically whether or
+// not the channel also carries one). A click, or ArrowLeft/ArrowRight
+// landing on a channel, instead navigates immediately — straight to that
+// channel's own `route` if it has one (Records/Public/Contacts, see
+// channels.js), otherwise it just opens the dropdown and leaves the
+// highlighter sitting there (nothing else to navigate to yet). The dropdown
+// auto-closes after a few seconds of inactivity, or immediately on a click
+// outside it.
 const DROPDOWN_TIMEOUT_MS = 4000;
 
 let mount = null;
@@ -85,9 +90,11 @@ function closeDropdown() {
 function moveChannel(delta) {
   const n = visibleChannels().length;
   highlightIndex = ((highlightIndex + delta) % n + n) % n;
-  // A channel that carries its own route (Records/Public — the exception
-  // to "channels have no content", see channels.js) navigates immediately
-  // instead of leaving the highlighter sitting there showing nothing.
+  // A channel that carries its own route (Records/Public/Contacts — the
+  // exception to "channels have no content", see channels.js) navigates
+  // immediately instead of leaving the highlighter sitting there showing
+  // nothing. Its subchannel dropdown (if it has one — Records does) is
+  // still reachable afterward via ArrowUp/ArrowDown, see moveSub below.
   const ch = currentChannel();
   if (ch?.route) {
     goToPage(ch);
@@ -144,8 +151,11 @@ function onKeyDown(e) {
   // without this guard pressing Enter for an unrelated reason anywhere in
   // the app (submitting a form, confirming a dialog) was also hijacked into
   // a same-page "confirm" that flashed this row's dropdown open. A
-  // route-carrying channel (Records/Public) doesn't need Enter at all —
-  // moveChannel already navigates to it immediately on arrow-key press.
+  // route-carrying channel with no subchannels of its own (Public/Contacts)
+  // doesn't need Enter at all — moveChannel already navigates to it
+  // immediately on arrow-key press. One that does have subchannels
+  // (Records) can still use Enter the normal way, to confirm whichever
+  // subchannel ArrowUp/ArrowDown last highlighted in its dropdown.
   if (e.key === 'Enter' && !dropdownOpen) return;
   e.preventDefault();
 
@@ -184,8 +194,9 @@ function selectByNumber(n) {
 }
 
 // Clicking a channel button moves the highlighter and opens its dropdown —
-// unless the channel carries its own route (Records/Public), in which case
-// it navigates immediately instead. Clicking a subchannel inside the
+// unless the channel carries its own route (Records/Public/Contacts), in
+// which case it navigates immediately instead (its dropdown, if it has one,
+// is still reachable afterward via ArrowUp/ArrowDown). Clicking a subchannel inside the
 // dropdown closes it (its own href handles the actual navigation). Menu's
 // own click handling lives in onMenuClick below — it's a separate DOM
 // subtree now, not part of this row.

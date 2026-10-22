@@ -1,5 +1,5 @@
-import { store } from './store.js?v=62';
-import { formatDateISO } from './format.js?v=62';
+import { store } from './store.js?v=63';
+import { formatDateISO } from './format.js?v=63';
 
 const TIMER_KEY = 'dietz:timer';
 
@@ -35,6 +35,11 @@ export function stopTimer() {
   const elapsedMs = endedAt - current.startedAt;
   save(null);
 
+  // Revision-group minutes aren't tallied into CourseState here — the
+  // Revision subchannel's chart (js/views/revision.js) sums live Sessions
+  // rows directly for anything not yet compacted, and js/compaction.js
+  // folds a session's minutes into CourseState exactly once, at the moment
+  // it compacts (and deletes) that row. Doing it here too would double-count.
   return store.upsert('Sessions', {
     categoryId: current.categoryId,
     date: formatDateISO(new Date(current.startedAt)),

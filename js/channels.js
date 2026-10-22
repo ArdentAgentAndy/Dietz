@@ -18,20 +18,24 @@ export const MENU = { id: 'menu', label: 'Menu', route: '/' };
 // clockwise, one per 45°, in this same array order.
 //
 // A channel's own `route` is the one exception to "channels carry no
-// content of their own" — Records and Public each ARE a page (Records
-// doubles as the existing Logging page; Public is its own stub) rather than
-// just a placeholder for subchannels. nav.js treats any channel with a
-// `route` as directly navigable (like a hub) instead of dropdown-only.
+// content of their own" — Records, Public, and Contacts each ARE a page
+// rather than just a placeholder for subchannels. nav.js treats any channel
+// with a `route` as directly navigable (like a hub): a click or Left/Right
+// arrow jumps straight to that route. A route-carrying channel can still
+// have subchannels of its own (Records does: Today/Logging) — Up/Down arrow
+// still opens/walks that dropdown exactly like it does for a channel with no
+// route of its own (Academics/Schedule), since nav.js's dropdown logic never
+// actually checks for a `route` — only the direct click/Left-Right jump does.
 // icon: a single emoji shown large/translucent inside the channel's circle
 // on the Menu page's constellation (js/views/menu.js's circlesHtml) —
 // purely decorative (aria-hidden there), so it carries no meaning the
 // label itself doesn't already.
 export const CHANNELS = [
   {
-    id: 'records',
-    label: 'Records',
-    icon: '🗂️',
-    route: '/logging',
+    id: 'contacts',
+    label: 'Contacts',
+    icon: '👥',
+    route: '/contacts',
     subchannels: [],
   },
   {
@@ -41,14 +45,23 @@ export const CHANNELS = [
     subchannels: [
       { id: 'courses', label: 'Courses', route: '/courses' },
       { id: 'lessons', label: 'Lessons', route: '/lessons' },
+      { id: 'revision', label: 'Revision', route: '/revision' },
     ],
+    // Which of the menu page's 3 standard diagonal slots (top/middle/bottom
+    // — see js/views/menu.js's CANONICAL_SLOT_OFFSETS) each subchannel
+    // above renders in, by index into *this* array: courses (index 0) in
+    // slot 2 (bottom), lessons (index 1) in slot 1 (middle, unchanged),
+    // revision (index 2) in slot 0 (top) — a deliberate swap, not the
+    // default top-to-bottom-by-array-order placement every other channel
+    // uses. The array/label order above (and the 1/2/3 keyboard shortcuts
+    // that follow it) is untouched; only the on-screen position moves.
+    subchannelSlots: [2, 1, 0],
   },
   {
     id: 'schedule',
     label: 'Schedule',
     icon: '📅',
     subchannels: [
-      { id: 'today', label: 'Today', route: '/today' },
       { id: 'calendar', label: 'Calendar', route: '/calendar' },
       { id: 'canvas', label: 'Canvas', route: '/canvas' },
     ],
@@ -83,10 +96,20 @@ export const CHANNELS = [
     ],
   },
   {
-    id: 'contacts',
-    label: 'Contacts',
-    icon: '👥',
-    route: '/contacts',
-    subchannels: [],
+    id: 'records',
+    label: 'Records',
+    icon: '🗂️',
+    route: '/today',
+    subchannels: [
+      { id: 'today', label: 'Today', route: '/today' },
+      { id: 'logging', label: 'Logging', route: '/logging' },
+    ],
+    // Records (135deg) and Academics (225deg) are mirror images of each
+    // other across the vertical axis — same distance from center, same
+    // resulting row heights — so pinning Records to Academics' top two
+    // slots (0, 1 — see that channel's own subchannelSlots) makes the two
+    // sides of the menu page symmetrical: today/logging sit at exactly the
+    // same two heights as revision/lessons do on the other side.
+    subchannelSlots: [0, 1],
   },
 ];

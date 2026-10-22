@@ -1420,6 +1420,85 @@ button.active, .btn.active {
   padding: 6px 12px;
 }
 
+/* Today subchannel's per-item stopwatch box (js/views/today.js) — same
+   card/accent/elapsed-time vocabulary as the per-category .timer-card
+   above, just laid out as one single box instead of a grid of cards. */
+.stopwatch-card.is-running {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-dim);
+}
+
+.stopwatch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stopwatch-display {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+/* The active task's shape/sub/name cells, replicated straight from the
+   table row (js/views/today.js's catCellsHtml — same classes, same
+   background-by-category styling) so the stopwatch reads as "this exact
+   row, zoomed in" rather than a second, differently-styled summary of it. */
+.stopwatch-task-cells {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+}
+
+.stopwatch-task-cells .today-cell-name {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Idle state ("No item selected") — js/views/today.js gives this the exact
+   same classes (.today-cell-name.mono) as a real task-name cell, so this
+   rule only needs to drop the padding/background that make sense for a
+   real row but not for a plain placeholder line. */
+.stopwatch-task-cells .today-cell-name.is-placeholder {
+  padding: 10px 0;
+  background: none !important;
+  color: var(--muted);
+}
+
+.stopwatch-elapsed {
+  font-family: 'Space Mono', monospace;
+  font-size: 28px;
+  color: var(--accent);
+  align-self: center;
+}
+
+.stopwatch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.today-row-clickable .today-cell {
+  cursor: pointer;
+}
+
+/* Same toggle-a-class/auto-remove flash convention as .canvas-chip.is-highlighted's
+   canvas-flash (3 iterations x 0.5s = 1.5s), just red instead of accent — a
+   nudge to fill in the duration field before marking a task complete. */
+.input-error-flash {
+  animation: input-error-flash 0.5s ease-in-out 3;
+}
+
+@keyframes input-error-flash {
+  50% {
+    border-color: var(--red);
+    box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.35);
+  }
+}
+
 /* #/contacts — same card shape as .timer-card (surface/border/radius/
    padding/column layout), just its own class since it's a different kind
    of thing, not a timer. */
@@ -1540,10 +1619,20 @@ button.active, .btn.active {
   display: grid;
   grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(56px, max-content) minmax(64px, max-content) minmax(118px, max-content);
   gap: 6px 10px;
-  align-items: center;
+  /* stretch, not center: every cell in a row fills the row's full height
+     (set by its tallest cell) so their background bands line up evenly —
+     see .today-cell-shape below for the one deliberate exception. */
+  align-items: stretch;
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+/* A 7th column, standalone /today page only (js/views/today.js adds this
+   class when !embedded — Home's embedded list never gets it, so it never
+   gets the extra column either). Holds the current-timer arrow cell. */
+.today-list.has-timer-arrow {
+  grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(56px, max-content) minmax(64px, max-content) minmax(118px, max-content) 28px;
 }
 
 .today-row {
@@ -1562,11 +1651,20 @@ button.active, .btn.active {
   align-items: center;
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   border-left: 4px solid var(--cell-color, transparent);
+  /* The one cell that stays its own natural size instead of stretching to
+     match the row's height (see .today-list's align-items above) — the
+     category symbol shouldn't grow just because, say, the name cell wraps
+     to two lines. */
+  align-self: center;
 }
 
 .today-cell-sub {
   display: flex;
   justify-content: center;
+  /* The cell itself stretches to match the row (today-list's align-items),
+     but its content (the badge pill) shouldn't grow taller with it — keep
+     the badge at its own natural height, centered in the taller cell. */
+  align-items: center;
 }
 
 /* Unlike Calendar's fixed-width chip, this column sizes itself to fit the
@@ -1589,6 +1687,9 @@ button.active, .btn.active {
 .today-cell-duration {
   display: flex;
   justify-content: center;
+  /* Same reasoning as .today-cell-sub above — the input keeps its own
+     natural height instead of stretching with the (taller) cell. */
+  align-items: center;
 }
 
 .today-cell-duration input[type="number"] {
@@ -1604,6 +1705,9 @@ button.active, .btn.active {
 .today-cell-actions {
   display: flex;
   justify-content: center;
+  /* Same reasoning as .today-cell-sub above — the buttons keep their own
+     natural height instead of stretching with the (taller) cell. */
+  align-items: center;
   gap: 4px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
@@ -1627,6 +1731,43 @@ button.active, .btn.active {
 
 .today-row.is-done .today-cell-name {
   text-decoration: line-through;
+}
+
+/* Current-timer indicator column (standalone /today only — see
+   .today-list.has-timer-arrow). Every row gets this cell so the column
+   stays aligned; the triangle itself only shows on the one row that's
+   js/views/today.js's activeStopwatchTaskId, via the .is-current-timer
+   row class, so no per-row JS branching is needed for the visual. Standard
+   zero-size-box CSS triangle (border-right colored, top/bottom transparent)
+   pointing left, back across the row toward the task it belongs to. */
+.today-cell-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.today-cell-arrow::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 10px solid var(--accent);
+  opacity: 0;
+}
+
+.today-row.is-current-timer .today-cell-arrow::before {
+  opacity: 1;
+  animation: timer-arrow-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes timer-arrow-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 @media (max-width: 700px) {

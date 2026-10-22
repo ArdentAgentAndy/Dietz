@@ -1,5 +1,5 @@
-import { HOME, CHANNELS } from '../channels.js?v=62';
-import { escapeHtml } from '../format.js?v=62';
+import { HOME, CHANNELS } from '../channels.js?v=63';
+import { escapeHtml } from '../format.js?v=63';
 
 let container = null;
 // -1 = nothing selected yet (fresh page visit) — the first Left/Right press
@@ -210,20 +210,69 @@ function subchannelAngles(parentAngle, n) {
     .map((o) => o.angle);
 }
 
-// Keep in sync with --circle-r/--sub-pill-width in css/styles.css — needed
-// here too so subchannelLine below can work out the line's actual
-// angle/length in real pixels.
+// Vertical pixel spacing between adjacent pills in a diagonal fan — see
+// diagonalPillAngle below for why this is picked directly rather than
+// derived from equal angle steps.
+const DIAGONAL_SUB_Y_STEP = 56;
+
+// The 3 standard diagonal slot heights (top/middle/bottom), in
+// DIAGONAL_SUB_Y_STEP units — what a channel.subchannelSlots entry (see
+// channels.js) indexes into. Shared across every diagonal channel so two
+// different channels (e.g. Records and Academics, mirror images of each
+// other — see channels.js) can be pinned to the exact same heights.
+const CANONICAL_SLOT_OFFSETS = [-1, 0, 1];
+
+// Equal angle steps between pills (subchannelAngles) put them at equal
+// arc/chord distance along the circle they sit on — true "equidistant
+// along the circumference" — but that is NOT the same as equal vertical
+// pixel spacing once projected onto the page: Y = dist*cos(angle), and
+// cos isn't linear in angle, so equal angle steps land unevenly once
+// flattened onto one axis (more so the larger dist gets, which is exactly
+// what made this visible after lengthening the diagonal lines). Since what
+// actually reads as "evenly spaced" to the eye is the vertical gap between
+// stacked pills, this instead works backwards from an evenly-spaced target
+// Y to the angle that produces it — a plain arccos inversion. cos's
+// principal value only covers [0,180], so of its two angle solutions
+// (principal and 360-principal) this picks whichever lands closer to the
+// pill's own nominal fan angle, rather than hand-deriving which half of
+// the circle each of the four diagonal channels' offsets falls in.
+function angleDiff(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+function diagonalPillAngle(dist, nominalAngleDeg, targetY) {
+  const ratio = Math.max(-1, Math.min(1, targetY / dist));
+  const principal = (Math.acos(ratio) * 180) / Math.PI;
+  const reflected = 360 - principal;
+  return angleDiff(principal, nominalAngleDeg) <= angleDiff(reflected, nominalAngleDeg) ? principal : reflected;
+}
+
+// Keep in sync with --circle-r/--sub-pill-width/--sub-pill-height in
+// css/styles.css — needed here too so subchannelLine below can work out the
+// line's actual angle/length in real pixels.
 const CIRCLE_R = 50;
 const SUB_PILL_WIDTH = 130;
-// Diagonal channels' lines run noticeably shorter (~25%) than cardinal
-// ones' — a stylistic distinction between the two, not a byproduct of
-// anything geometric, so it's just two separate constants.
+const SUB_PILL_HEIGHT = 34;
+// Diagonal channels get their own reach, tuned independently of the
+// cardinal one: a 3-subchannel diagonal fan (e.g. Academics) packs its
+// pills at only +/-20deg apart (DIAGONAL_OFFSETS), so at too short a
+// distance adjacent pills physically overlap — the *1.7 here is what
+// pushes them far enough apart to clear that, not a stylistic choice.
 const SUB_LINE_LEN_CARDINAL = 110;
-const SUB_LINE_LEN_DIAGONAL = Math.round(SUB_LINE_LEN_CARDINAL * 0.75);
+const SUB_LINE_LEN_DIAGONAL = Math.round(SUB_LINE_LEN_CARDINAL * 0.75 * 1.7);
 
-function subDist(parentAngle) {
-  const lineLen = isCardinal(parentAngle) ? SUB_LINE_LEN_CARDINAL : SUB_LINE_LEN_DIAGONAL;
-  return CIRCLE_R + lineLen + SUB_PILL_WIDTH / 2;
+// Cardinal channels only — diagonal ones use diagonalDist below instead.
+function subDist() {
+  return CIRCLE_R + SUB_LINE_LEN_CARDINAL + SUB_PILL_WIDTH / 2;
+}
+
+// Diagonal channels only. Every subchannel of one diagonal channel shares
+// this exact radius — none of them vary it — which is what makes them
+// equidistant along a shared circumference (see diagonalSubGeometry for how
+// each pill's angle is then solved around that fixed radius).
+function diagonalDist() {
+  return CIRCLE_R + SUB_LINE_LEN_DIAGONAL + SUB_PILL_WIDTH / 2;
 }
 
 // Math.sin/cos of a "round" angle like 270° isn't always exactly -1/0 —
@@ -235,16 +284,17 @@ function snapZero(v) {
   return Math.abs(v) < 1e-9 ? 0 : v;
 }
 
-// The pill never rotates to face its own line — instead the line's angle
-// and length are worked out so it runs straight from the circle's edge to
-// whichever end of the pill faces the circle: the midpoint of that end's
-// 180° rounded cap (its leftmost or rightmost point), not wherever the fan
-// angle's own ray happens to cross the pill's outline. fanAngleDeg is still
-// what actually positions the pill (via .menu-subchannel's --sub-angle, a
-// constant --sub-dist out along it) — this only derives the line that
-// connects to it. dist is that same --sub-dist (see subDist), passed in
-// rather than read from a shared constant since it differs between
-// cardinal and diagonal channels.
+// Cardinal channels only (see subchannelsHtml) — the pill never rotates to
+// face its own line, so here the line's angle and length are worked out so
+// it runs straight from the circle's edge to whichever end of the pill
+// faces the circle: the midpoint of that end's 180° rounded cap (its
+// leftmost or rightmost point), not wherever the fan angle's own ray
+// happens to cross the pill's outline. fanAngleDeg is still what actually
+// positions the pill (via .menu-subchannel's --sub-angle, a constant
+// --sub-dist out along it) — this only derives the line that connects to
+// it. dist is that same --sub-dist (see subDist), passed in rather than
+// read from a shared constant since it differs between cardinal and
+// diagonal channels.
 function subchannelLine(fanAngleDeg, dist) {
   const rad = (fanAngleDeg * Math.PI) / 180;
   const pillX = snapZero(-Math.sin(rad)) * dist;
@@ -263,15 +313,46 @@ function subchannelLine(fanAngleDeg, dist) {
 
 // Every pill is the same fixed size and always horizontal — no per-angle
 // rotation, just positioned (rotate/translateY/counter-rotate, same
-// no-net-rotation trick as .menu-channel-wrap) at its own fan angle, a
-// constant distance out. Its connecting line is computed separately (see
-// subchannelLine) since it generally points in a different direction than
-// that fan angle does.
+// no-net-rotation trick as .menu-channel-wrap) at its own angle, a constant
+// distance out. Cardinal channels use their exact nominal fan angle
+// (subDist/subchannelLine bend the LINE to still connect). Diagonal
+// channels share one fixed DISTANCE (diagonalDist) but, for a
+// multi-subchannel fan, re-pick each pill's ANGLE (diagonalPillAngle) so
+// they land evenly spaced top-to-bottom on screen rather than at the
+// nominal equal-angle-step positions — see diagonalPillAngle for why equal
+// angle steps alone don't look even once projected onto the page. The LINE
+// still bends (subchannelLine, same function as cardinal) to connect
+// exactly to whichever angle the pill actually ends up at.
 function subchannelsHtml(channel, i) {
   const parentAngle = channelAngle(i);
   const n = channel.subchannels.length;
-  const angles = subchannelAngles(parentAngle, n);
-  const dist = subDist(parentAngle);
+  const nominalAngles = subchannelAngles(parentAngle, n);
+  const cardinal = isCardinal(parentAngle);
+  const dist = cardinal ? subDist() : diagonalDist();
+  const parentY = dist * Math.cos((parentAngle * Math.PI) / 180);
+  const mid = (n - 1) / 2;
+  // channel.subchannelSlots (channels.js), when present, pins each
+  // subchannel to one of the 3 canonical slot heights (CANONICAL_SLOT_OFFSETS,
+  // shared across every diagonal channel) by index, instead of the default
+  // top-to-bottom-by-array-order spacing relative to this channel's own
+  // center. That's what lets two different channels — different subchannel
+  // counts, different "mid" — land on the exact same heights (Records
+  // matching Academics' top two) rather than just each being internally
+  // symmetric. The branch-selection hint diagonalPillAngle needs (to pick
+  // the correct one of its two arccos solutions) just falls back to this
+  // channel's own parentAngle in that case — always within DIAGONAL_OFFSETS'
+  // +/-20deg of any of its real slots, so it's unambiguous, and unlike
+  // indexing into nominalAngles by slot number it can't go out of bounds
+  // when a channel's subchannelSlots references a slot index >= its own
+  // subchannel count (exactly what Records' [0, 1] does, referencing
+  // Academics' 3-slot table from a 2-subchannel channel).
+  const angles = cardinal
+    ? nominalAngles
+    : channel.subchannels.map((_, k) => {
+        if (!channel.subchannelSlots) return diagonalPillAngle(dist, nominalAngles[k], parentY + (k - mid) * DIAGONAL_SUB_Y_STEP);
+        const offsetMultiplier = CANONICAL_SLOT_OFFSETS[channel.subchannelSlots[k]];
+        return diagonalPillAngle(dist, parentAngle, parentY + offsetMultiplier * DIAGONAL_SUB_Y_STEP);
+      });
   return channel.subchannels.map((s, k) => {
     const angle = angles[k];
     const line = subchannelLine(angle, dist);

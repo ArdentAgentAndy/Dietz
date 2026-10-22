@@ -1,5 +1,5 @@
-import { store } from './store.js?v=62';
-import { formatDateISO } from './format.js?v=62';
+import { store } from './store.js?v=63';
+import { formatDateISO } from './format.js?v=63';
 
 // goalHours: daily target shown as a dashed reference line on the hours graph.
 // No dedicated Homework series — homework is logged against whichever
