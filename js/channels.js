@@ -78,7 +78,9 @@ export const CHANNELS = [
     id: 'practice',
     label: 'Practice',
     icon: '🎹',
-    subchannels: [],
+    subchannels: [
+      { id: 'sight-reading', label: 'Sight Reading', route: '/sight-reading' },
+    ],
   },
   {
     id: 'contacts',

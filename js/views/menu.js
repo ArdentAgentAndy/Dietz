@@ -1,5 +1,5 @@
-import { HOME, CHANNELS } from '../channels.js?v=61';
-import { escapeHtml } from '../format.js?v=61';
+import { HOME, CHANNELS } from '../channels.js?v=62';
+import { escapeHtml } from '../format.js?v=62';
 
 let container = null;
 // -1 = nothing selected yet (fresh page visit) — the first Left/Right press

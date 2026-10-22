@@ -1,4 +1,4 @@
-import { hexForNotionColor } from './notionColors.js?v=61';
+import { hexForNotionColor } from './notionColors.js?v=62';
 
 // Display/sort order for categories, grouped with visual gaps between
 // groups. Anything not listed here (shouldn't happen) sorts after all of it.

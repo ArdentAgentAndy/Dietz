@@ -6,9 +6,9 @@
 // server-side (apps-script/Code.gs's publicPayload_) — no task names,
 // courses, locations, or instructors, just category-derived generic labels,
 // their Notion color, and timing.
-import { fetchPublicData, getCachedPublicData, sendPublicPing } from '../publicApi.js?v=61';
-import { escapeHtml, hexToRgba } from '../format.js?v=61';
-import { hexForNotionColor } from '../notionColors.js?v=61';
+import { fetchPublicData, getCachedPublicData, sendPublicPing } from '../publicApi.js?v=62';
+import { escapeHtml, hexToRgba } from '../format.js?v=62';
+import { hexForNotionColor } from '../notionColors.js?v=62';
 
 const CHICAGO_TZ = 'America/Chicago';
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

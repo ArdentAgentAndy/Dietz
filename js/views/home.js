@@ -7,13 +7,13 @@
 // `unmount`, mounted into its own sub-container, so mark/urgent/delete/
 // duration all work here exactly as they do on the Today page itself
 // (both write through to the same Notion cache either way).
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=61';
-import { escapeHtml, hexToRgba } from '../format.js?v=61';
-import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=61';
-import { hoursChartConfig } from './logging.js?v=61';
-import { coursesAndGpaHtml } from './courses.js?v=61';
-import { trackViewHtml } from './roadmap.js?v=61';
-import { render as renderTodayPanel, unmount as unmountTodayPanel } from './today.js?v=61';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=62';
+import { escapeHtml, hexToRgba } from '../format.js?v=62';
+import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=62';
+import { hoursChartConfig } from './logging.js?v=62';
+import { coursesAndGpaHtml } from './courses.js?v=62';
+import { trackViewHtml } from './roadmap.js?v=62';
+import { render as renderTodayPanel, unmount as unmountTodayPanel } from './today.js?v=62';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [

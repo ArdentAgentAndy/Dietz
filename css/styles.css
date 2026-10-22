@@ -2650,3 +2650,212 @@ details summary {
     overflow-x: auto;
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   SIGHT READING PAGE
+──────────────────────────────────────────────────────────────────────── */
+.sr-header {
+  margin-bottom: 1.5rem;
+}
+.sr-header h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.sr-header p {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.04em;
+}
+
+.sr-settings-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.sr-setting-group {
+  background: var(--surface);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  flex: 1;
+  min-width: 130px;
+}
+
+.sr-setting-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Space Mono', monospace;
+  margin-bottom: 4px;
+}
+
+.sr-setting-group select {
+  width: 100%;
+  font-size: 0.82rem;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.02em;
+}
+
+.sr-main-area {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.sr-staff-wrap {
+  background: var(--surface);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 14px;
+  flex: 0 0 auto;
+}
+
+canvas#sr-staff-canvas { display: block; }
+
+.sr-input-panel {
+  flex: 1;
+  min-width: 220px;
+  background: var(--surface);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sr-section-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Space Mono', monospace;
+  margin-bottom: 6px;
+}
+
+.sr-note-entry {
+  background: rgba(255,255,255,0.03);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 13px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sr-note-entry.sr-active {
+  border-color: rgba(195,222,232,0.5);
+  background: rgba(195,222,232,0.06);
+}
+
+.sr-note-entry.sr-correct {
+  border-color: rgba(91,200,122,0.45);
+  background: rgba(91,200,122,0.08);
+}
+
+.sr-note-entry.sr-wrong {
+  border-color: rgba(255,107,107,0.45);
+  background: rgba(255,107,107,0.08);
+}
+
+.sr-note-display {
+  font-family: 'Space Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 26px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.sr-note-display.sr-placeholder {
+  color: rgba(255,255,255,0.15);
+  font-weight: 400;
+  font-size: 1rem;
+  padding-top: 4px;
+}
+
+.sr-note-sublabel {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 3px;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.04em;
+}
+
+.sr-note-sublabel.sr-hint { color: var(--accent); }
+
+.sr-kbd-guide {
+  border-top: 0.5px solid var(--border);
+  padding-top: 12px;
+}
+
+.sr-kbd-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 5px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sr-kbd-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+}
+
+.sr-kbd {
+  display: inline-block;
+  background: rgba(255,255,255,0.06);
+  border: 0.5px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  min-width: 20px;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.sr-streak-block { display: flex; align-items: baseline; gap: 6px; }
+
+.sr-streak-num {
+  font-family: 'Space Mono', monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.sr-streak-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sr-feedback {
+  font-size: 0.75rem;
+  min-height: 16px;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.04em;
+}
+.sr-feedback.sr-correct { color: var(--green); }
+.sr-feedback.sr-wrong   { color: var(--red); }
