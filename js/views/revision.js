@@ -60,7 +60,7 @@ function revisionChartConfig() {
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   const labels = courses.map((c) => c.code);
   const hours = courses.map((c) => Math.round((totalRevisionMinutesForCourse(c.id) / 60) * 100) / 100);
-  const colors = courses.map((c) => hexForCourse(c.code));
+  const colors = courses.map((c) => hexForCourse(c));
   const mutedInk = 'rgba(240, 239, 244, 0.65)';
   const gridColor = 'rgba(255, 255, 255, 0.08)';
 

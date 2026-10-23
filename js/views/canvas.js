@@ -1,6 +1,6 @@
 import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=63';
 import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=63';
-import { hexForCourse } from '../notionColors.js?v=63';
+import { hexForCourse, hexForNotionColor } from '../notionColors.js?v=63';
 import { escapeHtml, hexToRgba } from '../format.js?v=63';
 import { store } from '../store.js?v=63';
 
@@ -9,6 +9,7 @@ const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 let container = null;
 let allEvents = [];
 let taskByCanvasId = new Map(); // canvas event id -> matching Notion task, only for linked events (deadline set)
+let courseColorByCode = {}; // course code -> Notion's own select-field color, wherever one's on record (see computeCourseColorMap)
 let loadError = null;
 
 let viewMode = 'week'; // 'week' | 'month'
@@ -244,6 +245,7 @@ export function render(rootEl) {
   if (cachedEvents.length) {
     allEvents = cachedEvents;
     taskByCanvasId = computeTaskByCanvasId(cachedTasks);
+    courseColorByCode = computeCourseColorMap(cachedTasks);
     loadError = null;
     rebuild();
   } else {
@@ -272,12 +274,40 @@ function computeTaskByCanvasId(tasks) {
   return map;
 }
 
+// Real Notion-set color per course code, built from the same task fetch
+// used for Canvas-link matching above — any task with a Revision/Homework/
+// Examination category carries task.course + task.courseColor (Notion's
+// own select-field color, see taskDisplay.js's SUB_FILTER_BY_CATEGORY).
+// Lets Canvas's event chips and filter buttons (via colorForCourseCode
+// below) mirror the exact color Calendar shows for that course, for any
+// course that's ever appeared on a Notion task with a color set, rather
+// than only ever using the separate, manually-maintained COURSE_COLOR_NAME
+// fallback in notionColors.js.
+function computeCourseColorMap(tasks) {
+  const map = {};
+  for (const t of tasks) {
+    if (t.course && t.courseColor && !map[t.course]) map[t.course] = t.courseColor;
+  }
+  return map;
+}
+
+// homeCourseCode (below) handles the HIST 112/AFST 112 cross-listing case —
+// a Canvas-parsed code checks its aliased form first, so a course tracked
+// in Notion under one code still matches a Canvas event filed under the
+// other.
+function colorForCourseCode(code) {
+  const notionColor = courseColorByCode[homeCourseCode(code)] || courseColorByCode[code];
+  return notionColor ? hexForNotionColor(notionColor) : hexForCourse(code);
+}
+
 async function load() {
   const [eventsResult, tasksResult] = await Promise.all([fetchCanvasEvents(), fetchNotionTasks()]);
   if (!container) return;
   if (eventsResult.error && getCachedCanvasEvents().length) return; // keep showing cached data
   allEvents = eventsResult.events;
-  taskByCanvasId = computeTaskByCanvasId(tasksResult.tasks.length ? tasksResult.tasks : getCachedNotionTasks());
+  const tasksForMatching = tasksResult.tasks.length ? tasksResult.tasks : getCachedNotionTasks();
+  taskByCanvasId = computeTaskByCanvasId(tasksForMatching);
+  courseColorByCode = computeCourseColorMap(tasksForMatching);
   loadError = eventsResult.error;
   rebuild();
 }
@@ -362,7 +392,7 @@ function eventChipStyle(color, event, task) {
 }
 
 function eventChipHtml(event) {
-  const color = hexForCourse(event.course);
+  const color = colorForCourseCode(event.course);
   const task = taskByCanvasId.get(event.id);
   const isLinked = Boolean(task);
   // Once linked, show the Calendar task's own name instead of Canvas's raw
@@ -676,7 +706,7 @@ function rebuild() {
 
   function courseButtonHtml(c) {
     const isActive = courseFilter === c;
-    const color = hexForCourse(c);
+    const color = colorForCourseCode(c);
     const style = isActive ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
     return `<button data-course-filter="${escapeHtml(c)}" class="${isActive ? 'active' : ''}"${style}>${escapeHtml(c)}</button>`;
   }

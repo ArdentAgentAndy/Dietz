@@ -179,7 +179,7 @@ function sessionSubColor(cat) {
   if (!cat) return null;
   if (cat.group === 'revision' && cat.courseId) {
     const course = store.table('Courses').find((c) => c.id === cat.courseId);
-    if (course) return hexForCourse(course.code);
+    if (course) return hexForCourse(course);
   }
   if (cat.group === 'project' || cat.group === 'research') return hexForLabel(cat.name);
   return null;

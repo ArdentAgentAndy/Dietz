@@ -50,3 +50,26 @@ export function stopTimer() {
     note: '',
   });
 }
+
+// If the tab is left open (or just not touched) across midnight while a
+// category timer is running, nothing otherwise closes it out — stopTimer()
+// above is the only place a Sessions row gets written, and only on an
+// explicit click. Called once at app boot (js/app.js, alongside
+// compaction) — deliberately NOT on a live tick, since a tick fires every
+// second on a page that's actively open, and auto-closing there would cut
+// off a timer the user is still actively running the moment it happens to
+// cross midnight (working late is the normal case here, not the exception
+// — see the "no matter what" framing on stopTimer's own date logic above,
+// which this reuses verbatim: full real elapsed time, dated to the day the
+// timer started, never capped or split at midnight). Boot only fires on a
+// fresh page load, which is the right moment to ask "was this left running
+// since before" — a same-day timer still legitimately in progress is left
+// untouched (same calendar day in, nothing to reconcile). Returns the
+// logged Sessions row, or null if there was nothing to close.
+export function reconcileTimerDayBoundary() {
+  const current = load();
+  if (!current) return null;
+  const startDay = formatDateISO(new Date(current.startedAt));
+  if (startDay === formatDateISO(new Date())) return null;
+  return stopTimer();
+}

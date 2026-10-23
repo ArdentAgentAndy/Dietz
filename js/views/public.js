@@ -209,6 +209,11 @@ function groupByDay(entries) {
     const day = chicagoDay(new Date(e.start));
     (map[day] = map[day] || []).push(e);
   });
+  // Chronological within each day — used for both the lessons row
+  // (classesSectionHtml) and the items grid (dayCardHtml), neither of which
+  // otherwise re-sorts what arrives from the server in whatever order it
+  // was returned.
+  Object.values(map).forEach((list) => list.sort((a, b) => new Date(a.start) - new Date(b.start)));
   return map;
 }
 

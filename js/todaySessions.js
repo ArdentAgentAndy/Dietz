@@ -52,10 +52,14 @@ export function elapsedMinutesSince(startedAt) {
   return (Date.now() - startedAt) / 60000;
 }
 
-// ---- taskId -> today's Sessions-row-id map, so pause/resume cycles on the
-// same item the same day converge on one row instead of fragmenting. Pruned
-// to just today's entries on every read, so a stale entry from a prior day
-// never resumes into that old row. ----
+// ---- taskId -> work-day Sessions-row-id map, so pause/resume cycles on the
+// same item converge on one row instead of fragmenting. A "work day" is the
+// day a stopwatch run STARTED, not the calendar day it happened to be saved
+// on — working past midnight (see addMinutesToTodaySession's workDayISO)
+// keeps resuming into the same row it started in. Pruned to today-or-
+// yesterday's entries on every read, so a genuinely stale entry (the same
+// task worked on days ago) never resumes into that old row, while a
+// just-crossed-midnight entry still gets found. ----
 function loadSessionMap() {
   let map;
   try {
@@ -65,9 +69,12 @@ function loadSessionMap() {
     map = {};
   }
   const todayISO = formatDateISO(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayISO = formatDateISO(yesterday);
   let changed = false;
   for (const [taskId, entry] of Object.entries(map)) {
-    if (entry.date !== todayISO) {
+    if (entry.date !== todayISO && entry.date !== yesterdayISO) {
       delete map[taskId];
       changed = true;
     }
@@ -108,46 +115,77 @@ export function unresolvedLabelForTask(task) {
   return task.course || '(no course set)';
 }
 
-// ---- find-or-create today's Sessions row for this task — the single
-// source of truth for "one row per item per day", shared by the stopwatch's
-// pause-save and the enhanced ✓-button flow. ----
-function findOrCreateTodaySessionForTask(taskId, categoryId, taskName) {
-  const todayISO = formatDateISO(new Date());
+// ---- find-or-create a task's Sessions row for the given work day — the
+// single source of truth for "one row per item per work-day", shared by the
+// stopwatch's pause-save and the enhanced ✓-button flow. ----
+function findOrCreateTodaySessionForTask(taskId, categoryId, taskName, workDayISO) {
   const map = loadSessionMap();
   const entry = map[taskId];
-  if (entry) {
+  if (entry && entry.date === workDayISO) {
     const existing = store.table('Sessions').find((s) => s.id === entry.sessionId);
     if (existing) return existing;
   }
   const row = store.upsert('Sessions', {
     categoryId,
-    date: todayISO,
+    date: workDayISO,
     start: '',
     end: '',
     minutes: 0,
     source: SOURCE,
     note: taskName || '',
   });
-  map[taskId] = { sessionId: row.id, date: todayISO };
+  map[taskId] = { sessionId: row.id, date: workDayISO };
   saveSessionMap(map);
   return row;
 }
 
-// Minutes already saved for this task today (0 if nothing logged yet) — for
-// rendering the stopwatch's frozen value while paused/idle.
+// Minutes already saved for this task today-or-yesterday (0 if nothing
+// logged yet) — for rendering the stopwatch's frozen value while
+// paused/idle, including right after crossing midnight mid-session.
 export function existingTodayMinutesForTask(taskId) {
   const entry = loadSessionMap()[taskId];
   if (!entry) return 0;
   return store.table('Sessions').find((s) => s.id === entry.sessionId)?.minutes || 0;
 }
 
-// Adds deltaMinutes to today's per-item row (creating it first if needed).
-// No CourseState bookkeeping here — the Revision subchannel's chart
-// (js/views/revision.js) sums live Sessions rows directly for anything not
-// yet compacted, and js/compaction.js folds a session's minutes into
-// CourseState exactly once, when it later compacts (and deletes) that row.
-export function addMinutesToTodaySession(taskId, categoryId, taskName, deltaMinutes) {
-  if (!(deltaMinutes > 0)) return findOrCreateTodaySessionForTask(taskId, categoryId, taskName);
-  const row = findOrCreateTodaySessionForTask(taskId, categoryId, taskName);
+// Adds deltaMinutes to a task's Sessions row, creating it first if needed.
+// workDayISO defaults to today (the enhanced ✓-button's preset-duration
+// fallback, which has no stopwatch run to anchor to) but the stopwatch path
+// (js/views/today.js's pauseActiveStopwatch) passes the run's own start
+// day explicitly — working past midnight stays attributed entirely to the
+// day the work started, never split or moved to the day it happened to be
+// paused on. No CourseState bookkeeping here — the Revision subchannel's
+// chart (js/views/revision.js) sums live Sessions rows directly for
+// anything not yet compacted, and js/compaction.js folds a session's
+// minutes into CourseState exactly once, when it later compacts (and
+// deletes) that row.
+export function addMinutesToTodaySession(taskId, categoryId, taskName, deltaMinutes, workDayISO = formatDateISO(new Date())) {
+  if (!(deltaMinutes > 0)) return findOrCreateTodaySessionForTask(taskId, categoryId, taskName, workDayISO);
+  const row = findOrCreateTodaySessionForTask(taskId, categoryId, taskName, workDayISO);
   return store.upsert('Sessions', { id: row.id, minutes: row.minutes + deltaMinutes, note: taskName || row.note });
+}
+
+// Closes out a stopwatch run that's still showing as "running" when the
+// Today page is (re)mounted — tab closed without pausing, or just never
+// revisited. Logs the full real elapsed time (start to now, however long
+// that's been — no cap, same "no matter what" rule as the explicit pause
+// path above) under the day the run STARTED. Only ever called at mount
+// time (js/views/today.js), never on a live tick, so it can't cut off a
+// session that's still actively being watched run past midnight — it only
+// ever fires on a fresh look at the page. `task` is the resolved task
+// object for the stale timer's taskId (or undefined, if it's since been
+// deleted/uncached) — pass null/undefined-safe so the caller doesn't need
+// to pre-check anything.
+export function closeStaleTodayTimer(task) {
+  const current = loadTimer();
+  if (!current) return;
+  saveTimer(null);
+  if (!task) return;
+
+  const cat = resolveCategoryForTask(task);
+  if (!cat) return; // nothing to attribute it to — drop rather than guess
+
+  const minutes = elapsedMinutesSince(current.startedAt);
+  if (!(minutes > 0)) return;
+  addMinutesToTodaySession(task.id, cat.id, task.name, minutes, formatDateISO(new Date(current.startedAt)));
 }

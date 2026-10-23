@@ -40,11 +40,27 @@ const COURSE_COLOR_NAME = {
   'AE 140': 'default',
 };
 
-export function hexForCourse(course) {
-  return hexForNotionColor(COURSE_COLOR_NAME[course]);
+// Accepts either a plain course code string (the original signature — used
+// where only the code is available, e.g. a Canvas event, which deliberately
+// stays locked to this fixed mapping so it keeps matching Notion's own
+// Course-select colors — see the comment above COURSE_COLOR_NAME) or a full
+// Courses row. Passing the row lets a user-set course.color (the Courses
+// page's color picker) override the fixed mapping for Dietz's own views
+// (Courses/Logging/Revision) without touching what Canvas/Notion show,
+// since those read color from elsewhere entirely (task.courseColor, a
+// Notion-provided field — see js/taskDisplay.js) and never call this at all.
+export function hexForCourse(courseOrCode) {
+  const code = typeof courseOrCode === 'string' ? courseOrCode : courseOrCode?.code;
+  const customColor = typeof courseOrCode === 'object' ? courseOrCode?.color : null;
+  if (customColor) return hexForNotionColor(customColor);
+  return hexForNotionColor(COURSE_COLOR_NAME[code]);
 }
 
 const PALETTE_NAMES = Object.keys(NOTION_COLOR_HEX).filter((name) => name !== 'default');
+
+// For a color-picker UI (js/views/courses.js) — every selectable swatch,
+// name + hex together.
+export const COLOR_PALETTE = PALETTE_NAMES.map((name) => ({ name, hex: NOTION_COLOR_HEX[name] }));
 
 // Deterministic color for a label with no fixed mapping of its own (a
 // Project/Research category's name — the "project/lead" sub-identity on

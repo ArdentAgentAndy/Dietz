@@ -13,7 +13,7 @@ import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, s
 import { hoursChartConfig } from './logging.js?v=63';
 import { coursesAndGpaHtml } from './courses.js?v=63';
 import { trackViewHtml } from './roadmap.js?v=63';
-import { render as renderTodayPanel, unmount as unmountTodayPanel } from './today.js?v=63';
+import { render as renderTodayPanel, unmount as unmountTodayPanel, requestJumpFlash } from './today.js?v=63';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [
@@ -35,10 +35,27 @@ function addDays(d, n) {
   return copy;
 }
 
+// T jumps straight to the standalone Today page — same guard pattern as
+// today.js's own spacebar-pause keybind, so it doesn't hijack typing into
+// the embedded Today panel's duration inputs or an open dialog.
+function isTypingTarget() {
+  const tag = document.activeElement?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function onKeyDown(e) {
+  if (e.key !== 't' && e.key !== 'T') return;
+  if (isTypingTarget() || document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  requestJumpFlash(); // picked up by today.js's next render() — see its own comment for why
+  location.hash = '#/today';
+}
+
 export function render(rootEl) {
   container = rootEl;
   // Track's AE grid is wide (same reason roadmap.js itself goes wide).
   container.closest('#app')?.classList.add('app-wide');
+  window.addEventListener('keydown', onKeyDown);
 
   const cached = getCachedNotionTasks();
   if (cached.length) {
@@ -50,6 +67,7 @@ export function render(rootEl) {
 }
 
 export function unmount() {
+  window.removeEventListener('keydown', onKeyDown);
   unmountTodayPanel();
   container?.closest('#app')?.classList.remove('app-wide');
   if (chart) chart.destroy();

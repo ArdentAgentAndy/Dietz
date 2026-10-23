@@ -1,5 +1,5 @@
 import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=63';
-import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS } from '../format.js?v=63';
+import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=63';
 import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=63';
 import {
   resolvableCategory,
@@ -11,6 +11,7 @@ import {
   elapsedMinutesSince,
   existingTodayMinutesForTask,
   addMinutesToTodaySession,
+  closeStaleTodayTimer,
 } from '../todaySessions.js?v=63';
 
 let container = null;
@@ -27,18 +28,48 @@ let activeStopwatchTaskId = null;
 let stopwatchError = null;
 let tickIntervalId = null;
 
+// Set by requestJumpFlash() (called from js/views/home.js's T keybind,
+// before it sets location.hash) — read once in rebuild() to add a brief
+// baby-blue border flash to the header card on the standalone page's next
+// mount, so jumping here via keybind gets a visible "you're here now" cue
+// the same way clicking through the menu doesn't need (you watched the
+// click land). Cleared on a timer rather than after the first rebuild(),
+// since render() generally fires a cached-path rebuild() immediately and a
+// second one once the async task fetch resolves — the flag needs to
+// survive both so the flash doesn't get cut short mid-animation.
+let flashOnMount = false;
+let flashTimeoutId = null;
+
+export function requestJumpFlash() {
+  flashOnMount = true;
+}
+
 export function render(rootEl, opts = {}) {
   container = rootEl;
   embedded = Boolean(opts.embedded);
 
-  // Restore an in-progress stopwatch run across reloads (standalone page only).
-  activeStopwatchTaskId = embedded ? null : todayTimerState()?.taskId ?? null;
+  // Standalone page only — Home already manages #app's width itself (for
+  // its own week-grid) around the embedded panel, so this would just be
+  // redundant (and risk fighting Home's own add/remove timing) there. Six
+  // (seven, with the current-timer arrow column) columns of cells need the
+  // same wider layout Calendar/Roadmap/Canvas/Home already opt into rather
+  // than being squeezed into the default #app width.
+  if (!embedded) container.closest('#app')?.classList.add('app-wide');
+
+  if (!embedded && flashOnMount) {
+    clearTimeout(flashTimeoutId);
+    flashTimeoutId = setTimeout(() => { flashOnMount = false; }, 1600);
+  } else if (embedded) {
+    flashOnMount = false; // the flash is standalone-page-only; never let a stray flag bleed into Home's embedded panel
+  }
+
   stopwatchError = null;
 
   const cached = getCachedNotionTasks();
   if (cached.length) {
     allTasks = cached;
     loadError = null;
+    refreshActiveStopwatchTask(); // needs allTasks loaded first, to resolve a stale run's category
     rebuild();
   } else {
     container.innerHTML = `
@@ -64,6 +95,7 @@ export function unmount() {
     clearInterval(tickIntervalId);
     tickIntervalId = null;
   }
+  if (!embedded) container?.closest('#app')?.classList.remove('app-wide');
   window.removeEventListener('keydown', onSpacePause);
   activeStopwatchTaskId = null;
   stopwatchError = null;
@@ -93,6 +125,7 @@ async function load() {
   if (error && getCachedNotionTasks().length) return; // keep showing the cached data
   allTasks = tasks;
   loadError = error;
+  refreshActiveStopwatchTask();
   rebuild();
 }
 
@@ -143,7 +176,11 @@ function catCellsHtml(task) {
 // makes each column line up across every row, same approach as the Classes
 // page's .class-list.
 function taskRowHtml(task) {
-  const clickable = !embedded && resolvableCategory(task);
+  // A completed task is done — re-selecting it to start the stopwatch back
+  // up doesn't make sense once it's already been marked off, so it drops
+  // out of the clickable set the same way a non-resolvable-category row
+  // always has been.
+  const clickable = !embedded && !task.mark && resolvableCategory(task);
   const isCurrentTimer = !embedded && activeStopwatchTaskId === task.id;
   const bg = hexToRgba(categoryColorForTask(task), 0.12);
   const rowClasses = ['today-row', task.mark ? 'is-done' : '', isCurrentTimer ? 'is-current-timer' : '', clickable ? 'today-row-clickable' : ''].filter(Boolean).join(' ');
@@ -225,10 +262,13 @@ async function deleteRow(taskId) {
 // Un-marking (true -> false) and non-resolvable-category tasks (Meeting,
 // Date, Application, Lesson, uncategorized) keep the exact original
 // one-line toggle, unchanged: no duration requirement, no session logging.
-// Marking a resolvable task complete (false -> true) now requires its
-// per-row duration to be filled in first (flashed red if empty) and, once
-// filled, logs that duration into today's per-item Sessions row (the same
-// row the stopwatch box below pauses/resumes into) before marking it done.
+// Marking a resolvable task complete (false -> true): if the stopwatch
+// already logged real time for this task today (existingTodayMinutesForTask
+// > 0), that session is already the accurate record — just mark complete,
+// no duration required, and nothing added on top of it (adding the preset
+// duration here too would double count). Only when there's no tracked time
+// yet does it fall back to the per-row duration field (flashed red if
+// empty), logged into today's per-item Sessions row before marking done.
 function onToggleMarkClick(task) {
   if (task.mark) {
     toggleField(task.id, 'mark', false);
@@ -242,6 +282,10 @@ function onToggleMarkClick(task) {
   if (!cat) {
     saveError = `Can't mark complete — "${unresolvedLabelForTask(task)}" doesn't match any existing course/project/lead.`;
     rebuild();
+    return;
+  }
+  if (existingTodayMinutesForTask(task.id) > 0) {
+    toggleField(task.id, 'mark', true);
     return;
   }
   if (!task.duration) {
@@ -269,21 +313,56 @@ function stopwatchDisplayMinutes(taskId) {
   return base + (timer?.taskId === taskId ? elapsedMinutesSince(timer.startedAt) : 0);
 }
 
+// Closes out a stopwatch run left going past midnight (tab never revisited,
+// or just never paused before bed) — see closeStaleTodayTimer's own comment
+// for why this needs to live here rather than in todaySessions.js: it's the
+// only place with allTasks loaded to resolve the stale run's task/category.
+// Deliberately called only at mount time (render()/load(), via
+// refreshActiveStopwatchTask below) and never from the per-tick ticker —
+// a tick fires every second on a page that's actively open, so reconciling
+// there would auto-close (and cut off) a run the user is still watching
+// the moment it happens to cross midnight. Mount only fires on a fresh
+// look at the page, which is the right moment to ask "was this left
+// running since before." A no-op whenever nothing's actually stale (the
+// normal case, including a same-day run still legitimately in progress).
+function reconcileStaleStopwatch() {
+  const timer = todayTimerState();
+  if (!timer) return;
+  if (formatDateISO(new Date(timer.startedAt)) === formatDateISO(new Date())) return;
+  closeStaleTodayTimer(allTasks.find((t) => t.id === timer.taskId));
+}
+
+// Reconciles, then (re)reads whatever's left running into
+// activeStopwatchTaskId — called after allTasks loads/changes (render's
+// cached-path and load()'s fresh-fetch path) and isn't called at all in
+// embedded mode (Home never shows a selected/running stopwatch).
+function refreshActiveStopwatchTask() {
+  if (embedded) {
+    activeStopwatchTaskId = null;
+    return;
+  }
+  reconcileStaleStopwatch();
+  activeStopwatchTaskId = todayTimerState()?.taskId ?? null;
+}
+
 // Pauses+saves whatever is currently running, if anything — used by the
 // explicit Pause button and as the first half of auto-switching to a
-// different item. Clears the running timer either way.
+// different item. Clears the running timer either way. Attributed to the
+// day the run STARTED, not the day it's being paused on — working past
+// midnight (e.g. starting Friday night, pausing Saturday before sunrise)
+// stays entirely on Friday's total, no matter how long the run went.
 function pauseActiveStopwatch() {
   const current = stopTodayTimer();
   if (!current) return;
   const task = allTasks.find((t) => t.id === current.taskId);
   const cat = task && resolveCategoryForTask(task);
   if (!task || !cat) return; // shouldn't happen — only resolvable rows are clickable
-  addMinutesToTodaySession(task.id, cat.id, task.name, elapsedMinutesSince(current.startedAt));
+  addMinutesToTodaySession(task.id, cat.id, task.name, elapsedMinutesSince(current.startedAt), formatDateISO(new Date(current.startedAt)));
 }
 
 function selectStopwatchTask(taskId) {
   const task = allTasks.find((t) => t.id === taskId);
-  if (!task || !resolvableCategory(task)) return;
+  if (!task || task.mark || !resolvableCategory(task)) return;
   const cat = resolveCategoryForTask(task);
   if (!cat) {
     stopwatchError = `Can't start — "${unresolvedLabelForTask(task)}" doesn't match any existing course/project/lead.`;
@@ -325,6 +404,11 @@ function onStopwatchCompleteClick() {
 
 function updateStopwatchElapsed() {
   if (!container || embedded) return;
+  // Deliberately no stale-run reconcile here — see reconcileStaleStopwatch's
+  // comment for why that's mount-only. This tick just keeps the live
+  // elapsed display moving, including straight through midnight; the run
+  // keeps counting under its start day until the user pauses/completes it
+  // or navigates away and back.
   const timer = todayTimerState();
   if (!timer) return;
   const el = container.querySelector('[data-stopwatch-elapsed]');
@@ -374,11 +458,12 @@ function rebuild() {
   const totalMinutes = totalDurationMinutes(tasks);
 
   container.innerHTML = `
-    <section class="card">
+    <section class="card${!embedded && flashOnMount ? ' today-jump-flash' : ''}">
       <div class="row-between" style="margin-bottom:0;">
         <div style="display:flex; align-items:baseline; gap:10px;">
           <h1 class="mono" style="margin:0;">Today</h1>
           <span class="muted">${formatDisplayDate()}</span>
+          ${embedded ? `<a href="#/today" class="today-jump-link mono" title="Open the Today page (T)">Open →</a>` : ''}
         </div>
         <p class="muted" style="margin:0;">Total duration: <span class="mono">${formatDuration(totalMinutes)}</span></p>
       </div>
@@ -393,6 +478,27 @@ function rebuild() {
   `;
 
   attachEvents();
+  syncStopwatchColumnWidths();
+}
+
+// .stopwatch-task-cells' CSS grid-template-columns (styles.css) uses the
+// same minmax(...,max-content) tracks as .today-list's own, but each grid
+// computes max-content independently from whatever content IT actually
+// contains — the table sizes its shape/sub columns off the widest badge
+// across every row, while the stopwatch only ever shows the one currently
+// selected task's badge, which is narrower more often than not. Matching
+// column classes alone only lines things up when the selected task happens
+// to have the widest badge; copying the table's actual rendered pixel
+// widths across (after it's laid out) is what makes them match every time,
+// regardless of which task is selected.
+function syncStopwatchColumnWidths() {
+  if (embedded || !container) return;
+  const list = container.querySelector('.today-list');
+  const cells = container.querySelector('.stopwatch-task-cells');
+  if (!list || !cells) return;
+  const tracks = getComputedStyle(list).gridTemplateColumns.split(' ');
+  if (tracks.length < 2) return;
+  cells.style.gridTemplateColumns = `${tracks[0]} ${tracks[1]} 1fr`;
 }
 
 function attachEvents() {

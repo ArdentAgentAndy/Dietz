@@ -4,7 +4,7 @@ import { clearCourseState, getCourseState } from '../courseState.js?v=63';
 import { escapeHtml, hexToRgba } from '../format.js?v=63';
 import { computeGrade } from '../grading.js?v=63';
 import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=63';
-import { hexForCourse } from '../notionColors.js?v=63';
+import { hexForCourse, COLOR_PALETTE } from '../notionColors.js?v=63';
 
 let container = null;
 let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];
@@ -20,14 +20,22 @@ export function unmount() {
 
 // Same column-grid technique css/styles.css's .class-list already uses for
 // Lessons (grid on the list, each row display:contents so its cells become
-// direct grid items and line up across rows) — Course/Name/Credits/
-// Archive/Delete, with the course's own color (hexForCourse, same as
-// everywhere else in the app) as a left-border accent on the first cell.
-function courseRowHtml(course) {
-  const color = hexForCourse(course.code);
+// direct grid items and line up across rows) — Reorder/Color/Course/Name/
+// Credits/Archive/Delete, with the course's own color (hexForCourse — a
+// custom course.color if set via the swatch button, else the fixed
+// Notion-matching default) as a left-border accent on the code cell.
+function courseRowHtml(course, isFirst, isLast) {
+  const color = hexForCourse(course);
   const bg = hexToRgba(color, 0.08);
   return `
     <div class="course-row${course.status === 'archived' ? ' is-archived' : ''}">
+      <span class="course-cell course-cell-reorder" style="background:${bg};">
+        <button data-action="move-up" data-id="${course.id}" ${isFirst ? 'disabled' : ''} title="Move up">&uarr;</button>
+        <button data-action="move-down" data-id="${course.id}" ${isLast ? 'disabled' : ''} title="Move down">&darr;</button>
+      </span>
+      <button type="button" class="course-cell course-cell-color" data-action="pick-color" data-id="${course.id}" style="background:${bg};" title="Change color">
+        <span class="course-color-swatch" style="background:${color};"></span>
+      </button>
       <a class="course-cell course-cell-code mono" href="#/course/${course.id}" style="background:${bg}; color:${color}; --cell-color:${color};">${escapeHtml(course.code)}</a>
       <span class="course-cell course-cell-name" style="background:${bg};">${escapeHtml(course.name)}</span>
       <span class="course-cell course-cell-credits muted mono" style="background:${bg};">${course.credits} cr</span>
@@ -46,6 +54,8 @@ function courseRowHtml(course) {
 function courseTableHeadHtml() {
   return `
     <div class="course-row course-row-head">
+      <span class="course-cell course-cell-reorder"></span>
+      <span class="course-cell course-cell-color"></span>
       <span class="course-cell course-cell-code muted mono">Course</span>
       <span class="course-cell course-cell-name muted mono">Name</span>
       <span class="course-cell course-cell-credits muted mono">Credits</span>
@@ -66,8 +76,8 @@ function rebuild() {
         <h1 class="mono">Courses</h1>
         <button data-action="add-course">+ Add course</button>
       </div>
-      <div class="course-table">${courseTableHeadHtml()}${active.map(courseRowHtml).join('')}</div>
-      ${archived.length ? `<h2 class="mono" style="margin-top:16px;">Archived</h2><div class="course-table">${courseTableHeadHtml()}${archived.map(courseRowHtml).join('')}</div>` : ''}
+      <div class="course-table">${courseTableHeadHtml()}${active.map((c, i) => courseRowHtml(c, i === 0, i === active.length - 1)).join('')}</div>
+      ${archived.length ? `<h2 class="mono" style="margin-top:16px;">Archived</h2><div class="course-table">${courseTableHeadHtml()}${archived.map((c, i) => courseRowHtml(c, i === 0, i === archived.length - 1)).join('')}</div>` : ''}
     </section>
 
     ${coursesAndGpaHtml()}
@@ -76,6 +86,60 @@ function rebuild() {
   `;
 
   attachEvents();
+}
+
+// Swaps sortOrder with the adjacent course within the same active/archived
+// group (the two groups are rendered as separate lists, so "adjacent" means
+// adjacent within whichever group the button is in).
+function moveCourse(courseId, direction) {
+  const courses = [...store.table('Courses')].sort((a, b) => a.sortOrder - b.sortOrder);
+  const course = courses.find((c) => c.id === courseId);
+  if (!course) return;
+  const group = courses.filter((c) => c.status === course.status);
+  const idx = group.findIndex((c) => c.id === courseId);
+  const other = group[idx + direction];
+  if (!other) return;
+  store.upsert('Courses', { id: course.id, sortOrder: other.sortOrder });
+  store.upsert('Courses', { id: other.id, sortOrder: course.sortOrder });
+  rebuild();
+}
+
+function openColorDialog(courseId) {
+  const course = store.table('Courses').find((c) => c.id === courseId);
+  if (!course) return;
+  const current = course.color || null;
+  const dialog = container.querySelector('#modal-dialog');
+
+  dialog.innerHTML = `
+    <form method="dialog" class="modal-form">
+      <h2 class="mono">${escapeHtml(course.code)} color</h2>
+      <div class="color-swatch-grid">
+        ${COLOR_PALETTE.map(
+          (p) => `<button type="button" class="color-swatch-option${current === p.name ? ' is-selected' : ''}" data-color="${p.name}" style="background:${p.hex};" title="${p.name}"></button>`
+        ).join('')}
+      </div>
+      <div class="modal-actions">
+        <button type="button" data-action="reset-color">Use default</button>
+        <button type="button" data-action="cancel">Cancel</button>
+      </div>
+    </form>
+  `;
+
+  dialog.querySelectorAll('[data-color]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      store.upsert('Courses', { id: courseId, color: btn.dataset.color });
+      dialog.close();
+      rebuild();
+    });
+  });
+  dialog.querySelector('[data-action="reset-color"]').addEventListener('click', () => {
+    store.upsert('Courses', { id: courseId, color: '' });
+    dialog.close();
+    rebuild();
+  });
+  dialog.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+
+  dialog.showModal();
 }
 
 function courseGradeCardHtml(course, grade) {
@@ -88,7 +152,7 @@ function courseGradeCardHtml(course, grade) {
   // Canvas/Lessons, via hexForCourse — see notionColors.js) so a course
   // reads as one consistent color everywhere in the app, not a new one
   // invented just for this card.
-  const color = hexForCourse(course.code);
+  const color = hexForCourse(course);
   return `
     <a class="course-grade-card" href="#/course/${course.id}" style="border-color:${hexToRgba(color, 0.5)}; background:${hexToRgba(color, 0.1)};">
       <span class="mono" style="color:${color};">${escapeHtml(course.code)}</span>
@@ -151,6 +215,18 @@ function attachEvents() {
 
   container.querySelectorAll('[data-action="delete"]').forEach((btn) => {
     btn.addEventListener('click', () => deleteCourse(btn.dataset.id));
+  });
+
+  container.querySelectorAll('[data-action="move-up"]').forEach((btn) => {
+    btn.addEventListener('click', () => moveCourse(btn.dataset.id, -1));
+  });
+
+  container.querySelectorAll('[data-action="move-down"]').forEach((btn) => {
+    btn.addEventListener('click', () => moveCourse(btn.dataset.id, 1));
+  });
+
+  container.querySelectorAll('[data-action="pick-color"]').forEach((btn) => {
+    btn.addEventListener('click', () => openColorDialog(btn.dataset.id));
   });
 }
 

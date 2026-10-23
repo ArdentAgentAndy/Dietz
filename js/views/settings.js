@@ -56,7 +56,7 @@ function rebuild() {
     <section class="card">
       <h2 class="mono">Me</h2>
       <label>Phone
-        <input type="text" data-setting="phone" value="${escapeHtml(getSetting('phone'))}" placeholder="(217) 555-0123">
+        <input type="text" data-setting="phone" value="${escapeHtml(getSetting('phone'))}" placeholder="(XXX)-XXX-XXXX">
       </label>
     </section>
 

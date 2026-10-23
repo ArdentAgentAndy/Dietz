@@ -34,6 +34,16 @@ a {
   color: inherit;
 }
 
+.today-jump-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.today-jump-link:hover {
+  text-decoration: underline;
+}
+
 .mono {
   font-family: 'Space Mono', monospace;
 }
@@ -633,7 +643,7 @@ h1, h2, h3 {
    js/views/courses.js's courseRowHtml. */
 .course-table {
   display: grid;
-  grid-template-columns: minmax(90px, max-content) 1fr minmax(64px, max-content) minmax(90px, max-content) minmax(70px, max-content);
+  grid-template-columns: minmax(44px, max-content) minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(64px, max-content) minmax(90px, max-content) minmax(70px, max-content);
   gap: 6px 12px;
   align-items: center;
 }
@@ -656,8 +666,35 @@ h1, h2, h3 {
   overflow-wrap: break-word;
 }
 
-.course-cell-code {
+.course-cell-reorder {
   border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  display: flex;
+  gap: 2px;
+}
+
+.course-cell-reorder button {
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.course-cell-color {
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.course-color-swatch {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+}
+
+.course-cell-code {
   border-left: 3px solid var(--cell-color, transparent);
   text-decoration: none;
 }
@@ -693,7 +730,7 @@ h1, h2, h3 {
     display: none;
   }
 
-  .course-cell-code,
+  .course-cell-reorder,
   .course-cell-delete {
     border-radius: 0;
   }
@@ -1448,10 +1485,17 @@ button.active, .btn.active {
    table row (js/views/today.js's catCellsHtml — same classes, same
    background-by-category styling) so the stopwatch reads as "this exact
    row, zoomed in" rather than a second, differently-styled summary of it. */
+/* Same 3 column tracks (shape/sub/name) as .today-list's own
+   grid-template-columns, so this always lines up with the table above it —
+   previously a plain flex row, the name cell only ever took as much width
+   as its own text needed, so a short task name left the whole box
+   narrower/lopsided instead of filling it out the way the table's 1fr name
+   column always does. */
 .stopwatch-task-cells {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr;
   align-items: stretch;
-  gap: 10px;
+  gap: 16px;
   min-width: 0;
 }
 
@@ -1464,6 +1508,9 @@ button.active, .btn.active {
    rule only needs to drop the padding/background that make sense for a
    real row but not for a plain placeholder line. */
 .stopwatch-task-cells .today-cell-name.is-placeholder {
+  /* The idle state is just this one span, not all 3 cells — span the full
+     grid row instead of landing in column 1's narrow shape-width track. */
+  grid-column: 1 / -1;
   padding: 10px 0;
   background: none !important;
   color: var(--muted);
@@ -1472,8 +1519,15 @@ button.active, .btn.active {
 .stopwatch-elapsed {
   font-family: 'Space Mono', monospace;
   font-size: 28px;
-  color: var(--accent);
+  /* Gray by default (idle, or paused on a selected task — .is-running,
+     below, is the only state that lights it up accent-blue) so a glance at
+     the color alone tells you whether it's actually ticking. */
+  color: var(--muted);
   align-self: center;
+}
+
+.stopwatch-card.is-running .stopwatch-elapsed {
+  color: var(--accent);
 }
 
 .stopwatch-actions {
@@ -1496,6 +1550,20 @@ button.active, .btn.active {
   50% {
     border-color: var(--red);
     box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.35);
+  }
+}
+
+/* Today's header card, flashed once on landing via the T keybind from Home
+   (js/views/home.js) — same finite-iteration technique as input-error-flash
+   above, just baby-blue (var(--accent)) instead of red. */
+.today-jump-flash {
+  animation: today-jump-flash 0.5s ease-in-out 3;
+}
+
+@keyframes today-jump-flash {
+  50% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(195, 222, 232, 0.35);
   }
 }
 
@@ -1618,7 +1686,7 @@ button.active, .btn.active {
 .today-list {
   display: grid;
   grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(56px, max-content) minmax(64px, max-content) minmax(118px, max-content);
-  gap: 6px 10px;
+  gap: 6px 16px;
   /* stretch, not center: every cell in a row fills the row's full height
      (set by its tallest cell) so their background bands line up evenly —
      see .today-cell-shape below for the one deliberate exception. */
@@ -1640,7 +1708,7 @@ button.active, .btn.active {
 }
 
 .today-cell {
-  padding: 10px 8px;
+  padding: 10px 14px;
   box-sizing: border-box;
   overflow-wrap: break-word;
 }
@@ -1676,11 +1744,15 @@ button.active, .btn.active {
 }
 
 .today-cell-name {
+  display: flex;
+  align-items: center;
   font-weight: 500;
 }
 
 .today-cell-time {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
 }
 
@@ -1982,6 +2054,25 @@ dialog#modal-dialog::backdrop {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 6px;
+}
+
+.color-swatch-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.color-swatch-option {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.color-swatch-option.is-selected {
+  border-color: var(--text);
 }
 
 .btn-primary {

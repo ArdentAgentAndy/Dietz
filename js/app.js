@@ -5,6 +5,7 @@ import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=6
 import { migrateCourseConfigs } from './migrations.js?v=63';
 import { initPush } from './push.js?v=63';
 import { initNav } from './nav.js?v=63';
+import { reconcileTimerDayBoundary } from './timer.js?v=63';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project
@@ -14,6 +15,7 @@ if ('serviceWorker' in navigator) {
 }
 
 migrateCourseConfigs();
+reconcileTimerDayBoundary();
 dedupeCompactedSessions();
 compactOldSessions();
 initPush();

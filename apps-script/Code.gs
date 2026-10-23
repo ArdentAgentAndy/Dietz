@@ -2,7 +2,7 @@
 // See CLAUDE.md §1 and §2 for the API contract and schema this implements.
 
 var TABLES = {
-  Courses: { columns: ['id', 'code', 'name', 'credits', 'term', 'status', 'finalLetter', 'configJson', 'sortOrder'], key: ['id'] },
+  Courses: { columns: ['id', 'code', 'name', 'credits', 'term', 'status', 'finalLetter', 'configJson', 'sortOrder', 'color'], key: ['id'] },
   Items: { columns: ['id', 'courseId', 'componentId', 'name', 'earned', 'possible', 'excused', 'dueDate', 'note'], key: ['id'] },
   CourseState: { columns: ['courseId', 'key', 'value'], key: ['courseId', 'key'] },
   Categories: { columns: ['id', 'group', 'name', 'courseId', 'archived'], key: ['id'] },

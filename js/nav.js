@@ -8,16 +8,15 @@ import { isConfigured } from './sync.js?v=63';
 // the channels row itself renders empty and ArrowLeft/Right/Up/Down/Enter
 // are no-ops: channels are only reachable from the Menu page's own octagon
 // constellation while Menu is open, never from this row. highlightIndex is
-// a plain index into CHANNELS. Landing on a channel only highlights it and
-// reveals its dropdown — channels carry no content of their own, so
-// ArrowUp/ArrowDown (move within row 2) is what walks a channel's own
-// subchannel dropdown (moveSub, below — it only checks for subchannels,
-// never for a channel's own `route`, so this works identically whether or
-// not the channel also carries one). A click, or ArrowLeft/ArrowRight
-// landing on a channel, instead navigates immediately — straight to that
-// channel's own `route` if it has one (Records/Public/Contacts, see
-// channels.js), otherwise it just opens the dropdown and leaves the
-// highlighter sitting there (nothing else to navigate to yet). The dropdown
+// a plain index into CHANNELS. A click, or ArrowLeft/ArrowRight landing on
+// a channel, opens its dropdown whenever it has subchannels to show
+// (ArrowUp/ArrowDown, moveSub below, is what then walks that dropdown) —
+// that's true even for a channel that also carries its own `route`
+// (Records, see channels.js): its default page is just the dropdown's own
+// first item, not a click-through shortcut that would otherwise make the
+// dropdown unreachable by mouse entirely. Only a channel with a `route` and
+// no subchannels at all (Public/Contacts) skips the dropdown and navigates
+// immediately, since there'd be nothing in it to show. The dropdown
 // auto-closes after a few seconds of inactivity, or immediately on a click
 // outside it.
 const DROPDOWN_TIMEOUT_MS = 4000;
@@ -90,13 +89,16 @@ function closeDropdown() {
 function moveChannel(delta) {
   const n = visibleChannels().length;
   highlightIndex = ((highlightIndex + delta) % n + n) % n;
-  // A channel that carries its own route (Records/Public/Contacts — the
-  // exception to "channels have no content", see channels.js) navigates
-  // immediately instead of leaving the highlighter sitting there showing
-  // nothing. Its subchannel dropdown (if it has one — Records does) is
-  // still reachable afterward via ArrowUp/ArrowDown, see moveSub below.
+  // A channel that carries its own route but has no subchannels of its own
+  // to show (Public/Contacts — the exception to "channels have no
+  // content", see channels.js) navigates immediately instead of leaving the
+  // highlighter sitting there showing nothing. A channel with subchannels
+  // always opens its dropdown instead, even if it also carries a route
+  // (Records) — otherwise that dropdown would never be reachable by mouse
+  // at all (click goes through the exact same check, see onClick below),
+  // only ever by the separate ArrowUp/ArrowDown handling in moveSub.
   const ch = currentChannel();
-  if (ch?.route) {
+  if (ch?.route && !ch.subchannels.length) {
     goToPage(ch);
     return;
   }
@@ -194,12 +196,21 @@ function selectByNumber(n) {
 }
 
 // Clicking a channel button moves the highlighter and opens its dropdown —
-// unless the channel carries its own route (Records/Public/Contacts), in
-// which case it navigates immediately instead (its dropdown, if it has one,
-// is still reachable afterward via ArrowUp/ArrowDown). Clicking a subchannel inside the
-// dropdown closes it (its own href handles the actual navigation). Menu's
-// own click handling lives in onMenuClick below — it's a separate DOM
-// subtree now, not part of this row.
+// unless the channel carries its own route AND has no subchannels of its
+// own to show (Public/Contacts), in which case it navigates immediately
+// instead. A channel with subchannels always opens the dropdown on click,
+// even if it also carries a route (Records, defaulting to Today) — that
+// default route is still just as reachable, as the dropdown's own first
+// item, one click further in; the alternative (clicking the channel button
+// itself always skipping straight past the dropdown) left that dropdown
+// completely unreachable by mouse. Clicking a subchannel inside the
+// dropdown navigates explicitly via location.hash (see below) rather than
+// relying on the link's own native click behavior — closeDropdown()
+// re-renders mount's innerHTML synchronously, which detaches the clicked
+// <a> from the document before the browser gets to the link's default
+// action, silently swallowing the navigation. Menu's own click handling
+// lives in onMenuClick below — it's a separate DOM subtree now, not part
+// of this row.
 function onClick(e) {
   // Stops here so onDocumentClick never sees this event — necessary, not
   // just tidy: a channel click calls render() synchronously below, which
@@ -216,14 +227,18 @@ function onClick(e) {
     if (idx !== -1) {
       highlightIndex = idx;
       const ch = channels[idx];
-      if (ch.route) goToPage(ch);
+      if (ch.route && !ch.subchannels.length) goToPage(ch);
       else { openDropdown(); render(); }
     }
     return;
   }
 
-  if (e.target.closest('.nav-subchannel')) {
+  const subLink = e.target.closest('.nav-subchannel');
+  if (subLink) {
+    e.preventDefault();
+    const href = subLink.getAttribute('href');
     closeDropdown();
+    if (href) location.hash = href;
     return;
   }
 }
