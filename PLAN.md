@@ -107,3 +107,4 @@ the schema either way.
 4. Port Quiz mode.
 5. Wire both up as Practice subchannels in `js/channels.js` (alongside
    Sight Reading, already there).
+
