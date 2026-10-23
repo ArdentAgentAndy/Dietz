@@ -6,8 +6,18 @@
 // already used on every import; cache is only a fallback when offline.
 // Adds OneSignal's push/notificationclick listeners on top of the caching
 // logic below (see push.js) — this stays the one SW file so installability
-// and offline caching aren't disturbed.
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+// and offline caching aren't disturbed. Wrapped in try/catch: importScripts
+// throws synchronously on any fetch failure (OneSignal's CDN has been seen
+// to 503), and an uncaught throw here fails evaluation of this ENTIRE
+// script — meaning the browser can't install this SW to replace whatever
+// stale one is currently active, leaving the app stuck on old cached JS/CSS
+// indefinitely. Push notifications breaking is fine to fail silently; the
+// app shell's own installability/caching below must not depend on it.
+try {
+  importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+} catch (err) {
+  console.error('[sw] OneSignal SDK failed to load; push notifications disabled for this SW lifecycle', err);
+}
 
 const CACHE = 'dietz-shell-v1';
 const SHELL = ['./', './index.html', './manifest.json'];
