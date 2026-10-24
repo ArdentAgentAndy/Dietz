@@ -66,22 +66,19 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// Adding a column to a table's `columns` array above (e.g. Courses' recent
+// Adding a column to a table's `columns` array above (e.g. Courses'
 // `color`) only changes what this script WRITES/reads by name from here on
 // — it does nothing to a Sheet tab that was already created before that
 // column existed, since getSheet_ only ever appends the full header row
-// once, on first creation. Without this, upsertRow_ (which writes
-// positionally by `columns.length`, see below) happily writes the new
-// field into a column the Sheet's own header row doesn't label — readTable_
-// (which reads by the Sheet's ACTUAL header row, not `columns`) then never
-// sees it on the next read, so the value silently vanishes on the very next
-// bootstrap pull. Called from getSheet_ on every access (not just at
-// creation) so any future column added to TABLES self-provisions in an
-// existing Sheet with no manual "add this header cell yourself" step —
-// appended after whatever's already there, never reordering/removing
-// existing headers, so upsertRow_'s own column-order assumption (see its
-// comment) stays valid as long as a column is only ever appended, never
-// reordered, in `columns`.
+// once, on first creation. Without this, a new field would have nowhere
+// to live in an existing Sheet's header row at all. Called from getSheet_
+// on every access (not just at creation) so any future column added to
+// TABLES self-provisions with no manual "add this header cell yourself"
+// step — appended after whatever's already there. upsertRow_/readTable_
+// both write/read by matching each column NAME to wherever it actually
+// sits in the Sheet's real header row, not by assuming a fixed order or
+// position, so this never needs the append to land in any particular
+// place — it only needs the header cell to exist somewhere.
 function ensureHeaders_(sheet, columns) {
   var lastCol = sheet.getLastColumn();
   var headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
@@ -181,19 +178,33 @@ function findRow_(sheet, headers, keyCols, keyValues) {
 function upsertRow_(tableName, row) {
   var config = TABLES[tableName];
   if (!config) throw new Error('Unknown table: ' + tableName);
-  // Writes positionally by `config.columns`' own order, not by matching
-  // header text in the Sheet — relies on the Sheet's actual columns being
-  // in this exact order, which getSheet_'s ensureHeaders_ call (above)
-  // guarantees as long as columns are only ever appended to, never
-  // reordered or removed, here.
   var sheet = getSheet_(tableName);
-  var headers = config.columns;
+  // Writes by matching each of THIS table's known columns to its actual
+  // header position in the Sheet (same name-based approach readTable_
+  // already uses for reading) — NOT by assuming the Sheet's physical
+  // column order matches config.columns' own order. That positional
+  // assumption broke in practice: a real Sheet can carry a stray/blank or
+  // manually-reordered column ensureHeaders_ never removes, which silently
+  // shifted every write after it into the wrong cell (confirmed live —
+  // color/lockedCategory/program/category all round-tripped as blank).
+  // Also: any column NOT in config.columns (that stray one, or anything
+  // else) now has its EXISTING value preserved rather than being
+  // overwritten with '' — the old code blanked every column the incoming
+  // `row` object didn't happen to mention, which is only safe when `row`
+  // is guaranteed complete; a partial row (hand-sent, or a future bug)
+  // must never be able to wipe fields it never touched.
+  var actualHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var keyValues = config.key.map(function (k) { return row[k]; });
-  var rowArray = headers.map(function (h) { return forSheetValue_(tableName, h, row[h] !== undefined ? row[h] : ''); });
+  var foundRow = findRow_(sheet, actualHeaders, config.key, keyValues);
+  var existingRow = foundRow > 0 ? sheet.getRange(foundRow, 1, 1, actualHeaders.length).getValues()[0] : [];
 
-  var foundRow = findRow_(sheet, headers, config.key, keyValues);
+  var rowArray = actualHeaders.map(function (h, i) {
+    if (config.columns.indexOf(h) === -1) return existingRow[i] !== undefined ? existingRow[i] : '';
+    return forSheetValue_(tableName, h, row[h] !== undefined ? row[h] : '');
+  });
+
   if (foundRow > 0) {
-    sheet.getRange(foundRow, 1, 1, headers.length).setValues([rowArray]);
+    sheet.getRange(foundRow, 1, 1, actualHeaders.length).setValues([rowArray]);
   } else {
     sheet.appendRow(rowArray);
   }
