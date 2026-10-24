@@ -22,7 +22,8 @@ import {
   hexToRgba,
 } from '../format.js?v=63';
 import { archiveCourseById, deleteCourseById } from './courses.js?v=63';
-import { hexForCourse, hexForLabel } from '../notionColors.js?v=63';
+import { hexForCourse, hexForLabel, hexForNotionColor } from '../notionColors.js?v=63';
+import { fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=63';
 
 let container = null;
 let tickIntervalId = null;
@@ -49,6 +50,18 @@ export function render(rootEl) {
   container = rootEl;
   rebuild();
   tickIntervalId = setInterval(updateLiveDisplays, 1000);
+  // Background-only, non-blocking — getCachedNotionSchema() just reads
+  // whatever's already cached (or null) until this resolves, so a project/
+  // research category's color (see notionSubColor) falls back to its old
+  // hashed one until the fetch lands, same as js/views/calendar.js's own
+  // call. Calendar already triggers this same fetch on its own mount, but
+  // Logging needs its own copy warm regardless of whether Calendar's been
+  // visited yet this session — then rebuilds once so a color that was
+  // still hashed on first paint updates without waiting for the next
+  // unrelated re-render. container-null-checked since the fetch can
+  // outlive this page if the user's already navigated elsewhere by the
+  // time it resolves.
+  fetchNotionSchema().then(() => { if (container) rebuild(); });
 }
 
 export function unmount() {
@@ -170,18 +183,58 @@ function sessionGroupColor(cat) {
   return groupColor(GROUP_ALIASES[cat?.group] || cat?.group);
 }
 
+// A project/research category's color pulled straight from Notion's own
+// schema (js/notion.js's fetchNotionSchema/getCachedNotionSchema — refreshed
+// in the background on this page's own mount, see render() below) rather
+// than hashed locally: Code.gs's notionSchema_ now returns a name->color map
+// (projectColors/leadColors) alongside the plain option-name lists calendar.js
+// already validates task entry against, so a category's own `name` (which
+// must already exactly match a real Project/Lead option for todaySessions.js
+// to ever resolve a task to it at all — see resolveCategoryForTask) is a
+// reliable key into that same map. null on a cache miss (never fetched yet,
+// or no color set on that Notion option) — caller falls back to the old
+// hashed color in that case.
+function notionSubColor(cat) {
+  if (cat?.group !== 'project' && cat?.group !== 'research') return null;
+  const schema = getCachedNotionSchema();
+  const colors = cat.group === 'project' ? schema?.projectColors : schema?.leadColors;
+  const notionColor = colors?.[cat.name];
+  return notionColor ? hexForNotionColor(notionColor) : null;
+}
+
+// Real Project/Lead option names straight from Notion's schema (same cache
+// notionSubColor and js/views/calendar.js's own task-entry validation read),
+// offered as native <datalist> suggestions on a project/research category's
+// Name field (both openAddCategoryDialog and openManageCategoryDialog) —
+// picking one guarantees the category matches a real Notion option (so its
+// color pulls through, see notionSubColor, and todaySessions.js's
+// resolveCategoryForTask can actually find it), while still leaving the
+// field free-text for a deliberately local-only name with no Notion
+// counterpart. Empty (no suggestions, never blocks) on a cache miss.
+function notionOptionsDatalistHtml(group) {
+  const schema = getCachedNotionSchema();
+  const names = (group === 'project' ? schema?.project : schema?.lead) || [];
+  return `<datalist id="category-name-options">${names.map((n) => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>`;
+}
+
 // The finer "project/course/lead" sub-identity — only exists for groups
 // that actually have one: a revision session's specific course
-// (hexForCourse, same as Courses/Grades/Calendar/Lessons), or a
-// Project/Research category's own name (hexForLabel, hashed since there's
-// no fixed map like courses have). Homework/Piano have no sub-identity.
+// (hexForCourse, same as Courses/Grades/Calendar/Lessons), or a Project/
+// Research category's real Notion-assigned color when known (notionSubColor
+// above), falling back to a locally-hashed one (hexForLabel) only when that
+// isn't cached yet — so the same project/lead reads as the exact same color
+// here as it does on Calendar/Today's own chips (js/views/calendar.js's
+// hexForNotionColor(task[config.colorProp])), not a coincidentally-different
+// one. Homework/Piano have no sub-identity.
 function sessionSubColor(cat) {
   if (!cat) return null;
   if (cat.group === 'revision' && cat.courseId) {
     const course = store.table('Courses').find((c) => c.id === cat.courseId);
     if (course) return hexForCourse(course);
   }
-  if (cat.group === 'project' || cat.group === 'research') return hexForLabel(cat.name);
+  if (cat.group === 'project' || cat.group === 'research') {
+    return notionSubColor(cat) || hexForLabel(cat.name);
+  }
   return null;
 }
 
@@ -601,7 +654,15 @@ function openManageCategoryDialog(cat) {
     dialog.innerHTML = `
       <form method="dialog" class="modal-form">
         <h2 class="mono">Manage ${escapeHtml(title)}</h2>
-        ${isNamed ? `<label>Name<input type="text" name="name" value="${escapeHtml(cat.name)}" required></label>` : ''}
+        ${isNamed ? `
+          <label>Name
+            <input type="text" name="name" value="${escapeHtml(cat.name)}" list="category-name-options" required>
+          </label>
+          ${notionOptionsDatalistHtml(cat.group)}
+          <p class="muted" style="font-size:12px;">
+            Pick a suggestion to match this to a real Notion ${cat.group === 'project' ? 'Project' : 'Lead'} value — its color then carries over here and across Sessions automatically.
+          </p>
+        ` : ''}
         <div class="danger-zone">
           <span class="muted">Danger zone</span>
           <div class="modal-actions">
@@ -692,8 +753,12 @@ function openAddCategoryDialog(group) {
     <form method="dialog" class="modal-form">
       <h2 class="mono">Add ${groupLabel}</h2>
       <label>Name
-        <input type="text" name="name" placeholder="e.g. ${group === 'project' ? 'Robotics club' : 'Lab writeup'}" required>
+        <input type="text" name="name" placeholder="e.g. ${group === 'project' ? 'Robotics club' : 'Lab writeup'}" list="category-name-options" required>
       </label>
+      ${notionOptionsDatalistHtml(group)}
+      <p class="muted" style="font-size:12px;">
+        Pick a suggestion to match a real Notion ${group === 'project' ? 'Project' : 'Lead'} value — its color then carries over here and across Sessions automatically.
+      </p>
       <div class="modal-actions">
         <button type="button" data-action="cancel">Cancel</button>
         <button type="submit" class="btn-primary">Add</button>
