@@ -114,6 +114,25 @@ async function pullBootstrap(config) {
     }
   }
 
+  // Enforce every still-held tombstone (see store.js's remove()) against
+  // what the server just sent back — catches a row resurrected by a stale/
+  // racy server-side copy (the delete that originally queued this
+  // tombstone may have already flushed and left the outbox long ago, so
+  // the re-apply loop above has nothing left to re-suppress it with).
+  // Self-pruning: once a pull confirms the row is actually gone, there's
+  // nothing left to guard against, so the tombstone is dropped instead of
+  // sitting around forever.
+  const remainingTombstones = [];
+  for (const t of store.data.tombstones || []) {
+    const rows = store.data[t.table];
+    if (rows && rows.some((r) => r.id === t.id)) {
+      store.data[t.table] = rows.filter((r) => r.id !== t.id);
+      store.data.outbox.push({ op: 'delete', table: t.table, id: t.id });
+      remainingTombstones.push(t);
+    }
+  }
+  store.data.tombstones = remainingTombstones;
+
   store.persist();
   // A pull can merge in another device's compacted rows for a day this one
   // also already compacted independently (see dedupeCompactedSessions'
