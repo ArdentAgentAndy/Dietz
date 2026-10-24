@@ -26,11 +26,6 @@ let markMode = null; // null | 'completed' | 'taking'
 let activeSubjects = new Set();
 let searchQuery = '';
 let draggingId = null;
-// Set right after creating a new course via the "Add to Track" flow (see
-// openAddDialog's placementMode) — while non-null, Track view is in
-// "click a box to place [course]" mode (see attachEvents' data-category-drop
-// click handler) instead of its normal toggle-status click behavior.
-let pendingPlacementId = null;
 
 export function render(rootEl) {
   container = rootEl;
@@ -54,12 +49,7 @@ function catalogEntries() {
   const byId = new Map(store.table('RoadmapStatus').map((r) => [r.id, r]));
   return COURSES.map((c) => {
     const row = byId.get(c.id);
-    // lockedCategory: "program:category" — which ONE of this course's
-    // electivePool-flagged tags (if it has more than one) it currently
-    // counts toward; see matchesLock below. Irrelevant (never read) for a
-    // course with 0-1 electivePool tags, since those always count
-    // everywhere they're tagged.
-    return { ...c, status: row?.status || '', semester: row?.semester || '', lockedCategory: row?.lockedCategory || '', custom: false };
+    return { ...c, status: row?.status || '', semester: row?.semester || '', custom: false };
   });
 }
 
@@ -71,20 +61,6 @@ function customEntries() {
     name: r.name,
     credits: Number(r.credits) || 0,
     programs: [],
-    // A custom (Gen Ed/elective/etc.) addition's main Track placement —
-    // set by the "Add to Track" flow or by dragging the card onto a
-    // (non-Gen-Ed) category box (see placeInCategory). Blank until placed;
-    // shows only in Semesters/Unassigned until then.
-    program: r.program || '',
-    category: r.category || '',
-    // A SEPARATE, second placement specifically for a Gen Ed category (see
-    // that CATEGORIES genEd:true note in roadmapCourses.js) — independent
-    // of the main program/category above, so a course can hold both at
-    // once: its real technical slot AND a Gen Ed one, explicit
-    // double-dipping. placeInCategory decides which pair to write to based
-    // on whether the target category is genEd-flagged.
-    genEdProgram: r.genEdProgram || '',
-    genEdCategory: r.genEdCategory || '',
     status: r.status || '',
     semester: r.semester || '',
     custom: true,
@@ -169,44 +145,6 @@ function isExcludedForProgram(entry, program) {
   return program !== 'AE' && isDoubleCounted(entry);
 }
 
-// electivePool-flagged categories (see CATEGORIES in roadmapCourses.js) are
-// genuine elective CHOICE slots — a course tagged to 2+ of them (counting
-// across every program it's tagged to, AE's own two Tech-Electives
-// categories included) can only ever count toward ONE at a time, and has
-// to be explicitly locked there (dragging its card onto a Track category
-// box — see placeInCategory) before Track shows or counts it in ANY of
-// them. This is separate from (and supersedes, for Track's own counting/
-// display) isExcludedForProgram above, which only ever protected a minor
-// from AE's "free" courses, not elective-vs-elective contention — see the
-// CATEGORIES comment for the full reasoning (why MATH241/Calc III, a
-// REQUIRED course in two places, is exempt but MATH461, an ELECTIVE choice
-// in two/three places, is not).
-function isElectivePoolCategory(program, category) {
-  return CATEGORIES.some((c) => c.program === program && c.category === category && c.electivePool);
-}
-
-// Gen Ed boxes (roadmapCourses.js's CATEGORIES genEd:true) get their own
-// separate placement slot on a custom entry (genEdProgram/genEdCategory,
-// alongside its main program/category) instead of overwriting it — see
-// placeInCategory — which is what actually lets a course double-dip into
-// Gen Ed while still holding a real technical placement too.
-function isGenEdCategory(program, category) {
-  return CATEGORIES.some((c) => c.program === program && c.category === category && c.genEd);
-}
-
-function electivePoolTagCount(entry) {
-  return entry.programs.filter((p) => isElectivePoolCategory(p.program, p.category)).length;
-}
-
-// true = this entry counts/displays for (program, category); a custom
-// entry already matched exactly by its own program/category (see
-// customEntries), so it's always true once "tagged" already included it.
-function matchesLock(entry, program, category) {
-  if (entry.custom) return true;
-  if (electivePoolTagCount(entry) <= 1) return true;
-  return entry.lockedCategory === `${program}:${category}`;
-}
-
 // `ctx.program`, when given, is whichever program's box this card is being
 // rendered inside (Track's fixed boxes, Possible's per-program list) — used
 // only to decide whether THIS course counts toward THIS program's totals
@@ -259,41 +197,6 @@ function assignSemester(id, semester) {
   rebuild();
 }
 
-// A custom entry can go in any Track box (it has no fixed tags of its own
-// yet — this IS how it gets one). A catalog entry can only go where it's
-// actually tagged — dropping it anywhere else is a no-op, same as dropping
-// a card on a semester column it makes no sense in isn't blocked elsewhere
-// in this file either; this one small guard just prevents silently
-// fabricating a tag/lock pair the course was never eligible for.
-function canPlaceInCategory(entry, program, category) {
-  if (entry.custom) return true;
-  return entry.programs.some((p) => p.program === program && p.category === category);
-}
-
-// The single "move this course's Track placement" action — shared by
-// dragging a card onto a category box and by the Add-to-Track pending-
-// placement click (see attachEvents). For a custom entry this IS its one
-// Track placement (program/category, independent of its semester). For a
-// catalog entry already tagged to this exact category, it just records
-// which one of its (possibly several) electivePool tags it's locked to —
-// see matchesLock in categoryFulfillment/categoryBoxHtml.
-function placeInCategory(id, program, category) {
-  const entry = allEntries().find((e) => e.id === id);
-  if (!entry || !canPlaceInCategory(entry, program, category)) return;
-  if (entry.custom) {
-    // A Gen Ed target writes to its own separate slot, leaving the main
-    // program/category (if any) untouched — that's the whole mechanism
-    // behind Gen Ed's explicit double-dipping (see isGenEdCategory).
-    // Anything else is this entry's one main placement, same as before.
-    if (isGenEdCategory(program, category)) store.upsert('RoadmapCustom', { id, genEdProgram: program, genEdCategory: category });
-    else store.upsert('RoadmapCustom', { id, program, category });
-  } else {
-    store.upsert('RoadmapStatus', { id, lockedCategory: `${program}:${category}` });
-  }
-  pendingPlacementId = null;
-  rebuild();
-}
-
 function semestersViewHtml(entries, full, filterBar) {
   const bySemester = {};
   SEMESTERS.forEach((s) => (bySemester[s.id] = []));
@@ -307,14 +210,8 @@ function semestersViewHtml(entries, full, filterBar) {
   const columns = SEMESTERS.map((s) => {
     const list = sortEntries(bySemester[s.id]);
     const credits = list.reduce((sum, e) => sum + (e.credits || 0), 0);
-    // Red border once a semester's actually been planned out (credits > 0 —
-    // an untouched future semester sitting at 0 isn't "underloaded", it's
-    // just not filled in yet) and its total falls outside the normal
-    // full-time course-load range: over 18 (needs advisor sign-off at most
-    // schools) or under 12 (below full-time status).
-    const isOffLoad = credits > 18 || (credits > 0 && credits < 12);
     return `
-      <div class="rm-semester-col${isOffLoad ? ' is-off-load' : ''}" data-semester="${s.id}">
+      <div class="rm-semester-col" data-semester="${s.id}">
         <div class="rm-semester-head"><span class="mono">${s.label}</span><span class="muted mono">${credits}cr</span></div>
         <div class="rm-card-grid">${list.map((e) => cardHtml(e, full)).join('')}</div>
       </div>
@@ -350,20 +247,11 @@ function semestersViewHtml(entries, full, filterBar) {
 // because the subject filter happens to be hiding some of its courses.
 function categoryFulfillment(program, category, full) {
   const def = CATEGORIES.find((c) => c.program === program && c.category === category);
-  const tagged = full.filter((e) =>
-    e.programs.some((p) => p.program === program && p.category === category) ||
-    (e.custom && e.program === program && e.category === category) ||
-    (e.custom && e.genEdProgram === program && e.genEdCategory === category));
-  // tagged stays everything tagged to this category (Possible view wants
-  // every real option, including ones excluded from counting here) —
-  // `completed` is what actually satisfies it: an electivePool category
-  // only counts a course that's either unambiguous (0-1 electivePool tags
-  // total across every program it's tagged to) or explicitly locked to
-  // THIS exact (program, category) — see matchesLock. A non-electivePool
-  // (core/required) category never excludes anything — isExcludedForProgram
-  // is no longer consulted here, only by cardHtml's informational "shared"
-  // badge on Possible view.
-  const completed = tagged.filter((e) => e.status === 'completed' && matchesLock(e, program, category));
+  const tagged = full.filter((e) => e.programs.some((p) => p.program === program && p.category === category));
+  // A double-counted 300+ course still shows as a (grayed, "shared") card
+  // here — tagged stays everything tagged to this category — it just
+  // doesn't count toward met/progress for a minor (see isExcludedForProgram).
+  const completed = tagged.filter((e) => e.status === 'completed' && !isExcludedForProgram(e, program));
 
   if (def.requiredCredits != null) {
     const completedCredits = completed.reduce((sum, e) => sum + (e.credits || 0), 0);
@@ -440,12 +328,7 @@ function categoryDisplayName(category) {
 // instead of clipping or needing its own internal scroll.
 function categoryBoxHtml(program, categoryKey, cols, rows, full, visibleIds, statusFilter, opts = {}) {
   const { tagged, met, progressText, def } = categoryFulfillment(program, categoryKey, full);
-  // matchesLock here too, not just in categoryFulfillment's own completed
-  // count — this function is Track-only (see call sites), and an
-  // electivePool-ambiguous, not-yet-locked course should be fully absent
-  // from every box it could go in, not just excluded from the progress
-  // count while still shown as a dead card.
-  let shown = tagged.filter((e) => visibleIds.has(e.id) && matchesLock(e, program, categoryKey));
+  let shown = tagged.filter((e) => visibleIds.has(e.id));
   shown = statusFilter ? capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def, program) : sortEntries(shown);
 
   // Every box's width is the grid's native N-column width (cols*cardW +
@@ -475,9 +358,9 @@ function categoryBoxHtml(program, categoryKey, cols, rows, full, visibleIds, sta
   const justify = opts.center ? 'center' : 'flex-start';
 
   return `
-    <div class="rm-category${met ? ' is-met' : ''}${pendingPlacementId ? ' is-placeable' : ''}" data-category-drop data-program="${escapeHtml(program)}" data-category="${escapeHtml(categoryKey)}">
+    <div class="rm-category${met ? ' is-met' : ''}">
       <div class="rm-category-head"><span class="mono">${escapeHtml(categoryDisplayName(categoryKey))}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; justify-content:${justify}; align-content:flex-start; width:${gridWidth}; min-height:${minHeight};">${shown.map((e) => cardHtml(e, full, { program, category: categoryKey })).join('')}</div>
+      <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; justify-content:${justify}; align-content:flex-start; width:${gridWidth}; min-height:${minHeight};">${shown.map((e) => cardHtml(e, full, { program })).join('')}</div>
     </div>
   `;
 }
@@ -579,8 +462,8 @@ const MINOR_ROW_BOXES = {
   ],
   MATH: [
     { key: 'MATH Core', cols: 2, rows: 1 },
-    { key: 'Calculus', cols: 1, rows: 1 },
-    { key: 'Extra', cols: 1, rows: 1 },
+    { key: 'Linalg', cols: 1, rows: 1 },
+    { key: 'DFQ', cols: 1, rows: 1 },
     { key: 'MATH Upper Electives', cols: 2, rows: 1 },
   ],
   CS: [
@@ -600,40 +483,26 @@ const MINOR_ROW_LABELS = { ECE: 'ECE Minor', MATH: 'MATH Minor', CS: 'CS Minor' 
 // minor's row via .rm-genEd-group's margin-left:auto. CS's row carries an
 // extra "Gen Ed" section-title box (bold, no progress) since it has one
 // fewer real requirement than ECE's/Math's — squashed to 88px (the exact
-// leftover: ECE/Math's total 2*108+204+2*8=436, minus WCC/US-M/Non-W's
-// 3*108+3*8=348) so WCC still lines up under A. Rhet/Rhet and
+// leftover: ECE/Math's total 2*108+204+2*8=436, minus F. Lang/Non-US/
+// Entrp's 3*108+3*8=348) so F. Lang still lines up under A. Rhet/Rhet and
 // all three groups land on the same width/right edge.
 const GEN_ED_GROUPS = {
-  ECE: [['A. Rhet', 1], ['F. Lang', 1], ['Humanities & Arts', 2]],
-  MATH: [['Rhet', 1], ['Entrp', 1], ['Social Sci', 2]],
-  CS: [['WCC', 1], ['US-M', 1], ['Non-W', 1]],
+  ECE: [['A. Rhet', 1], ['WCC', 1], ['Humanities & Arts', 2]],
+  MATH: [['Rhet', 1], ['Non-W', 1], ['Social Sci', 2]],
+  CS: [['F. Lang', 1], ['Non-US', 1], ['Entrp', 1]],
 };
 
-// Real category box now (placeable via Add to Track/drag, same
-// data-category-drop mechanism every other box uses) — these categories
-// are never electivePool (see roadmapCourses.js), so matchesLock always
-// lets a course show/count here regardless of what else it's tagged or
-// locked to elsewhere: explicit double-dipping, Gen Ed only. The "Gen Ed"
-// box itself is a plain section title, not a requirement, so it skips all
-// of that and just gets the squashed leftover width.
-function genEdBoxHtml(program, label, cols, isTitle, full, visibleIds, statusFilter) {
+// Matches a real category box's head markup (label + progress) — these
+// just have no card grid underneath since there's no fixed Gen Ed course
+// list to show cards for. The "Gen Ed" box is a section title, not a
+// requirement, so it skips the progress span and gets the squashed
+// leftover width instead of a normal cols-based one.
+function genEdBoxHtml(label, cols, isTitle) {
   const width = isTitle ? 88 : (cols === 2 ? 204 : 108);
-  if (isTitle) {
-    return `
-      <div class="rm-category" style="width:${width}px;">
-        <div class="rm-category-head"><span class="mono rm-genEd-title">${escapeHtml(label)}</span></div>
-      </div>
-    `;
-  }
-
-  const { tagged, met, progressText, def } = categoryFulfillment(program, label, full);
-  let shown = tagged.filter((e) => visibleIds.has(e.id) && matchesLock(e, program, label));
-  shown = capShown(sortEntries(shown.filter((e) => statusFilter.includes(e.status))), def, program);
-
+  const progress = isTitle ? '' : `<span class="muted mono">0/${cols}</span>`;
   return `
-    <div class="rm-category${met ? ' is-met' : ''}${pendingPlacementId ? ' is-placeable' : ''}" style="width:${width}px;" data-category-drop data-program="${escapeHtml(program)}" data-category="${escapeHtml(label)}">
-      <div class="rm-category-head"><span class="mono">${escapeHtml(label)}</span><span class="muted mono">${escapeHtml(progressText)}</span></div>
-      <div class="rm-card-grid" style="display:flex; flex-wrap:wrap; gap:6px;">${shown.map((e) => cardHtml(e, full, { program, category: label })).join('')}</div>
+    <div class="rm-category" style="width:${width}px;">
+      <div class="rm-category-head"><span class="mono${isTitle ? ' rm-genEd-title' : ''}">${escapeHtml(label)}</span>${progress}</div>
     </div>
   `;
 }
@@ -645,10 +514,8 @@ function genEdSectionTitleHtml() {
   return `<div class="rm-genEd-section-title"><div>Gen</div><div>Ed</div></div>`;
 }
 
-function genEdGroupHtml(program, full, visibleIds, statusFilter) {
-  const boxes = GEN_ED_GROUPS[program]
-    .map(([label, cols, isTitle]) => genEdBoxHtml(program, label, cols, isTitle, full, visibleIds, statusFilter))
-    .join('');
+function genEdGroupHtml(program) {
+  const boxes = GEN_ED_GROUPS[program].map(([label, cols, isTitle]) => genEdBoxHtml(label, cols, isTitle)).join('');
   const title = program === 'CS' ? genEdSectionTitleHtml() : '';
   return `<div class="rm-genEd-group">${title}${boxes}</div>`;
 }
@@ -662,7 +529,7 @@ function minorRowHtml(program, full, visibleIds, statusFilter) {
     <div class="rm-ae-row rm-minor-row">
       <div class="rm-row-label">${escapeHtml(MINOR_ROW_LABELS[program])}</div>
       ${boxesHtml}
-      ${genEdGroupHtml(program, full, visibleIds, statusFilter)}
+      ${genEdGroupHtml(program)}
     </div>
   `;
 }
@@ -717,37 +584,7 @@ function categoryViewHtml(full, visible, statusFilter) {
   }).join('');
 
   const aeAndMinorsHtml = statusFilter ? aeAndMinorsSectionHtml(full, visibleIds, statusFilter) : '';
-  const needsPlacement = statusFilter ? needsPlacementHtml(full, statusFilter) : '';
-  return needsPlacement + programsHtml + aeAndMinorsHtml;
-}
-
-// A completed/taking course tagged to 2+ electivePool categories but not
-// yet locked to one (see matchesLock) is, by design, shown in NONE of
-// Track's fixed boxes — but that leaves no card anywhere to drag onto one,
-// a real chicken-and-egg gap for the very first lock. This small list is
-// the way out of it: one row per such course, with a plain button per
-// eligible category — clicking one locks it there immediately (same
-// placeInCategory a drag/drop uses), after which the course appears as a
-// normal card in that box and (being locked now) drops out of this list.
-function needsPlacementHtml(full, statusFilter) {
-  const entries = full.filter((e) => !e.custom && statusFilter.includes(e.status) && !e.lockedCategory && electivePoolTagCount(e) > 1);
-  if (!entries.length) return '';
-  return `
-    <section class="card rm-needs-placement">
-      <h2 class="mono">Needs placement</h2>
-      <p class="muted">Tagged for more than one elective slot — pick which one each counts toward (it won't show in any of them until you do).</p>
-      ${entries.map((e) => `
-        <div class="rm-needs-row">
-          <span class="rm-needs-name mono">${escapeHtml(e.subject)}${escapeHtml(String(e.number))} — ${escapeHtml(e.name)}</span>
-          <div class="rm-needs-options">
-            ${e.programs.filter((p) => isElectivePoolCategory(p.program, p.category)).map((p) => `
-              <button type="button" data-action="lock" data-id="${escapeHtml(e.id)}" data-program="${escapeHtml(p.program)}" data-category="${escapeHtml(p.category)}">${escapeHtml(p.program)}: ${escapeHtml(categoryDisplayName(p.category))}</button>
-            `).join('')}
-          </div>
-        </div>
-      `).join('')}
-    </section>
-  `;
+  return programsHtml + aeAndMinorsHtml;
 }
 
 // AE Major + the 3 minor rows, all inside one shared card instead of each
@@ -769,19 +606,7 @@ export function trackViewHtml() {
   return categoryViewHtml(full, full, ['taking', 'completed']);
 }
 
-function headerHtml(full) {
-  const pending = pendingPlacementId ? full.find((e) => e.id === pendingPlacementId) : null;
-  // Only shows once pendingPlacementId is actually set (right after
-  // submitting the Add-to-Track dialog — see openAddDialog) — the button
-  // itself just starts that flow, it doesn't toggle a standing mode on its
-  // own, so there's nothing to show beforehand.
-  const pendingBannerHtml = pending ? `
-    <div class="rm-pending-banner">
-      <span>Click a box below in Track to place <strong>${escapeHtml(pending.subject)}${escapeHtml(String(pending.number))}</strong> — ${escapeHtml(pending.name)}</span>
-      <button type="button" data-action="cancel-placement">Cancel</button>
-    </div>
-  ` : '';
-
+function headerHtml() {
   return `
     <section class="card">
       <div class="row-between">
@@ -795,9 +620,7 @@ function headerHtml(full) {
       <div class="range-toggle" style="margin-top:8px;">
         <button data-action="mark" data-mark="completed" class="${markMode === 'completed' ? 'active' : ''}">Mark Complete</button>
         <button data-action="mark" data-mark="taking" class="${markMode === 'taking' ? 'active' : ''}">Mark Taking</button>
-        ${view === 'semesters' ? '<button data-action="add-to-track">+ Add to Track</button>' : ''}
       </div>
-      ${pendingBannerHtml}
     </section>
   `;
 }
@@ -843,7 +666,7 @@ function rebuild() {
       : categoryViewHtml(full, visible, null));
 
   container.innerHTML = `
-    ${headerHtml(full)}
+    ${headerHtml()}
     ${bodyHtml}
   `;
 
@@ -858,70 +681,25 @@ function rebuild() {
   }
 }
 
-// A custom course already added (Semesters' "+ Add course", or an earlier
-// "Add to Track" that only got as far as creation) but never placed on
-// Track yet — e.g. a Gen Ed entered while filling out Semesters, with no
-// reason at the time to also pick a category. Only offered in
-// placementMode: picking one here skips creating anything and jumps
-// straight to placing the course that already exists.
-function unplacedCustomEntries() {
-  return store.table('RoadmapCustom')
-    .filter((r) => !r.program && !r.category)
-    .map((r) => ({ id: r.id, subject: r.subject, number: Number(r.number), name: r.name }));
-}
-
-// placementMode (the "+ Add to Track" button, only offered on Semesters —
-// see headerHtml) skips the plain rebuild() after creating/picking the
-// course and instead switches to Track view with pendingPlacementId set,
-// so the next click on a category box there (see attachEvents'
-// data-category-drop handler) finishes the job by calling placeInCategory.
-// A course added this way still has no semester yet either — same as the
-// plain flow, it just also needs this one extra step before it's placed.
-function openAddDialog(placementMode = false) {
+function openAddDialog() {
   const dialog = container.querySelector('#modal-dialog');
-  const existing = placementMode ? sortEntries(unplacedCustomEntries()) : [];
 
   dialog.innerHTML = `
-    <div class="modal-form">
-      <h2 class="mono">${placementMode ? 'Add to Track' : 'Add course'}</h2>
-      ${existing.length ? `
-        <p class="muted">Pick one already on your roadmap that isn't placed yet —</p>
-        <div class="rm-existing-list">
-          ${existing.map((e) => `
-            <button type="button" class="rm-existing-row" data-action="pick-existing" data-id="${escapeHtml(e.id)}">
-              <span class="mono">${escapeHtml(e.subject)}${escapeHtml(String(e.number))}</span>
-              <span>${escapeHtml(e.name)}</span>
-            </button>
-          `).join('')}
-        </div>
-        <p class="muted" style="margin-top:12px;">— or add a brand new one:</p>
-      ` : ''}
-      <form method="dialog" class="modal-form">
-        <p class="muted">For anything outside the AE/ECE/Math/CS catalog this page already knows — Gen Eds, free electives, etc.${placementMode ? ' Next you\'ll pick where it goes on the Track page.' : ''}</p>
-        <div class="field-row">
-          <label>Subject <input type="text" name="subject" placeholder="RHET" required></label>
-          <label>Number <input type="number" name="number" placeholder="105" required></label>
-        </div>
-        <label>Name <input type="text" name="name" placeholder="Composition I" required></label>
-        <label>Credits <input type="number" name="credits" step="any" min="0" value="3" required></label>
-        <div class="modal-actions">
-          <button type="button" data-action="cancel">Cancel</button>
-          <button type="submit" class="btn-primary">${placementMode ? 'Next' : 'Add'}</button>
-        </div>
-      </form>
-    </div>
+    <form method="dialog" class="modal-form">
+      <h2 class="mono">Add course</h2>
+      <p class="muted">For anything outside the AE/ECE/Math/CS catalog this page already knows — Gen Eds, free electives, etc.</p>
+      <div class="field-row">
+        <label>Subject <input type="text" name="subject" placeholder="RHET" required></label>
+        <label>Number <input type="number" name="number" placeholder="105" required></label>
+      </div>
+      <label>Name <input type="text" name="name" placeholder="Composition I" required></label>
+      <label>Credits <input type="number" name="credits" step="any" min="0" value="3" required></label>
+      <div class="modal-actions">
+        <button type="button" data-action="cancel">Cancel</button>
+        <button type="submit" class="btn-primary">Add</button>
+      </div>
+    </form>
   `;
-
-  function startPlacement(id) {
-    pendingPlacementId = id;
-    view = 'track';
-    dialog.close();
-    rebuild();
-  }
-
-  dialog.querySelectorAll('[data-action="pick-existing"]').forEach((btn) => {
-    btn.addEventListener('click', () => startPlacement(btn.dataset.id));
-  });
 
   const form = dialog.querySelector('form');
   form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
@@ -938,11 +716,8 @@ function openAddDialog(placementMode = false) {
       credits: Number(data.get('credits')),
       status: '',
       semester: '',
-      program: '',
-      category: '',
     });
-    if (placementMode) startPlacement(id);
-    else rebuild();
+    rebuild();
   });
 
   dialog.showModal();
@@ -973,16 +748,7 @@ function attachEvents(full) {
     });
   });
 
-  container.querySelectorAll('[data-action="lock"]').forEach((btn) => {
-    btn.addEventListener('click', () => placeInCategory(btn.dataset.id, btn.dataset.program, btn.dataset.category));
-  });
-
-  container.querySelector('[data-action="add-course"]')?.addEventListener('click', () => openAddDialog(false));
-  container.querySelector('[data-action="add-to-track"]')?.addEventListener('click', () => openAddDialog(true));
-  container.querySelector('[data-action="cancel-placement"]')?.addEventListener('click', () => {
-    pendingPlacementId = null;
-    rebuild();
-  });
+  container.querySelector('[data-action="add-course"]')?.addEventListener('click', openAddDialog);
 
   container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
     searchQuery = e.target.value;
@@ -991,31 +757,7 @@ function attachEvents(full) {
 
   container.querySelectorAll('.rm-card').forEach((el) => {
     const entry = full.find((e) => e.id === el.dataset.id);
-    el.addEventListener('click', (e) => {
-      // In placement mode (see headerHtml's banner), clicking an existing
-      // card still just does its normal thing below — only a click that
-      // reaches the surrounding box itself (see the data-category-drop
-      // handler below, which this stopPropagation lets fire or not) places
-      // the pending course. Without this, clicking a card inside a box
-      // while placing would do both at once.
-      e.stopPropagation();
-      if (markMode) {
-        toggleStatus(entry);
-        return;
-      }
-      // No mark mode active — this used to be a dead click (toggleStatus's
-      // own early-return). Repurposed as the click (not drag) path onto
-      // Track: jump there with this card pending placement, same banner/
-      // click-a-box flow "Add to Track" already uses — the point being any
-      // card already sitting in a Semesters column (a Gen Ed entry like
-      // CLCV115, say) can be placed (or re-placed/moved, including into a
-      // second Gen Ed box alongside its existing placement — see
-      // isGenEdCategory) without needing a drag gesture or the Add-to-
-      // Track dialog's picker at all.
-      pendingPlacementId = entry.id;
-      view = 'track';
-      rebuild();
-    });
+    el.addEventListener('click', () => toggleStatus(entry));
     el.addEventListener('dragstart', (e) => {
       draggingId = el.dataset.id;
       e.dataTransfer.setData('text/plain', el.dataset.id);
@@ -1034,31 +776,6 @@ function attachEvents(full) {
       const id = e.dataTransfer.getData('text/plain') || draggingId;
       if (id) assignSemester(id, zone.dataset.semester);
       draggingId = null;
-    });
-  });
-
-  // Track's category boxes double as both a drag-drop target (any card,
-  // dragged from anywhere) and, while a course is pending placement (see
-  // headerHtml's banner), a click target — clicking a box places the
-  // pending course there and exits placement mode; the per-card click
-  // handler above stops its own clicks from reaching here, so clicking an
-  // existing card never accidentally also places the pending one.
-  container.querySelectorAll('[data-category-drop]').forEach((zone) => {
-    const { program, category } = zone.dataset;
-    zone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      zone.classList.add('is-drag-over');
-    });
-    zone.addEventListener('dragleave', () => zone.classList.remove('is-drag-over'));
-    zone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      zone.classList.remove('is-drag-over');
-      const id = e.dataTransfer.getData('text/plain') || draggingId;
-      if (id) placeInCategory(id, program, category);
-      draggingId = null;
-    });
-    zone.addEventListener('click', () => {
-      if (pendingPlacementId) placeInCategory(pendingPlacementId, program, category);
     });
   });
 }

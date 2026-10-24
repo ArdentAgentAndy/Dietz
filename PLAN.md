@@ -108,21 +108,3 @@ the schema either way.
 5. Wire both up as Practice subchannels in `js/channels.js` (alongside
    Sight Reading, already there).
 
----
-
-## Menu page — visual redesign (round 2)
-
-v64 already rewrote the Menu page's layout/interaction model: a hand-authored
-node-web/skill-tree (`js/channels.js`'s `pos`, `js/views/menu.js`, Menu-hub
-section of `css/styles.css`) replacing the old radial-ring constellation —
-click/arrow-key a channel to zoom in on it (siblings dim but stay visible,
-not fully hidden), drilling into a subchannel zooms further, Escape (or
-tapping empty background, on touch) zooms back out. Full keyboard parity
-(arrows/number keys/H) carried over unchanged. Each channel got a color via
-`hexForLabel` (`js/notionColors.js`).
-
-That structural rewrite is done and working. Still ahead, intentionally
-deferred to a later round: a **visual** redesign on top of it — the user is
-going to share reference images for a direction before this gets scoped.
-Nothing to build yet; revisit once those images are in hand.
-

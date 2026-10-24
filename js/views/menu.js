@@ -1,6 +1,5 @@
 import { HOME, CHANNELS } from '../channels.js?v=63';
 import { escapeHtml } from '../format.js?v=63';
-import { hexForLabel } from '../notionColors.js?v=63';
 
 let container = null;
 // -1 = nothing selected yet (fresh page visit) — the first Left/Right press
@@ -14,13 +13,6 @@ let selectedIndex = -1;
 // navigate by itself; Enter commits it (see confirmSelection) — same
 // two-step select-then-confirm as the top nav's ArrowUp/Down + Enter.
 let selectedSubIndex = -1;
-
-// How far .menu-tree-viewport scales up around the focused node — see
-// applySelectionClasses. One fixed value rather than a per-depth one: the
-// *origin* moving from a channel's own pos to its selected subchannel's pos
-// (see focusPos below) is what makes drilling into a subchannel read as
-// "zooming in further", not a bigger scale number.
-const ZOOM_SCALE = '1.7';
 
 export function render(rootEl) {
   container = rootEl;
@@ -40,12 +32,13 @@ export function render(rootEl) {
 }
 
 export function unmount() {
-  clearSelection();
   const app = container?.closest('#app');
   app?.classList.remove('app-no-scroll');
   app?.style.removeProperty('--topnav-h');
   document.body.classList.remove('menu-no-scroll');
   window.removeEventListener('keydown', onKeyDown);
+  selectedIndex = -1;
+  selectedSubIndex = -1;
   container = null;
 }
 
@@ -64,11 +57,9 @@ function goToSubchannel(sub) {
 
 // First Left/Right press (selectedIndex still -1) always lands on Records,
 // regardless of direction — after that, each press moves one channel
-// further in that direction, wrapping around (array order, see
-// channels.js — purely an index walk, independent of any node's actual
-// on-screen position). Changing which channel is highlighted always drops
-// any subchannel selection within the previous one — it wouldn't mean
-// anything pointed at a different channel.
+// further in that direction, wrapping around the ring. Changing which
+// channel is highlighted always drops any subchannel selection within the
+// previous one — it wouldn't mean anything pointed at a different channel.
 function moveSelection(delta) {
   if (selectedIndex === -1) {
     selectedIndex = 0;
@@ -94,9 +85,10 @@ function selectByNumber(n) {
 }
 
 // Up/Down cycle through the *currently selected* channel's subchannels —
-// same order the number keys and the pills' own layout use, wrapping around
-// same as Left/Right does for channels. A no-op with no channel selected,
-// or one with no subchannels at all.
+// same top-to-bottom order the number keys and the pills' own layout use
+// (see subchannelsHtml's comment on why data order already matches visual
+// order), wrapping around same as Left/Right does for channels. A no-op
+// with no channel selected, or one with no subchannels at all.
 function moveSubSelection(delta) {
   if (selectedIndex === -1) return;
   const subs = CHANNELS[selectedIndex].subchannels;
@@ -124,16 +116,6 @@ function confirmSelection() {
   if (ch.route) goToChannel(ch);
 }
 
-// Escape zooms all the way back out — same end state as a fresh page visit
-// (and what unmount() resets to on the way out). Shared by the keyboard
-// binding below and by tapping the stage's empty background (see build()),
-// which is touch's equivalent of this same key.
-function clearSelection() {
-  selectedIndex = -1;
-  selectedSubIndex = -1;
-  applySelectionClasses();
-}
-
 // Scoped to this page only (added/removed in render()/unmount()) rather
 // than wired up globally in nav.js. nav.js's own ArrowLeft/ArrowRight
 // handling (channel cycling in the top row) is itself a no-op while Menu is
@@ -141,17 +123,6 @@ function clearSelection() {
 // listeners both reacting to the same keypress.
 function onKeyDown(e) {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  // Nothing opens a <dialog> while Menu is mounted today, but Escape is the
-  // browser-native "close the open dialog" key — defensive guard against a
-  // future modal stacking on top of Menu and double-firing both its own
-  // close and this page's zoom-out/selection handling at once. Same guard
-  // nav.js's onKeyDown already uses for its own keys.
-  if (document.querySelector('dialog[open]')) return;
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    clearSelection();
-    return;
-  }
   if (e.key === 'h' || e.key === 'H') {
     e.preventDefault();
     goHome();
@@ -189,194 +160,314 @@ function onKeyDown(e) {
   }
 }
 
-// Inline left%/top% straight from a node's own pos (channels.js) — pos.x/10
-// is pos.x's position on the 0-1000 logical square expressed as a percent
-// of the stage, same space the SVG edges below draw in 1:1 (viewBox 0 0
-// 1000 1000), so a node and the line pointing at it never need separate
-// math to agree on where it is. extra appends any additional inline style
-// (the per-channel color custom properties, see channelColorVars).
-function nodeStyle(pos, extra = '') {
-  return `left:${pos.x / 10}%; top:${pos.y / 10}%;${extra}`;
+// CHANNELS[0] sits at the top (0deg), then one per 45deg clockwise — see
+// the ordering note in js/channels.js. Each channel's line/circle share the
+// same --angle custom property, which drives both the radial position (see
+// styles.css for the rotate/translateY breakdown). Circles have no edges to
+// "fold" the way a square would — that's saved for subchannels later —
+// so the wrap just needs to counter-rotate back to keep the label upright.
+// +180: the rotate/translateY math in CSS naturally points "down" at 0deg
+// (an unrotated, untranslated box extends downward, per normal layout), so
+// this offset is what makes index 0 land at the top instead of the bottom.
+function channelAngle(i) {
+  return (i * 45 + 180) % 360;
 }
 
-// A channel's own color (js/notionColors.js's hexForLabel — deterministic,
-// no stored field needed) applied to both the channel's own node and every
-// one of its subchannels, so a whole branch of the tree reads as one color.
-// Three custom properties instead of one: --node-color is the raw hex (used
-// for the full-strength selected-state border/text), -dim/-strong are
-// pre-converted rgba versions at two opacities (the default resting border,
-// and a slightly-stronger one still short of fully opaque) — converted once
-// here rather than asking CSS to do opacity math on a hex string it can't.
-function channelColorVars(channel) {
-  const hex = hexForLabel(channel.label);
-  return ` --node-color:${hex}; --node-color-dim:${hexToRgba(hex, 0.35)}; --node-color-strong:${hexToRgba(hex, 0.85)};`;
+function linesHtml() {
+  return CHANNELS.map((c, i) => `<div class="menu-line" style="--angle:${channelAngle(i)}deg;"></div>`).join('');
 }
 
-function hexToRgba(hex, alpha) {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+// A channel sitting at a multiple of 90° (Records/Schedule/Public/Practice —
+// straight up/right/down/left) gets the wider 5-slot spread; the 4 diagonals
+// in between get the narrower 3-slot one.
+const CARDINAL_OFFSETS = [0, 20, -20, 40, -40];
+const DIAGONAL_OFFSETS = [0, 20, -20];
+
+function isCardinal(angle) {
+  return angle % 90 === 0;
 }
 
-// One <line> per edge, drawn directly between two nodes' own pos — no
-// angle/length computation anywhere, unlike the old ring's trig: the data
-// *is* the drawing. data-edge carries the owning channel's id (plus the
-// subchannel's, for a channel->subchannel edge) so applySelectionClasses
-// can dim the right edges without re-deriving who connects to whom.
-function edgeLine(from, to, key, extraClass) {
-  return `<line class="menu-edge${extraClass ? ' ' + extraClass : ''}" data-edge="${escapeHtml(key)}" x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}"></line>`;
+// Picks the first n offsets from this channel's slot list (so n=2 on a
+// cardinal channel uses [0,30], not a symmetric [-15,15] pair — the offsets
+// themselves are a fixed, deliberately-ordered set, not something to
+// re-spread per count), then reorders *those* by where they actually land
+// on screen, top to bottom. That reorder matters because +/-30 isn't
+// consistently "below/above" — it flips with which way the channel points
+// (e.g. +30 lands below the line on a rightward channel like Schedule, but
+// above it on a leftward one like Practice), so sorting by each offset's
+// real resulting angle (not the raw signed number) is what keeps this
+// reading top-to-bottom on every channel. The channel's own subchannels
+// list (channels.js order — same order the number keys use) is then laid
+// into these top-to-bottom slots in that order, so the first subchannel is
+// always the topmost pill, regardless of which offset value it ends up at.
+function subchannelAngles(parentAngle, n) {
+  const offsets = isCardinal(parentAngle) ? CARDINAL_OFFSETS : DIAGONAL_OFFSETS;
+  return offsets
+    .slice(0, n)
+    .map((offset) => parentAngle + offset)
+    .map((angle) => ({ angle, y: Math.cos((angle * Math.PI) / 180) }))
+    .sort((a, b) => a.y - b.y)
+    .map((o) => o.angle);
 }
 
-function edgesHtml() {
-  const homeEdges = CHANNELS.map((c) => edgeLine(HOME.pos, c.pos, c.id)).join('');
-  const subEdges = CHANNELS.map((c) => c.subchannels.map((s) => edgeLine(c.pos, s.pos, `${c.id}:${s.id}`, 'menu-edge-sub')).join('')).join('');
-  return `<svg class="menu-tree-edges" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">${homeEdges}${subEdges}</svg>`;
+// Vertical pixel spacing between adjacent pills in a diagonal fan — see
+// diagonalPillAngle below for why this is picked directly rather than
+// derived from equal angle steps.
+const DIAGONAL_SUB_Y_STEP = 56;
+
+// The 3 standard diagonal slot heights (top/middle/bottom), in
+// DIAGONAL_SUB_Y_STEP units — what a channel.subchannelSlots entry (see
+// channels.js) indexes into. Shared across every diagonal channel so two
+// different channels (e.g. Records and Academics, mirror images of each
+// other — see channels.js) can be pinned to the exact same heights.
+const CANONICAL_SLOT_OFFSETS = [-1, 0, 1];
+
+// Equal angle steps between pills (subchannelAngles) put them at equal
+// arc/chord distance along the circle they sit on — true "equidistant
+// along the circumference" — but that is NOT the same as equal vertical
+// pixel spacing once projected onto the page: Y = dist*cos(angle), and
+// cos isn't linear in angle, so equal angle steps land unevenly once
+// flattened onto one axis (more so the larger dist gets, which is exactly
+// what made this visible after lengthening the diagonal lines). Since what
+// actually reads as "evenly spaced" to the eye is the vertical gap between
+// stacked pills, this instead works backwards from an evenly-spaced target
+// Y to the angle that produces it — a plain arccos inversion. cos's
+// principal value only covers [0,180], so of its two angle solutions
+// (principal and 360-principal) this picks whichever lands closer to the
+// pill's own nominal fan angle, rather than hand-deriving which half of
+// the circle each of the four diagonal channels' offsets falls in.
+function angleDiff(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
 }
 
-function nodesHtml() {
-  const channelNodes = CHANNELS.map((c) => `
-    <button type="button" class="menu-node menu-node-channel" data-channel="${escapeHtml(c.id)}" style="${nodeStyle(c.pos, channelColorVars(c))}" title="${escapeHtml(c.label)}">
-      <span class="menu-node-icon" aria-hidden="true">${c.icon || ''}</span>
-      <span class="menu-node-label mono">${escapeHtml(c.label)}</span>
-    </button>
+function diagonalPillAngle(dist, nominalAngleDeg, targetY) {
+  const ratio = Math.max(-1, Math.min(1, targetY / dist));
+  const principal = (Math.acos(ratio) * 180) / Math.PI;
+  const reflected = 360 - principal;
+  return angleDiff(principal, nominalAngleDeg) <= angleDiff(reflected, nominalAngleDeg) ? principal : reflected;
+}
+
+// Keep in sync with --circle-r/--sub-pill-width/--sub-pill-height in
+// css/styles.css — needed here too so subchannelLine below can work out the
+// line's actual angle/length in real pixels.
+const CIRCLE_R = 50;
+const SUB_PILL_WIDTH = 130;
+const SUB_PILL_HEIGHT = 34;
+// Diagonal channels get their own reach, tuned independently of the
+// cardinal one: a 3-subchannel diagonal fan (e.g. Academics) packs its
+// pills at only +/-20deg apart (DIAGONAL_OFFSETS), so at too short a
+// distance adjacent pills physically overlap — the *1.7 here is what
+// pushes them far enough apart to clear that, not a stylistic choice.
+const SUB_LINE_LEN_CARDINAL = 110;
+const SUB_LINE_LEN_DIAGONAL = Math.round(SUB_LINE_LEN_CARDINAL * 0.75 * 1.7);
+
+// Cardinal channels only — diagonal ones use diagonalDist below instead.
+function subDist() {
+  return CIRCLE_R + SUB_LINE_LEN_CARDINAL + SUB_PILL_WIDTH / 2;
+}
+
+// Diagonal channels only. Every subchannel of one diagonal channel shares
+// this exact radius — none of them vary it — which is what makes them
+// equidistant along a shared circumference (see diagonalSubGeometry for how
+// each pill's angle is then solved around that fixed radius).
+function diagonalDist() {
+  return CIRCLE_R + SUB_LINE_LEN_DIAGONAL + SUB_PILL_WIDTH / 2;
+}
+
+// Math.sin/cos of a "round" angle like 270° isn't always exactly -1/0 —
+// floating-point noise on the order of 1e-16 creeps in. Harmless most
+// places in this file, but it's fatal for the sign check below (whether the
+// pill ended up left or right of the circle), so near-zero values are
+// snapped back to a clean 0 first.
+function snapZero(v) {
+  return Math.abs(v) < 1e-9 ? 0 : v;
+}
+
+// Cardinal channels only (see subchannelsHtml) — the pill never rotates to
+// face its own line, so here the line's angle and length are worked out so
+// it runs straight from the circle's edge to whichever end of the pill
+// faces the circle: the midpoint of that end's 180° rounded cap (its
+// leftmost or rightmost point), not wherever the fan angle's own ray
+// happens to cross the pill's outline. fanAngleDeg is still what actually
+// positions the pill (via .menu-subchannel's --sub-angle, a constant
+// --sub-dist out along it) — this only derives the line that connects to
+// it. dist is that same --sub-dist (see subDist), passed in rather than
+// read from a shared constant since it differs between cardinal and
+// diagonal channels.
+function subchannelLine(fanAngleDeg, dist) {
+  const rad = (fanAngleDeg * Math.PI) / 180;
+  const pillX = snapZero(-Math.sin(rad)) * dist;
+  const pillY = snapZero(Math.cos(rad)) * dist;
+  const halfWidth = SUB_PILL_WIDTH / 2;
+  // Pill right of (or dead above/below) the circle -> connect its left tip,
+  // the side actually facing back toward the circle, and vice versa.
+  const tipX = pillX + (pillX >= 0 ? -halfWidth : halfWidth);
+  const tipY = pillY;
+  const length = Math.hypot(tipX, tipY) - CIRCLE_R;
+  // Inverse of the rotate()+translateY() convention used everywhere else in
+  // this file (a vector (vx,vy) = (-sin(a), cos(a)) * len) — solved for a.
+  const angleDeg = (Math.atan2(-tipX, tipY) * 180) / Math.PI;
+  return { angleDeg, length };
+}
+
+// Every pill is the same fixed size and always horizontal — no per-angle
+// rotation, just positioned (rotate/translateY/counter-rotate, same
+// no-net-rotation trick as .menu-channel-wrap) at its own angle, a constant
+// distance out. Cardinal channels use their exact nominal fan angle
+// (subDist/subchannelLine bend the LINE to still connect). Diagonal
+// channels share one fixed DISTANCE (diagonalDist) but, for a
+// multi-subchannel fan, re-pick each pill's ANGLE (diagonalPillAngle) so
+// they land evenly spaced top-to-bottom on screen rather than at the
+// nominal equal-angle-step positions — see diagonalPillAngle for why equal
+// angle steps alone don't look even once projected onto the page. The LINE
+// still bends (subchannelLine, same function as cardinal) to connect
+// exactly to whichever angle the pill actually ends up at.
+function subchannelsHtml(channel, i) {
+  const parentAngle = channelAngle(i);
+  const n = channel.subchannels.length;
+  const nominalAngles = subchannelAngles(parentAngle, n);
+  const cardinal = isCardinal(parentAngle);
+  const dist = cardinal ? subDist() : diagonalDist();
+  const parentY = dist * Math.cos((parentAngle * Math.PI) / 180);
+  const mid = (n - 1) / 2;
+  // channel.subchannelSlots (channels.js), when present, pins each
+  // subchannel to one of the 3 canonical slot heights (CANONICAL_SLOT_OFFSETS,
+  // shared across every diagonal channel) by index, instead of the default
+  // top-to-bottom-by-array-order spacing relative to this channel's own
+  // center. That's what lets two different channels — different subchannel
+  // counts, different "mid" — land on the exact same heights (Records
+  // matching Academics' top two) rather than just each being internally
+  // symmetric. The branch-selection hint diagonalPillAngle needs (to pick
+  // the correct one of its two arccos solutions) just falls back to this
+  // channel's own parentAngle in that case — always within DIAGONAL_OFFSETS'
+  // +/-20deg of any of its real slots, so it's unambiguous, and unlike
+  // indexing into nominalAngles by slot number it can't go out of bounds
+  // when a channel's subchannelSlots references a slot index >= its own
+  // subchannel count (exactly what Records' [0, 1] does, referencing
+  // Academics' 3-slot table from a 2-subchannel channel).
+  const angles = cardinal
+    ? nominalAngles
+    : channel.subchannels.map((_, k) => {
+        if (!channel.subchannelSlots) return diagonalPillAngle(dist, nominalAngles[k], parentY + (k - mid) * DIAGONAL_SUB_Y_STEP);
+        const offsetMultiplier = CANONICAL_SLOT_OFFSETS[channel.subchannelSlots[k]];
+        return diagonalPillAngle(dist, parentAngle, parentY + offsetMultiplier * DIAGONAL_SUB_Y_STEP);
+      });
+  return channel.subchannels.map((s, k) => {
+    const angle = angles[k];
+    const line = subchannelLine(angle, dist);
+    return `
+      <div class="menu-sub-line" style="--sub-line-angle:${line.angleDeg.toFixed(2)}deg; --sub-line-dist:${line.length.toFixed(2)}px;"></div>
+      <div class="menu-subchannel" style="--sub-angle:${angle}deg; --sub-dist:${dist}px;">
+        <div class="menu-sub-pill" data-subchannel="${escapeHtml(channel.id)}:${escapeHtml(s.id)}" title="[${k + 1}] ${escapeHtml(s.label)}">
+          <span class="menu-sub-pill-label mono">${escapeHtml(s.label)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function circlesHtml() {
+  return CHANNELS.map((c, i) => `
+    <div class="menu-channel-wrap" style="--angle:${channelAngle(i)}deg;">
+      <div class="menu-channel-circle" data-channel="${escapeHtml(c.id)}">
+        <span class="menu-channel-icon" aria-hidden="true">${c.icon || ''}</span>
+        <span class="menu-channel-label mono">${escapeHtml(c.label)}</span>
+      </div>
+      ${subchannelsHtml(c, i)}
+    </div>
   `).join('');
+}
 
-  const subNodes = CHANNELS.map((c) => c.subchannels.map((s, k) => `
-    <button type="button" class="menu-node menu-node-sub" data-subchannel="${escapeHtml(c.id)}:${escapeHtml(s.id)}" style="${nodeStyle(s.pos, channelColorVars(c))}" title="[${k + 1}] ${escapeHtml(s.label)}">
-      <span class="menu-node-sub-label mono">${escapeHtml(s.label)}</span>
-    </button>
-  `).join('')).join('');
-
-  return `
-    <button type="button" class="menu-node menu-node-home" data-action="home" style="${nodeStyle(HOME.pos)}" title="[H] Home">
-      <span class="menu-node-home-label mono">Home</span>
-    </button>
-    ${channelNodes}
-    ${subNodes}
-  `;
+// One big 45deg hover wedge per channel (see .menu-sector in styles.css for
+// the actual shape/geometry) — [data-sector] is matched up with the same
+// index's .menu-channel-wrap in build() below to toggle .is-sector-hover.
+function sectorsHtml() {
+  return CHANNELS.map((c, i) => `<div class="menu-sector" data-sector="${escapeHtml(c.id)}" style="--angle:${channelAngle(i)}deg;"></div>`).join('');
 }
 
 // Pushes the current selectedIndex/selectedSubIndex onto the already-built
-// DOM by toggling classes/style properties on the existing elements, rather
-// than tearing the whole tree down and rebuilding it. That matters because
-// a transition only plays when an existing element's style changes across
-// two frames, not when a brand-new element is inserted with its end-state
-// already baked into the HTML — true for the zoom transform here the same
-// way it was for the old ring's opacity reveal.
+// DOM by toggling classes on the existing elements, rather than tearing the
+// whole constellation down and rebuilding it (what this used to do, back
+// when it was part of a single rebuild() called on every selection change).
+// That mattered once the subchannel reveal became a CSS opacity transition
+// (see .menu-sub-line/.menu-subchannel in styles.css): a transition only
+// plays when an existing element's style changes across two frames, not
+// when a brand-new element is inserted with its end-state already baked
+// into the HTML — which is exactly what innerHTML-replacing on every
+// keypress/click would do, uselessly flash-cutting straight to the end
+// state instead of fading.
 function applySelectionClasses() {
   if (!container) return;
-  const viewport = container.querySelector('.menu-tree-viewport');
-  const selectedChannel = selectedIndex !== -1 ? CHANNELS[selectedIndex] : null;
-  const selectedSub = selectedChannel && selectedSubIndex !== -1 ? selectedChannel.subchannels[selectedSubIndex] : null;
-
-  if (viewport) {
-    if (selectedChannel) {
-      // Drilling into a subchannel (selectedSub set) re-centers the zoom on
-      // IT instead of its parent channel — same fixed ZOOM_SCALE, but
-      // targeting a point further out reads as "zooming in further", which
-      // is what makes moving channel -> subchannel feel like a second zoom
-      // step rather than a flat one-level zoom.
-      const focusPos = selectedSub ? selectedSub.pos : selectedChannel.pos;
-      viewport.style.setProperty('--zoom-scale', ZOOM_SCALE);
-      viewport.style.setProperty('transform-origin', `${focusPos.x / 10}% ${focusPos.y / 10}%`);
-    } else {
-      viewport.style.setProperty('--zoom-scale', '1');
-      viewport.style.removeProperty('transform-origin');
-    }
-  }
-
-  // Tier 1 (.is-selected) / tier 3 (.is-dimmed, "dim but visible") / tier 2
-  // (neither class — full opacity, the resting look) — see styles.css for
-  // what each actually renders as. Tier 3 only ever applies once something
-  // IS selected; with nothing selected the whole tree sits at tier 2.
-  container.querySelectorAll('[data-channel]').forEach((el) => {
-    const idx = CHANNELS.findIndex((c) => c.id === el.dataset.channel);
-    const isSelected = idx === selectedIndex;
-    el.classList.toggle('is-selected', isSelected);
-    el.classList.toggle('is-dimmed', selectedIndex !== -1 && !isSelected);
+  const wraps = container.querySelectorAll('.menu-channel-wrap');
+  wraps.forEach((wrap, idx) => {
+    wrap.classList.toggle('is-selected', idx === selectedIndex);
   });
-
-  container.querySelectorAll('[data-subchannel]').forEach((el) => {
-    const [channelId, subId] = el.dataset.subchannel.split(':');
+  container.querySelectorAll('.menu-sub-pill').forEach((pill) => {
+    const [channelId, subId] = pill.dataset.subchannel.split(':');
     const idx = CHANNELS.findIndex((c) => c.id === channelId);
     const channel = idx !== -1 ? CHANNELS[idx] : null;
     const subIdx = channel ? channel.subchannels.findIndex((s) => s.id === subId) : -1;
-    const parentSelected = idx === selectedIndex;
-    el.classList.toggle('is-selected', parentSelected && subIdx === selectedSubIndex);
-    el.classList.toggle('is-dimmed', selectedIndex !== -1 && !parentSelected);
-  });
-
-  // An edge's owning channel is always the first ':'-separated segment of
-  // its data-edge, whether it's a home->channel edge ("academics") or a
-  // channel->subchannel one ("academics:courses") — same dim rule as that
-  // channel's own node either way.
-  container.querySelectorAll('[data-edge]').forEach((el) => {
-    const channelId = el.dataset.edge.split(':')[0];
-    const idx = CHANNELS.findIndex((c) => c.id === channelId);
-    el.classList.toggle('is-dimmed', selectedIndex !== -1 && idx !== selectedIndex);
+    pill.classList.toggle('is-selected', idx === selectedIndex && subIdx === selectedSubIndex);
   });
 }
 
-// Builds the tree once (selectedIndex/selectedSubIndex are always -1 at
-// this point, nothing to apply yet) and wires up every listener — selection
-// changes afterward go through applySelectionClasses() instead, not back
-// through here. See that function's comment for why.
+// Builds the constellation once (selectedIndex/selectedSubIndex are always
+// -1 at this point, nothing to re-render for) and wires up every listener —
+// selection changes afterward go through applySelectionClasses() instead,
+// not back through here. See that function's comment for why.
 function build() {
   if (!container) return;
   container.innerHTML = `
     <div class="menu-stage">
-      <div class="menu-tree-stage">
-        <div class="menu-tree-viewport">
-          ${edgesHtml()}
-          <div class="menu-tree-nodes">
-            ${nodesHtml()}
-          </div>
-        </div>
+      <div class="menu-constellation">
+        ${sectorsHtml()}
+        ${linesHtml()}
+        <button type="button" class="menu-octagon" data-action="home" title="[H] Home">
+          <span class="menu-octagon-inner">
+            <span class="menu-octagon-label mono">Home</span>
+          </span>
+        </button>
+        ${circlesHtml()}
       </div>
     </div>
   `;
-
   container.querySelector('[data-action="home"]')?.addEventListener('click', goHome);
-
-  // A click/tap on a channel that isn't already selected just selects/zooms
-  // it (same as Left/Right landing on it) — one already selected AND
-  // carrying its own route (Records/Public/Contacts) navigates instead.
-  // This single rule reproduces the old separate click+dblclick pair
-  // naturally (first click selects, a real second click sees "already
-  // selected" and navigates) while also giving touch the same two-tap
-  // pattern with no dblclick timing to get wrong on a touchscreen.
+  // A single click only selects a channel — exactly what Left/Right
+  // landing on it does, never an immediate navigate, even for a channel
+  // that carries its own route (Records/Public) — those need Enter
+  // afterward too, same as every other channel. A double-click on one of
+  // those route-carrying channels is a shortcut straight past that: select
+  // then immediately confirm, same as a quick select-then-Enter.
   container.querySelectorAll('[data-channel]').forEach((el) => {
     const idx = CHANNELS.findIndex((c) => c.id === el.dataset.channel);
     if (idx === -1) return;
     const channel = CHANNELS[idx];
     el.addEventListener('click', () => {
-      if (idx === selectedIndex && channel.route) {
-        goToChannel(channel);
-        return;
-      }
       selectedIndex = idx;
       selectedSubIndex = -1;
       applySelectionClasses();
     });
+    if (channel.route) {
+      el.addEventListener('dblclick', () => goToChannel(channel));
+    }
   });
-
-  // A subchannel pill always navigates immediately on click/tap, dimmed or
-  // not — dimmed (off-focus) nodes stay fully clickable throughout this
-  // page, same as channel nodes above.
   container.querySelectorAll('[data-subchannel]').forEach((el) => {
     const [channelId, subId] = el.dataset.subchannel.split(':');
     const channel = CHANNELS.find((c) => c.id === channelId);
     const sub = channel?.subchannels.find((s) => s.id === subId);
     if (sub) el.addEventListener('click', () => goToSubchannel(sub));
   });
-
-  // Tapping/clicking anywhere on the stage that ISN'T a node is touch's
-  // equivalent of Escape — the stage has no other purpose for a click, and
-  // this is the only way a touch user (no keyboard) can zoom back out.
-  container.querySelector('.menu-stage')?.addEventListener('click', (e) => {
-    if (e.target.closest('.menu-node')) return;
-    clearSelection();
+  // Hovering a channel's outer sector shows its subchannels the same way
+  // hovering the circle itself does (see .is-sector-hover in styles.css) —
+  // purely a visual hover state, deliberately not touching selectedIndex,
+  // same as :hover on the circle doesn't either.
+  const wraps = container.querySelectorAll('.menu-channel-wrap');
+  container.querySelectorAll('[data-sector]').forEach((el) => {
+    const idx = CHANNELS.findIndex((c) => c.id === el.dataset.sector);
+    const wrap = idx !== -1 ? wraps[idx] : null;
+    if (!wrap) return;
+    el.addEventListener('mouseenter', () => wrap.classList.add('is-sector-hover'));
+    el.addEventListener('mouseleave', () => wrap.classList.remove('is-sector-hover'));
   });
 }
