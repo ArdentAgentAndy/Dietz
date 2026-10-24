@@ -320,108 +320,126 @@ body.menu-no-scroll {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
-/* Fixed stage the octagon, its 8 spokes, and the 8 channel circles are all
-   absolutely positioned within — --octagon-r/--line-len/--circle-r/
-   --circle-dist are the one set of measurements everything below is built
-   from, so the whole layout only needs changing in one place. */
-.menu-constellation {
+/* The tree's whole coordinate space: every node (js/channels.js's `pos`)
+   and every edge endpoint is hand-authored on a fixed 0-1000 logical
+   square, 1:1 with the SVG viewBox below — a node's pos.x is literally both
+   its viewBox x-coordinate and (divided by 10) its CSS left%. One square,
+   scaled by the browser to fit the viewport — nothing here needs
+   recalculating at different sizes, which is also what makes this
+   responsive for free (see the @media blocks at the bottom). */
+.menu-tree-stage {
   position: relative;
-  width: 640px;
-  height: 640px;
-  --octagon-r: 80px;
-  --line-len: 120px;
-  --circle-r: 50px;
-  --circle-dist: calc(var(--octagon-r) + var(--line-len) + var(--circle-r));
-  --sub-pill-width: 130px;
-  --sub-pill-height: 34px;
+  width: min(92vmin, 640px);
+  height: min(92vmin, 640px);
 }
 
-/* One spoke per channel, radiating from the octagon's center — positioned
-   at the stage center then rotated by --angle (0 = up, clockwise) and
-   pushed out by --octagon-r first so it starts right at the octagon's edge,
-   same way every "line"/"circle" position below is built: rotate first,
-   translate second, so the translate happens along the now-rotated axis. */
-.menu-line {
+/* The one element that actually "zooms" — see applySelectionClasses() in
+   js/views/menu.js, which sets --zoom-scale and transform-origin on this
+   element per selection. transform-origin is the focused node's own
+   position (same pos.x/10 / pos.y/10 percentages every node's left/top
+   use), so scaling up around that point IS "zooming into that node" — no
+   pan/translate math needed anywhere. Both the SVG edges layer and the
+   HTML nodes layer live inside this one wrapper so they scale together, in
+   lockstep, lines staying glued to their nodes' centers through the zoom. */
+.menu-tree-viewport {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 2px;
-  height: var(--line-len);
-  margin-left: -1px;
-  background: var(--border-strong);
-  transform-origin: top center;
-  transform: rotate(var(--angle)) translateY(var(--octagon-r));
+  inset: 0;
+  transform: scale(var(--zoom-scale, 1));
+  transform-origin: 50% 50%;
+  transition: transform 0.2s ease;
 }
 
-/* One huge invisible hit-zone per channel, a 45deg wedge so hovering
-   anywhere in that general direction reveals the channel's subchannels —
-   not just hovering its small circle (see .is-sector-hover, set from
-   js/views/menu.js on mouseenter/mouseleave of [data-sector]). The wedge's
-   near edge sits at 300px (--octagon-r + --line-len + --circle-r, i.e.
-   exactly the outermost edge of the channel circles) so it never covers the
-   circles/pills/lines themselves — those keep their own precise hover.
-   Drawn as a fixed polygon pointing straight down (angle 0, matching every
-   other radial element's convention here) at a size (4000px, 2000px out to
-   each straight edge) that comfortably outlasts any real viewport, then
-   just rotated into place with no translate needed — the distance is
-   already baked into the polygon's own points. Sits earliest in the
-   constellation's DOM order (see sectorsHtml in menu.js) so everything
-   else — lines, octagon, circles, pills — naturally paints on top of it. */
-.menu-sector {
+/* Lines are drawn directly from each node's own authored pos (see
+   js/views/menu.js's edgesHtml) — zero angle/length computation anywhere,
+   unlike the old ring's trig. Earlier in DOM order than .menu-tree-nodes so
+   nodes paint over the line ends, same as the old .menu-line/
+   .menu-channel-circle relationship. */
+.menu-tree-edges {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4000px;
-  height: 4000px;
-  margin: -2000px 0 0 -2000px;
-  clip-path: polygon(1885.2px 2277.16px, 1234.63px 3847.76px, 2765.37px 3847.76px, 2114.8px 2277.16px);
-  transform: rotate(var(--angle));
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-/* A plain `border` on a clip-path'd element only draws along the box's
-   rectangular edges — it gets clipped away entirely on the diagonal
-   corners, so the "border" would only show top/bottom/left/right, not
-   wrap the octagon. Two nested octagons instead: the outer one *is* the
-   border color, the inner one is inset by the border thickness (via
-   padding) and clipped to the same shape, so a ring of the outer color
-   shows all the way around, following every edge including the diagonals. */
-.menu-octagon {
+.menu-edge {
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transition: stroke-opacity 0.12s ease;
+}
+
+.menu-edge.is-dimmed {
+  stroke-opacity: 0.35;
+}
+
+.menu-tree-nodes {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 160px;
-  height: 160px;
-  margin: -80px 0 0 -80px;
-  padding: 3px;
+  inset: 0;
+}
+
+/* Every node (Home, a channel, a subchannel) shares this base: positioned
+   at its own pos.x/10%, pos.y/10% (set inline per node) and centered on
+   that point. The translate here is the one part of the transform that
+   never changes — .is-selected/.is-dimmed below only ever add a scale() on
+   top of it, so the full transform value still animates cleanly across
+   both states (see applySelectionClasses's comment on why selection
+   changes toggle classes on persisted nodes rather than re-rendering, so
+   these transitions actually play). */
+.menu-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
   display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.12s ease;
+}
+
+/* Two nested shapes, same trick the old octagon used — a plain `border` on
+   a clip-path'd element only draws along the box's rectangular edges, it
+   gets clipped away on the diagonal corners. The outer shape IS the border
+   color; the inner label layer sits inset (via padding on the outer),
+   clipped to the same shape, so a ring of the outer color wraps every edge
+   including the diagonals. */
+.menu-node-home {
+  width: 120px;
+  height: 120px;
+  padding: 3px;
   clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
   background: var(--border-strong);
   border: none;
-  cursor: pointer;
-  transition: background 0.15s ease;
 }
 
-.menu-octagon:hover {
+.menu-node-home:hover {
   /* A translucent tint, not the solid opaque --accent — reads as a
      highlight on the ring, same idea as every other hover/active state in
      this app (e.g. button.active's border + --accent-dim fill). */
   background: rgba(195, 222, 232, 0.55);
 }
 
-.menu-octagon-inner {
-  flex: 1;
+.menu-node-home-label {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
   clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
   background: var(--surface2);
   color: var(--text);
-  transition: color 0.15s ease, background 0.15s ease;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: color 0.15s ease;
 }
 
-.menu-octagon:hover .menu-octagon-inner {
+.menu-node-home:hover .menu-node-home-label {
   /* Fill stays the normal dark surface — only the ring (above) and the
      text pick up the highlight, so the ring actually reads as a ring
      against a still-dark center instead of the whole shape going one flat
@@ -429,204 +447,154 @@ body.menu-no-scroll {
   color: var(--accent);
 }
 
-.menu-octagon-label {
-  font-size: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-/* Positions a channel circle's center at --circle-dist out along --angle,
-   with no net rotation on the wrap itself — rotate(angle) then
-   translateY(dist) moves it out along that angle same as .menu-line above,
-   and the trailing rotate(-angle) cancels the rotation back out so the
-   label inside reads upright instead of sideways/upside-down depending on
-   which of the 8 directions it's in. */
-.menu-channel-wrap {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(var(--angle)) translateY(var(--circle-dist)) rotate(calc(-1 * var(--angle)));
+/* A channel's own color (js/notionColors.js's hexForLabel, set inline as
+   --node-color/--node-color-dim/--node-color-strong per node — see
+   channelColorVars in js/views/menu.js) replaces the universal blue accent
+   for this page specifically, so each branch of the tree reads as its own
+   color — same idea as the Courses page's per-course color border
+   (js/views/courses.js). Falls back to the plain neutral pair if
+   --node-color is ever unset (shouldn't happen; every channel/subchannel
+   node always sets it). */
+.menu-node-channel,
+.menu-node-sub {
+  border: 2px solid var(--node-color-dim, var(--border-strong));
+  background: var(--surface2);
+  color: var(--text);
 }
 
 /* A real circle (border-radius, not clip-path) needs none of the
-   two-layer-ring trick the octagon above does — a plain border already
+   two-layer-ring trick the Home node above does — a plain border already
    wraps a circle continuously with no corners to clip it away at. */
-.menu-channel-circle {
-  position: relative;
-  /* Painted above its own .menu-sub-line/.menu-subchannel siblings (they
-     come later in source order, see subchannelsHtml in menu.js, so would
-     otherwise paint on top) — needed so the opaque fill actually hides the
-     sub-line's near end once the circle scales outward over it on hover,
-     same reasoning as the octagon-spoke-line fix above. */
-  z-index: 1;
-  width: calc(var(--circle-r) * 2);
-  height: calc(var(--circle-r) * 2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.menu-node-channel {
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
-  border: 2px solid var(--border-strong);
-  background: var(--surface2);
-  color: var(--text);
-  cursor: pointer;
-  text-align: center;
   padding: 8px;
-  box-sizing: border-box;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  /* Painted above subchannel nodes/edges, which can sit visually "under"
+     it once it scales up on selection — same reasoning the old
+     .menu-channel-circle's z-index had. */
+  z-index: 1;
+}
+
+/* Same shape as the sub-value badges on the Today page (.cal-chip-sub-badge)
+   — a short, wide, fully-rounded pill. */
+.menu-node-sub {
+  width: 112px;
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 10px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* Sits behind the label (earlier in source order, no z-index needed) as a
-   translucent watermark — big enough to actually read inside the circle,
-   but faint enough that the label stays the thing your eye lands on. */
-.menu-channel-icon {
+   translucent watermark — big enough to actually read inside the node, but
+   faint enough that the label stays the thing your eye lands on. */
+.menu-node-icon {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 36px;
+  font-size: 30px;
   line-height: 1;
   opacity: 0.35;
   pointer-events: none;
 }
 
-.menu-channel-circle:hover,
-.menu-channel-wrap.is-selected .menu-channel-circle,
-.menu-channel-wrap.is-sector-hover .menu-channel-circle {
-  border-width: 3px;
-  border-color: rgba(195, 222, 232, 0.55);
-  color: var(--accent);
-  /* Opaque, not var(--accent-dim) — same reasoning as .menu-octagon-inner's
-     fill staying solid on hover: a translucent fill here would let the
-     connecting .menu-line show through once the circle scales inward over
-     it (the line sits behind in DOM order but isn't actually covered
-     unless the fill on top of it is solid). */
-  background: var(--surface2);
-  /* ~20% larger on hover/select, same treatment as .menu-sub-pill below —
-     big enough that the fill visibly grows into the highlighted border
-     instead of just the thin border ring reading as "bigger". */
-  transform: scale(1.2);
-}
-
-.menu-channel-label {
+.menu-node-label {
   position: relative;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1.3;
-}
-
-/* A subchannel's line + pill branch off the already-centered channel circle
-   (see .menu-channel-wrap) — both positioned top:50%/left:50% relative to
-   that wrap, i.e. anchored at the circle's own center, same pivot-point
-   convention as .menu-line/.menu-channel-wrap use off the octagon, just one
-   level further out. Hidden by default (see the .is-selected/:hover rule
-   further down) — a channel's branches only show once it's actually
-   highlighted or moused over, so the ring isn't cluttered with every
-   channel's subchannels at once.
-   Unlike .menu-line/.menu-channel-wrap, this doesn't share an angle with
-   the thing it connects to: the pill (.menu-subchannel below) sits at its
-   own fan angle (--sub-angle), but the line always runs straight to
-   whichever end of the pill faces the circle — its leftmost or rightmost
-   point (the midpoint of that end's rounded cap), not wherever the fan
-   angle's own ray happens to land. --sub-line-angle/--sub-line-dist are
-   that separately-computed angle and length (js/views/menu.js's
-   subchannelLine), set inline per subchannel. */
-.menu-sub-line {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 2px;
-  height: var(--sub-line-dist);
-  margin-left: -1px;
-  background: var(--border-strong);
-  transform-origin: top center;
-  transform: rotate(var(--sub-line-angle)) translateY(var(--circle-r));
-}
-
-/* No net rotation (rotate/translateY/counter-rotate, same trick as
-   .menu-channel-wrap) — centers the pill at --sub-dist out along
-   --sub-angle (set inline per subchannel, js/views/menu.js's subDist —
-   diagonal channels sit closer in than cardinal ones), with the pill itself
-   (below) always staying flat/horizontal, never rotated to face its own
-   line (see .menu-sub-line above for how the line connects to it instead). */
-.menu-subchannel {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(var(--sub-angle)) translateY(var(--sub-dist)) rotate(calc(-1 * var(--sub-angle)));
-}
-
-/* Same shape as the sub-value badges on the Today page (.cal-chip-sub-badge
-   in css/styles.css) — a short, wide, fully-rounded pill — just bigger and
-   with its own fixed size here (every subchannel pill is identical
-   regardless of channel or position, unlike that badge which sizes to its
-   text). */
-.menu-sub-pill {
-  width: var(--sub-pill-width);
-  height: var(--sub-pill-height);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 2px solid var(--border-strong);
-  background: var(--surface2);
-  color: var(--text);
-  cursor: pointer;
-  text-align: center;
-  padding: 0 12px;
-  box-sizing: border-box;
-  white-space: nowrap;
-  overflow: hidden;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
-}
-
-.menu-sub-pill:hover,
-.menu-sub-pill.is-selected {
-  border-width: 3px;
-  border-color: rgba(195, 222, 232, 0.55);
-  color: var(--accent);
-  /* Opaque, not var(--accent-dim) — see .menu-channel-circle:hover's
-     comment: a translucent fill would let its .menu-sub-line show through
-     once the pill scales over it. */
-  background: var(--surface2);
-  /* ~20% larger on hover/select, same treatment as .menu-channel-circle above. */
-  transform: scale(1.2);
-}
-
-.menu-sub-pill-label {
   font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
+}
+
+.menu-node-sub-label {
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Default-hidden (faded out, not display:none — needs to stay paintable for
-   the opacity transition below to actually animate) — a channel's
-   subchannel branches only appear once that channel is actually highlighted
-   (Left/Right/Up/Down, see .is-selected on .menu-channel-wrap), moused over
-   directly, or hovered via its outer .menu-sector (see .is-sector-hover,
-   set from js/views/menu.js) — keeps the ring from showing every channel's
-   subchannels at once. :hover on the wrap stays active while the cursor is
-   anywhere inside it, including over the pills themselves, so nothing
-   disappears out from under the pointer while interacting with it.
-   pointer-events:none while hidden so a faded-out pill sitting behind
-   another channel's sector can't steal its hover/click. */
-.menu-sub-line,
-.menu-subchannel {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
+/* Tier 1 — the actively selected node (a highlighted channel, or its
+   highlighted subchannel): full-strength version of its own color, same
+   ~20% scale-up the old ring used for hover/select. Opaque fill, not a
+   translucent one — same reasoning the old .menu-channel-circle:hover
+   comment gave: a see-through fill would let the connecting edge show
+   through once the node scales out over it. */
+.menu-node-channel.is-selected,
+.menu-node-sub.is-selected {
+  border-width: 3px;
+  border-color: var(--node-color-strong, rgba(195, 222, 232, 0.55));
+  color: var(--node-color, var(--accent));
+  background: var(--surface2);
+  transform: translate(-50%, -50%) scale(1.2);
 }
 
-.menu-channel-wrap.is-selected .menu-sub-line,
-.menu-channel-wrap.is-selected .menu-subchannel,
-.menu-channel-wrap:hover .menu-sub-line,
-.menu-channel-wrap:hover .menu-subchannel,
-.menu-channel-wrap.is-sector-hover .menu-sub-line,
-.menu-channel-wrap.is-sector-hover .menu-subchannel {
-  opacity: 1;
-  pointer-events: auto;
+/* Tier 3 — everything NOT on the current focus path once something is
+   selected (see applySelectionClasses): shrinks and fades, but stays fully
+   visible and clickable (clicking jumps/zooms straight there) — "dim but
+   visible", never a full fade to invisible, so the rest of the tree is
+   always still in view for orientation. No tier-3 class is ever applied to
+   anything while selectedIndex is -1 (nothing selected) — the whole tree
+   sits at neutral/full opacity in that resting state. */
+.menu-node-channel.is-dimmed,
+.menu-node-sub.is-dimmed {
+  opacity: 0.4;
+  transform: translate(-50%, -50%) scale(0.82);
+}
+
+@media (max-width: 700px) {
+  .menu-node-channel {
+    width: 76px;
+    height: 76px;
+  }
+
+  .menu-node-sub {
+    width: 92px;
+    height: 28px;
+  }
+
+  .menu-node-icon {
+    font-size: 22px;
+  }
+
+  .menu-node-label {
+    font-size: 10px;
+  }
+
+  .menu-node-sub-label {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 480px) {
+  .menu-tree-stage {
+    width: min(96vmin, 480px);
+    height: min(96vmin, 480px);
+  }
+
+  .menu-node-channel {
+    width: 64px;
+    height: 64px;
+  }
+
+  .menu-node-sub {
+    width: 78px;
+    height: 24px;
+  }
+
+  .menu-node-home {
+    width: 92px;
+    height: 92px;
+  }
+
+  /* The decorative watermark competes too much with the label at this
+     size — drop it, the label alone still says exactly as much. */
+  .menu-node-icon {
+    display: none;
+  }
 }
 
 h1, h2, h3 {
@@ -1137,10 +1105,10 @@ h1, h2, h3 {
 .cal-day-col.is-today,
 .cal-month-cell.is-today {
   /* Same baby-blue used for the "selected"/hover state elsewhere (see
-     .menu-channel-circle:hover, .menu-sub-pill:hover) — var(--accent) at
-     the same translucency, not the saturated var(--blue). Thicker than the
-     1px default border so it actually reads as a highlight, not just a
-     slightly different shade of the same hairline. */
+     .menu-node-channel.is-selected, .menu-node-sub.is-selected) —
+     var(--accent) at the same translucency, not the saturated var(--blue).
+     Thicker than the 1px default border so it actually reads as a
+     highlight, not just a slightly different shade of the same hairline. */
   border-width: 2px;
   border-color: rgba(195, 222, 232, 0.55);
 }
@@ -2049,6 +2017,32 @@ dialog#modal-dialog::backdrop {
   padding: 8px 10px;
 }
 
+.rm-existing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.rm-existing-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  text-align: left;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rm-existing-row:hover {
+  border-color: var(--accent);
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -2653,6 +2647,12 @@ details summary {
   font-size: 10px;
 }
 
+/* Over 18 or (non-zero and) under 12 credits — outside the normal
+   full-time course-load range, see semestersViewHtml's isOffLoad. */
+.rm-semester-col.is-off-load {
+  border-color: var(--red);
+}
+
 .rm-pool {
   margin-top: 16px;
 }
@@ -2701,6 +2701,59 @@ details summary {
 .rm-category.is-met {
   border-color: var(--green);
   background: rgba(91, 200, 122, 0.08);
+}
+
+[data-category-drop].is-drag-over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* Set on every category box while a course is pending placement (see
+   roadmap.js's headerHtml/pendingPlacementId) — a dashed accent border on
+   every box it could legally land in, cursor:pointer to make it read as
+   clickable, same idea as .rm-category.is-met's solid-border highlight but
+   for "click me" rather than "already done". */
+.rm-category.is-placeable {
+  border-style: dashed;
+  border-color: var(--accent);
+  cursor: pointer;
+}
+
+.rm-needs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.rm-needs-row:first-of-type {
+  border-top: none;
+}
+
+.rm-needs-name {
+  font-size: 12px;
+}
+
+.rm-needs-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rm-pending-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  font-size: 12px;
 }
 
 .rm-category-head {

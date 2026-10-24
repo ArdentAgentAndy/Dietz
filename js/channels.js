@@ -5,17 +5,21 @@
 // route/content of their own — see nav.js, which renders this into the
 // header and does all the channel/subchannel keyboard+mouse navigation,
 // and hides the whole channel row while Menu itself is open (channels are
-// then only reachable from Menu's own octagon constellation).
+// then only reachable from Menu's own node-tree page).
 // Home is temporary and deliberately not a top-nav item at all — only
-// reachable via the octagon button (keybind H) on the Menu page
+// reachable via the central node (keybind H) on the Menu page
 // (js/views/menu.js). Its route constant stays here so that page (and
 // router.js) have one shared place to read it from.
-export const HOME = { id: 'home', label: 'Home', route: '/home' };
+export const HOME = { id: 'home', label: 'Home', route: '/home', pos: { x: 500, y: 500 } };
 export const MENU = { id: 'menu', label: 'Menu', route: '/' };
 
-// Order matters beyond just the top nav: Menu's octagon constellation
-// (js/views/menu.js) places CHANNELS[0] at the top and walks the rest
-// clockwise, one per 45°, in this same array order.
+// Array order still matters beyond the top nav: it's what Left/Right
+// cycling and the number-key shortcuts (js/views/menu.js's moveSelection/
+// selectByNumber) walk — purely by index, same as before. It is NOT what
+// positions anything on screen anymore (see `pos` below) — the two are
+// independent on purpose, so reordering this array (to change keyboard
+// cycling order) never has to touch anyone's hand-placed coordinates, and
+// vice versa.
 //
 // A channel's own `route` is the one exception to "channels carry no
 // content of their own" — Records, Public, and Contacts each ARE a page
@@ -26,52 +30,57 @@ export const MENU = { id: 'menu', label: 'Menu', route: '/' };
 // still opens/walks that dropdown exactly like it does for a channel with no
 // route of its own (Academics/Schedule), since nav.js's dropdown logic never
 // actually checks for a `route` — only the direct click/Left-Right jump does.
-// icon: a single emoji shown large/translucent inside the channel's circle
-// on the Menu page's constellation (js/views/menu.js's circlesHtml) —
-// purely decorative (aria-hidden there), so it carries no meaning the
-// label itself doesn't already.
+//
+// `pos: {x, y}` is a hand-authored position on a fixed 0-1000 logical
+// square — js/views/menu.js draws this 1:1 against an SVG viewBox of the
+// same size (pos.x is literally the line's x-coordinate; divided by 10,
+// it's also the node's CSS left%). This replaces the old version's
+// angle-from-index trig entirely: nothing about layout is computed anymore,
+// it's just edited here, same "hand-edit an array, no build step" spirit as
+// the rest of this file. Keep new nodes roughly within 60-940 on each axis
+// so they don't crowd the stage's edge.
+//
+// icon: a single emoji shown large/translucent inside a channel's node on
+// the Menu page (js/views/menu.js's nodesHtml) — purely decorative
+// (aria-hidden there), so it carries no meaning the label itself doesn't
+// already.
 export const CHANNELS = [
   {
     id: 'contacts',
     label: 'Contacts',
     icon: '👥',
     route: '/contacts',
+    pos: { x: 500, y: 240 },
     subchannels: [],
   },
   {
     id: 'academics',
     label: 'Academics',
     icon: '🎓',
+    pos: { x: 740, y: 260 },
     subchannels: [
-      { id: 'courses', label: 'Courses', route: '/courses' },
-      { id: 'lessons', label: 'Lessons', route: '/lessons' },
-      { id: 'revision', label: 'Revision', route: '/revision' },
+      { id: 'courses', label: 'Courses', route: '/courses', pos: { x: 910, y: 150 } },
+      { id: 'lessons', label: 'Lessons', route: '/lessons', pos: { x: 940, y: 260 } },
+      { id: 'revision', label: 'Revision', route: '/revision', pos: { x: 900, y: 370 } },
     ],
-    // Which of the menu page's 3 standard diagonal slots (top/middle/bottom
-    // — see js/views/menu.js's CANONICAL_SLOT_OFFSETS) each subchannel
-    // above renders in, by index into *this* array: courses (index 0) in
-    // slot 2 (bottom), lessons (index 1) in slot 1 (middle, unchanged),
-    // revision (index 2) in slot 0 (top) — a deliberate swap, not the
-    // default top-to-bottom-by-array-order placement every other channel
-    // uses. The array/label order above (and the 1/2/3 keyboard shortcuts
-    // that follow it) is untouched; only the on-screen position moves.
-    subchannelSlots: [2, 1, 0],
   },
   {
     id: 'schedule',
     label: 'Schedule',
     icon: '📅',
+    pos: { x: 800, y: 500 },
     subchannels: [
-      { id: 'calendar', label: 'Calendar', route: '/calendar' },
-      { id: 'canvas', label: 'Canvas', route: '/canvas' },
+      { id: 'calendar', label: 'Calendar', route: '/calendar', pos: { x: 940, y: 420 } },
+      { id: 'canvas', label: 'Canvas', route: '/canvas', pos: { x: 940, y: 580 } },
     ],
   },
   {
     id: 'application',
     label: 'Application',
     icon: '🚀',
+    pos: { x: 677, y: 677 },
     subchannels: [
-      { id: 'roadmap', label: 'Roadmap', route: '/roadmap' },
+      { id: 'roadmap', label: 'Roadmap', route: '/roadmap', pos: { x: 800, y: 800 } },
     ],
   },
   {
@@ -79,20 +88,23 @@ export const CHANNELS = [
     label: 'Public',
     icon: '🌐',
     route: '/public',
+    pos: { x: 500, y: 760 },
     subchannels: [],
   },
   {
     id: 'resources',
     label: 'Resources',
     icon: '📚',
+    pos: { x: 323, y: 677 },
     subchannels: [],
   },
   {
     id: 'practice',
     label: 'Practice',
     icon: '🎹',
+    pos: { x: 200, y: 500 },
     subchannels: [
-      { id: 'sight-reading', label: 'Sight Reading', route: '/sight-reading' },
+      { id: 'sight-reading', label: 'Sight Reading', route: '/sight-reading', pos: { x: 55, y: 560 } },
     ],
   },
   {
@@ -100,16 +112,16 @@ export const CHANNELS = [
     label: 'Records',
     icon: '🗂️',
     route: '/today',
+    // Mirrors Academics (pos.x = 1000 - Academics' 740) across the tree's
+    // vertical center line, same idea the old subchannelSlots trick aimed
+    // for (Records visually matching Academics) but now just literal,
+    // visible coordinates instead of an index into a shared slot table —
+    // see Today/Logging below, mirrored against Academics' own top two
+    // subchannels (Courses/Lessons) the same way.
+    pos: { x: 260, y: 260 },
     subchannels: [
-      { id: 'today', label: 'Today', route: '/today' },
-      { id: 'logging', label: 'Logging', route: '/logging' },
+      { id: 'today', label: 'Today', route: '/today', pos: { x: 90, y: 150 } },
+      { id: 'logging', label: 'Logging', route: '/logging', pos: { x: 60, y: 260 } },
     ],
-    // Records (135deg) and Academics (225deg) are mirror images of each
-    // other across the vertical axis — same distance from center, same
-    // resulting row heights — so pinning Records to Academics' top two
-    // slots (0, 1 — see that channel's own subchannelSlots) makes the two
-    // sides of the menu page symmetrical: today/logging sit at exactly the
-    // same two heights as revision/lessons do on the other side.
-    subchannelSlots: [0, 1],
   },
 ];

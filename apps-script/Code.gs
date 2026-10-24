@@ -24,8 +24,20 @@ var TABLES = {
   // id there (e.g. "AE311"). RoadmapCustom is for a manually-added course
   // (Gen Eds, etc. — anything outside the static catalog), so it carries
   // its own name/credits rather than just referencing a catalog id.
-  RoadmapStatus: { columns: ['id', 'status', 'semester'], key: ['id'] },
-  RoadmapCustom: { columns: ['id', 'subject', 'number', 'name', 'credits', 'status', 'semester'], key: ['id'] },
+  // lockedCategory ("program:category", e.g. "ECE:Probability/Stats (choose
+  // 1)"): which ONE of a catalog course's electivePool-flagged Track
+  // categories (js/roadmapCourses.js's CATEGORIES) it counts toward, for a
+  // course eligible for more than one — see js/views/roadmap.js's
+  // matchesLock. Blank for everything else (no real choice to lock).
+  RoadmapStatus: { columns: ['id', 'status', 'semester', 'lockedCategory'], key: ['id'] },
+  // program/category: this custom course's main Track placement (the "Add
+  // to Track" flow, js/views/roadmap.js), independent of semester — blank
+  // until placed, in which case it shows only in Semesters/Unassigned.
+  // genEdProgram/genEdCategory: a SEPARATE, second placement specifically
+  // for a Gen Ed category, independent of the main one above — lets a
+  // course hold both a real technical placement and a Gen Ed one at once
+  // (explicit double-dipping, Gen Ed only — see CATEGORIES' genEd flag).
+  RoadmapCustom: { columns: ['id', 'subject', 'number', 'name', 'credits', 'status', 'semester', 'program', 'category', 'genEdProgram', 'genEdCategory'], key: ['id'] },
   // Contacts (#/contacts): category is one of 'Professors', 'Projects',
   // 'Advisors/Staff' (js/views/contacts.js's CONTACT_CATEGORIES) — a
   // Projects entry is still a person (whoever you'd contact about that
@@ -54,13 +66,40 @@ function jsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// Adding a column to a table's `columns` array above (e.g. Courses' recent
+// `color`) only changes what this script WRITES/reads by name from here on
+// — it does nothing to a Sheet tab that was already created before that
+// column existed, since getSheet_ only ever appends the full header row
+// once, on first creation. Without this, upsertRow_ (which writes
+// positionally by `columns.length`, see below) happily writes the new
+// field into a column the Sheet's own header row doesn't label — readTable_
+// (which reads by the Sheet's ACTUAL header row, not `columns`) then never
+// sees it on the next read, so the value silently vanishes on the very next
+// bootstrap pull. Called from getSheet_ on every access (not just at
+// creation) so any future column added to TABLES self-provisions in an
+// existing Sheet with no manual "add this header cell yourself" step —
+// appended after whatever's already there, never reordering/removing
+// existing headers, so upsertRow_'s own column-order assumption (see its
+// comment) stays valid as long as a column is only ever appended, never
+// reordered, in `columns`.
+function ensureHeaders_(sheet, columns) {
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var missing = columns.filter(function (c) { return headers.indexOf(c) === -1; });
+  if (missing.length) {
+    sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing]);
+  }
+}
+
 function getSheet_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(name);
-  if (sheet) return sheet;
-
-  sheet = ss.insertSheet(name);
-  sheet.appendRow(TABLES[name].columns);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(TABLES[name].columns);
+    return sheet;
+  }
+  ensureHeaders_(sheet, TABLES[name].columns);
   return sheet;
 }
 
@@ -142,6 +181,11 @@ function findRow_(sheet, headers, keyCols, keyValues) {
 function upsertRow_(tableName, row) {
   var config = TABLES[tableName];
   if (!config) throw new Error('Unknown table: ' + tableName);
+  // Writes positionally by `config.columns`' own order, not by matching
+  // header text in the Sheet — relies on the Sheet's actual columns being
+  // in this exact order, which getSheet_'s ensureHeaders_ call (above)
+  // guarantees as long as columns are only ever appended to, never
+  // reordered or removed, here.
   var sheet = getSheet_(tableName);
   var headers = config.columns;
   var keyValues = config.key.map(function (k) { return row[k]; });
@@ -537,7 +581,26 @@ function notionSchema_() {
     var p = properties[name];
     return (p && p.select && p.select.options) ? p.select.options.map(function (o) { return o.name; }) : [];
   }
-  return { course: optionsFor('Course'), project: optionsFor('Project'), lead: optionsFor('Lead') };
+  // name -> Notion's own color name for that option, e.g. {"Robotics club":
+  // "purple"} — js/views/logging.js reads this (projectColors/leadColors)
+  // so a local Project/Research category can share the exact color Notion
+  // already assigned that value, instead of hashing its own from the name.
+  // Additive alongside the plain name lists above (unchanged, still what
+  // calendar.js's task-entry validation checks against) rather than
+  // reshaping them, so nothing already reading course/project/lead as flat
+  // string arrays needs to change.
+  function colorsFor(name) {
+    var p = properties[name];
+    var out = {};
+    if (p && p.select && p.select.options) {
+      p.select.options.forEach(function (o) { out[o.name] = o.color; });
+    }
+    return out;
+  }
+  return {
+    course: optionsFor('Course'), project: optionsFor('Project'), lead: optionsFor('Lead'),
+    courseColors: colorsFor('Course'), projectColors: colorsFor('Project'), leadColors: colorsFor('Lead'),
+  };
 }
 
 function doPost(e) {

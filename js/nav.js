@@ -6,8 +6,10 @@ import { isConfigured } from './sync.js?v=63';
 // arrow-key-cyclable strip at all — it's always reachable (click, or [M]
 // from anywhere), but while it's actually open (activePath === MENU.route)
 // the channels row itself renders empty and ArrowLeft/Right/Up/Down/Enter
-// are no-ops: channels are only reachable from the Menu page's own octagon
-// constellation while Menu is open, never from this row. highlightIndex is
+// are no-ops: channels are only reachable from the Menu page's own node
+// tree while Menu is open, never from this row (that page also owns a
+// page-scoped Escape binding of its own, js/views/menu.js — nothing here
+// listens for Escape, so there's nothing to guard against it). highlightIndex is
 // a plain index into CHANNELS. A click, or ArrowLeft/ArrowRight landing on
 // a channel, opens its dropdown whenever it has subchannels to show
 // (ArrowUp/ArrowDown, moveSub below, is what then walks that dropdown) —
