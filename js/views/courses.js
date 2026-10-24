@@ -1,10 +1,10 @@
-import { store } from '../store.js?v=63';
-import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=63';
-import { clearCourseState, getCourseState } from '../courseState.js?v=63';
-import { escapeHtml, hexToRgba } from '../format.js?v=63';
-import { computeGrade } from '../grading.js?v=63';
-import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=63';
-import { hexForCourse, COLOR_PALETTE } from '../notionColors.js?v=63';
+import { store } from '../store.js?v=64';
+import { STANDARD_CUTOFFS, TERM } from '../seed.js?v=64';
+import { clearCourseState, getCourseState } from '../courseState.js?v=64';
+import { escapeHtml, hexToRgba } from '../format.js?v=64';
+import { computeGrade } from '../grading.js?v=64';
+import { computeSemesterGPA, computeCumulativeGPA } from '../gpa.js?v=64';
+import { hexForCourse, COLOR_PALETTE } from '../notionColors.js?v=64';
 
 let container = null;
 let draftComponents = [{ name: '', value: '', dropLowest: '', cap: '', excusable: false }];

@@ -1,6 +1,6 @@
-import { HOME, CHANNELS } from '../channels.js?v=63';
-import { escapeHtml } from '../format.js?v=63';
-import { hexForLabel } from '../notionColors.js?v=63';
+import { HOME, CHANNELS } from '../channels.js?v=64';
+import { escapeHtml } from '../format.js?v=64';
+import { hexForLabel } from '../notionColors.js?v=64';
 
 let container = null;
 // -1 = nothing selected yet (fresh page visit) — the first Left/Right press
