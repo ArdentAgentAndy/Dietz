@@ -7,13 +7,13 @@
 // `unmount`, mounted into its own sub-container, so mark/urgent/delete/
 // duration all work here exactly as they do on the Today page itself
 // (both write through to the same Notion cache either way).
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=64';
-import { escapeHtml, hexToRgba } from '../format.js?v=64';
-import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=64';
-import { hoursChartConfig } from './logging.js?v=64';
-import { coursesAndGpaHtml } from './courses.js?v=64';
-import { trackViewHtml } from './roadmap.js?v=64';
-import { render as renderTodayPanel, unmount as unmountTodayPanel, requestJumpFlash } from './today.js?v=64';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=65';
+import { escapeHtml, hexToRgba } from '../format.js?v=65';
+import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=65';
+import { hoursChartConfig } from './logging.js?v=65';
+import { coursesAndGpaHtml } from './courses.js?v=65';
+import { trackViewHtml } from './roadmap.js?v=65';
+import { render as renderTodayPanel, unmount as unmountTodayPanel, requestJumpFlash } from './today.js?v=65';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [
@@ -55,6 +55,9 @@ export function render(rootEl) {
   container = rootEl;
   // Track's AE grid is wide (same reason roadmap.js itself goes wide).
   container.closest('#app')?.classList.add('app-wide');
+  // Faint baby-blue tint on this page only — see body.home-page in
+  // styles.css.
+  document.body.classList.add('home-page');
   window.addEventListener('keydown', onKeyDown);
 
   const cached = getCachedNotionTasks();
@@ -70,6 +73,7 @@ export function unmount() {
   window.removeEventListener('keydown', onKeyDown);
   unmountTodayPanel();
   container?.closest('#app')?.classList.remove('app-wide');
+  document.body.classList.remove('home-page');
   if (chart) chart.destroy();
   chart = null;
   container = null;

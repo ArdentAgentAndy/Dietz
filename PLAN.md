@@ -110,9 +110,9 @@ the schema either way.
 
 ---
 
-## Menu page — visual redesign (round 2)
+## Menu page — visual redesign (round 2) — done (v65)
 
-v64 already rewrote the Menu page's layout/interaction model: a hand-authored
+v64 rewrote the Menu page's layout/interaction model: a hand-authored
 node-web/skill-tree (`js/channels.js`'s `pos`, `js/views/menu.js`, Menu-hub
 section of `css/styles.css`) replacing the old radial-ring constellation —
 click/arrow-key a channel to zoom in on it (siblings dim but stay visible,
@@ -121,8 +121,46 @@ tapping empty background, on touch) zooms back out. Full keyboard parity
 (arrows/number keys/H) carried over unchanged. Each channel got a color via
 `hexForLabel` (`js/notionColors.js`).
 
-That structural rewrite is done and working. Still ahead, intentionally
-deferred to a later round: a **visual** redesign on top of it — the user is
-going to share reference images for a direction before this gets scoped.
-Nothing to build yet; revisit once those images are in hand.
+v65 built the deferred visual pass on top of that, once reference sketches
+were in hand:
+
+- Organic "pebble" node shape (shared asymmetric `border-radius`) for
+  channel/subchannel nodes, dashed "chem-bond" edges from Home to the outer
+  ring.
+- **Solo channels** (`channels.js`'s `solo: true` — Contacts, Public):
+  one-page channels with no zoom state, demoted to a small inner-ring node
+  near Home, reachable by their own first-letter keybind (`P`/`C`) instead
+  of being mixed into the outer ring's Left/Right cycling order. Scoped
+  entirely to the Menu page — the top-nav channel row (`nav.js`) is
+  unaffected.
+- Two `???` placeholder nodes filling the outer ring's now-8-but-only-6-real
+  slots (`channels.js`'s `placeholder-1`/`placeholder-2`) — inert until
+  something real takes those spots.
+- On-screen corner prev/next triangle buttons (`.menu-nav-arrow`) — touch
+  equivalent of the existing ArrowLeft/ArrowRight channel cycling, visible
+  only while a channel is selected/zoomed.
+
+---
+
+## Upcoming ideas
+
+Short list of channels/features pulled back out to a `???` placeholder
+(`js/channels.js`) for now, not because they're cut — just not scoped/built
+yet.
+
+- **Application.** Was its own outer-ring channel (routed to a Roadmap
+  subchannel); demoted to a `???` placeholder. Probably becomes its own
+  separate thing again in a later version — nothing decided yet on scope.
+- **Practice.** Was its own outer-ring channel (Sight Reading subchannel);
+  demoted to a `???` placeholder. Unlike Application, this one isn't headed
+  back to another outer-ring slot — it's getting its own separate place in
+  the app instead. Nothing decided yet on where/how; Sight Reading itself
+  is unaffected and still reachable directly at `#/sight-reading` in the
+  meantime.
+
+Other small fixes/ideas, not yet scoped:
+
+- Main menu upgrade with I/O, diagonal singlers, orthogonal mainers,
+  singler channel mainer.
+- Brainstorm page, snap to grid, boxes self add.
 

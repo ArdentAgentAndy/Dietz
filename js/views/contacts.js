@@ -1,5 +1,5 @@
-import { store } from '../store.js?v=64';
-import { escapeHtml } from '../format.js?v=64';
+import { store } from '../store.js?v=65';
+import { escapeHtml } from '../format.js?v=65';
 
 // Fixed order, one box per category — a Projects entry is still a person
 // (whoever you'd contact about that project), same shape as every other

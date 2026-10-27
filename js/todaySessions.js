@@ -2,8 +2,8 @@
 // so the Today subchannel's per-item stopwatch (js/views/today.js) can log
 // real Sessions rows. Kept separate from js/sessions.js's generic
 // group/category query helpers, which know nothing about Notion tasks.
-import { store } from './store.js?v=64';
-import { formatDateISO } from './format.js?v=64';
+import { store } from './store.js?v=65';
+import { formatDateISO } from './format.js?v=65';
 
 const TIMER_KEY = 'dietz:todayTimer';
 const SESSION_MAP_KEY = 'dietz:todayTimerSessions';

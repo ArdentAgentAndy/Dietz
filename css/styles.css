@@ -152,13 +152,11 @@ a {
   display: none;
 }
 
-/* Channel nav (see js/nav.js). Menu + the 6 channels sit in one row — plain
-   highlight-only buttons (never a destination on their own, except the Menu
-   link). Whichever channel is currently highlighted can show a dropdown of
-   its subchannels, anchored directly beneath it (each channel's own
-   position:relative wrapper, so no JS offset math is needed) — the actual
-   destinations. The dropdown auto-closes after a few seconds of inactivity
-   or on a click outside it (see nav.js). */
+/* Channel nav (see js/nav.js) — just the one channel the current page
+   belongs to, plus that channel's own subchannels, flat in one row (no
+   dropdown: switching channels is Menu's job now, this row only walks
+   subchannels, via ArrowLeft/ArrowRight or a click). Menu's own link sits
+   in a separate mount (#top-nav-menu in index.html). */
 #top-nav {
   display: flex;
 }
@@ -166,10 +164,6 @@ a {
 .nav-channels {
   display: flex;
   gap: 4px;
-}
-
-.nav-channel-wrap {
-  position: relative;
 }
 
 .nav-channel {
@@ -197,33 +191,18 @@ a {
   background: var(--surface2);
 }
 
-/* The keyboard/mouse highlighter position — distinct from .active (the page
-   actually on screen), since arrowing across channels moves this without
-   navigating anywhere. */
-.nav-channel.is-current {
-  border-color: var(--border-strong);
-}
-
 .nav-channel.active {
   color: var(--accent);
   background: var(--accent-dim);
 }
 
-.nav-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 140px;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  z-index: 20;
+/* The current channel label (js/nav.js's channelRowHtml) — an outline
+   only, not .active's filled background, so it doesn't visually duplicate
+   the exact-page highlight a subchannel pill right next to it can also
+   carry at the same time (Records' own route doubles as Today's). */
+.nav-channel.is-current {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .nav-subchannel {
@@ -243,10 +222,6 @@ a {
 .nav-subchannel:hover {
   color: var(--text);
   background: var(--surface2);
-}
-
-.nav-subchannel.is-current {
-  border-color: var(--border-strong);
 }
 
 .nav-subchannel.active {
@@ -314,7 +289,35 @@ body.menu-no-scroll {
   overflow: hidden;
 }
 
+/* Faint tint on the Home page only (js/views/home.js's render/unmount) —
+   --accent is already this app's baby-blue identity color (menu borders,
+   nav-arrow background, etc.), so blending a small amount of it into --bg
+   reads as a "default" tint rather than a new, unrelated color. */
+body.home-page {
+  background-color: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+  /* Diagonal stripes on top of that same tint — --accent-dim is already
+     this app's faint-baby-blue token (menu nav-arrow background, etc.), so
+     reusing it here keeps the stripe the same "default" blue the tint
+     itself is built from. 135deg matches the app's own established
+     diagonal (ZOOM_DIAGONAL_DEG in js/views/menu.js). */
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 24px,
+    var(--accent-dim) 24px 48px
+  );
+}
+
+/* Thicker, more visible card border on this page only — the plain
+   .card border (1px, --border) all but disappears against the tinted/
+   striped background above, so this page needs its own stronger, still
+   baby-blue-tinted one to read clearly against it. */
+body.home-page .card {
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 .menu-stage {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
@@ -322,6 +325,47 @@ body.menu-no-scroll {
   justify-content: center;
   padding: 16px;
   box-sizing: border-box;
+}
+
+/* Corner prev/next channel buttons (v65) — on-screen/touch equivalent of
+   ArrowLeft/ArrowRight (js/views/menu.js's moveSelection). Solid CSS
+   triangles via clip-path, matching the sketch; hidden until a regular
+   channel is selected (see applySelectionClasses's is-visible toggle) so
+   they never compete with the resting, nothing-selected view. Positioned
+   on .menu-stage (not .menu-tree-viewport) so the zoom transform never
+   scales/moves them. */
+.menu-nav-arrow {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: var(--accent-dim);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.menu-nav-arrow.is-visible {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+
+.menu-nav-arrow:hover {
+  background: var(--accent);
+}
+
+.menu-nav-arrow-prev {
+  top: 24px;
+  left: 24px;
+  clip-path: polygon(100% 0%, 0% 50%, 100% 100%);
+}
+
+.menu-nav-arrow-next {
+  bottom: 24px;
+  right: 24px;
+  clip-path: polygon(0% 0%, 100% 50%, 0% 100%);
 }
 
 /* The tree's whole coordinate space: every node (js/channels.js's `pos`)
@@ -335,6 +379,12 @@ body.menu-no-scroll {
   position: relative;
   width: min(92vmin, 640px);
   height: min(92vmin, 640px);
+  /* The square frame's two lines sit exactly at this box's own left/right
+     edges — clipping here means anything swinging past them during
+     switchZoomedChannel's orbit (js/views/menu.js) actually disappears
+     behind that edge instead of floating past it, like the frame is a
+     wall rather than just a drawn line. */
+  overflow: hidden;
 }
 
 /* The one element that actually "zooms" — see applySelectionClasses() in
@@ -377,7 +427,215 @@ body.menu-no-scroll {
   stroke-opacity: 0.35;
 }
 
+/* Rotates the spokes/arcs/ring as one rigid group (ArrowUp/ArrowDown — see
+   js/views/menu.js's applyRotation) around HOME.pos exactly, the same point
+   the spoke geometry is already computed from. transform-box: view-box
+   makes the SVG viewBox's own 0-1000 user units available to
+   transform-origin (otherwise it'd default to this <g>'s own bounding box,
+   which isn't centered on HOME.pos). .menu-channel-ring (further down)
+   mirrors this same transform so the blobs turn in lockstep. */
+.menu-spoke-ring {
+  transform-box: view-box;
+  transform-origin: 500px 500px;
+  transition: transform 500ms ease-in-out;
+}
+
+/* Fixed marker for the one activation slot (bottom-right/SE) that Enter
+   commits whatever channel the ring's rotation has brought there — stays
+   outside .menu-spoke-ring on purpose, so it never itself rotates. */
+.menu-slot-indicator {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 5;
+  vector-effect: non-scaling-stroke;
+  animation: menu-slot-flash 1.4s ease-in-out infinite;
+}
+
+@keyframes menu-slot-flash {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.25; }
+}
+
+/* Dotted guide line from the octagon out to the indicator above — same
+   span (SPOKE_INNER_RADIUS to SPOKE_OUTER_RADIUS) a regular spoke covers,
+   just fixed at the bottom-right slot's own angle instead of rotating. */
+.menu-slot-guide {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 6;
+  stroke-opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Ring through every spoke's inner endpoint (see js/views/menu.js's
+   innerRingHtml) — stroked, not filled, same weight as the spokes
+   themselves so it reads as part of the same line drawing. */
+.menu-inner-ring {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Each spoke's stack of short arcs (js/views/menu.js's spokeArcsHtml) —
+   same stroke as everything else here; fill:none matters for a <path> (a
+   <line> has no area to worry about, but an open arc path does unless this
+   is set explicitly). */
+.menu-edge-arc {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transition: stroke-opacity 0.12s ease;
+}
+
+/* Two vertical lines framing the whole menu (hub or zoomed) as a square —
+   see js/views/menu.js's squareFrameHtml. */
+.menu-square-frame {
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Reference arc through the zoomed blob's own center (v65, see
+   js/views/menu.js's blobNormalGuideHtml) — dashed, fainter than the
+   square frame, since it's a reference line, not a border. fill: none
+   matters here (unlike the square frame's plain <line>s): this is an open
+   <path>, which SVG fills black by default, implicitly closing it back to
+   its own start point. */
+.menu-diagonal-guide {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
+  stroke-opacity: 0.4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Tapered beam from the zoomed blob out to a subchannel (v65, see
+   js/views/menu.js's zoomedBeamsHtml) — fill (translucent) and stroke
+   (opaque) colors are both set inline per beam, the channel's own hex at
+   two different opacities; this just gives that border its actual weight. */
+.menu-sub-beam {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Back arrow (bottom-left corner of the zoomed-into-a-channel page) — see
+   js/views/menu.js's backArrowHtml. The <g> is what actually gets the click
+   listener (buildZoomed), so it needs the pointer cursor; the filled
+   triangle is what gives it a real clickable area (an unfilled <line> alone
+   barely has one). */
+.menu-back-arrow {
+  cursor: pointer;
+}
+
+/* Rounded corners on a filled polygon need a same-color stroke with a round
+   join (fill alone has no radius concept) — stroke-width here is really a
+   corner-rounding amount, not a visible outline. */
+.menu-back-arrow-head {
+  fill: var(--border-strong);
+  stroke: var(--border-strong);
+  stroke-width: 14;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.menu-back-arrow:hover .menu-back-arrow-head {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.menu-back-arrow-tail {
+  stroke: var(--border-strong);
+  stroke-width: 8;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.menu-back-arrow:hover .menu-back-arrow-tail {
+  stroke: var(--accent);
+}
+
+/* Two more of the same arrow glyph (v65, see js/views/menu.js's
+   beamMidpointMarkersHtml) — same shape/rounding as the back arrow above.
+   Now wired to switchZoomedChannel (prev/next), so same
+   cursor/hover-highlight treatment as the back arrow. */
+.menu-beam-marker {
+  cursor: pointer;
+}
+
+.menu-beam-marker-head {
+  fill: var(--border-strong);
+  stroke: var(--border-strong);
+  stroke-width: 14;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.menu-beam-marker:hover .menu-beam-marker-head {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.menu-beam-marker-tail {
+  stroke: var(--border-strong);
+  stroke-width: 8;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.menu-beam-marker:hover .menu-beam-marker-tail {
+  stroke: var(--accent);
+}
+
+/* Hub -> outer-ring-channel edges (v65) — the sketch's "chem-bond" dashed
+   line, same base .menu-edge color/dim rules, just dashed. */
+.menu-edge-dotted {
+  stroke-dasharray: 3 7;
+}
+
+/* Hub -> inner-ring solo-channel edges (v65) — plain, not dashed: these are
+   already short by construction (SOLO's pos sits close to Home in
+   channels.js), so the dash would read as visual noise rather than
+   distinguishing anything. */
+.menu-edge-solo {
+  stroke-width: 1.5;
+}
+
 .menu-tree-nodes {
+  position: absolute;
+  inset: 0;
+  /* Transparent, but a full-size positioned div still captures pointer
+     events across its whole box by default — without this, it sits on top
+     of (and blocks clicks to) anything in the SVG edges layer beneath it,
+     like the zoomed page's back arrow. Its actual interactive children
+     (.menu-node, .menu-sector) opt back in below. */
+  pointer-events: none;
+}
+
+/* Wraps the 8 channel sectors/blobs (js/views/menu.js's channelNodesHtml)
+   — rotates together with .menu-spoke-ring on ArrowUp/ArrowDown (see
+   applyRotation), a plain CSS rotate around this div's own center, which
+   already sits on HOME.pos since it's the same full-size inset:0 box
+   .menu-tree-nodes itself is. */
+.menu-channel-ring {
+  position: absolute;
+  inset: 0;
+  transition: transform 500ms ease-in-out;
+}
+
+/* Wraps the zoomed page's own blob + its 4 subchannel nodes (v65, see
+   js/views/menu.js's buildZoomed) — same full-size inset:0 box
+   .menu-channel-ring above is, just without a transition of its own:
+   switchZoomedChannel drives this one's rotate() directly with its own
+   inline transition/timing (SWITCH_FADE_MS), since its pivot
+   (zoomArcCenter(), not HOME.pos) and animation shape (a one-shot swap,
+   not a persisted ArrowUp/Down state) are both different from the hub
+   ring's. */
+.menu-zoom-orbit-nodes {
   position: absolute;
   inset: 0;
 }
@@ -400,6 +658,8 @@ body.menu-no-scroll {
   cursor: pointer;
   box-sizing: border-box;
   transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.12s ease;
+  /* Opts back in to pointer events — see .menu-tree-nodes's own rule. */
+  pointer-events: auto;
 }
 
 /* Two nested shapes, same trick the old octagon used — a plain `border` on
@@ -415,6 +675,11 @@ body.menu-no-scroll {
   clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
   background: var(--border-strong);
   border: none;
+  /* Every .menu-sector's wedge apex sits exactly at Home's own center (see
+     js/views/menu.js's sectorClipPath), so without this Home would end up
+     underneath whichever sector happens to paint later in DOM order near
+     that point — keeps it clickable/hoverable regardless. */
+  z-index: 2;
 }
 
 .menu-node-home:hover {
@@ -449,12 +714,11 @@ body.menu-no-scroll {
 
 /* A channel's own color (js/notionColors.js's hexForLabel, set inline as
    --node-color/--node-color-dim/--node-color-strong per node — see
-   channelColorVars in js/views/menu.js) replaces the universal blue accent
-   for this page specifically, so each branch of the tree reads as its own
-   color — same idea as the Courses page's per-course color border
-   (js/views/courses.js). Falls back to the plain neutral pair if
-   --node-color is ever unset (shouldn't happen; every channel/subchannel
-   node always sets it). */
+   channelColorVars in js/views/menu.js) tints the blob's own BORDER — dim
+   at rest, strong on hover (see .menu-sector:hover below) — so each one
+   reads as its own color, same idea as the Courses page's per-course color
+   border (js/views/courses.js). The fill stays the plain neutral
+   --surface2 always; only the border carries color. */
 .menu-node-channel,
 .menu-node-sub {
   border: 2px solid var(--node-color-dim, var(--border-strong));
@@ -462,13 +726,33 @@ body.menu-no-scroll {
   color: var(--text);
 }
 
-/* A real circle (border-radius, not clip-path) needs none of the
-   two-layer-ring trick the Home node above does — a plain border already
-   wraps a circle continuously with no corners to clip it away at. */
+/* Organic "pebble" shape (v65) — asymmetric border-radius instead of a
+   plain circle/pill, matching the sketch's hand-drawn blob nodes. Fallback
+   for anything that doesn't get one of the .menu-blob-N variants below
+   (e.g. subchannel nodes, once those come back). */
+.menu-node-channel,
+.menu-node-sub {
+  border-radius: 57% 43% 52% 48% / 53% 48% 55% 46%;
+}
+
+/* 8 distinct blob presets (v65) — one per outer-ring channel (see
+   js/views/menu.js's channelNodesHtml, which cycles data-blob 0-7 by
+   index), so the 8 circles don't all read as the same copy-pasted shape.
+   Same spirit as the single preset above, just hand-varied per corner
+   instead of one fixed value everywhere. Overrides the fallback above by
+   source order (equal specificity, declared later). */
+.menu-blob-0 { border-radius: 57% 43% 52% 48% / 53% 48% 55% 46%; }
+.menu-blob-1 { border-radius: 46% 54% 56% 45% / 49% 46% 55% 52%; }
+.menu-blob-2 { border-radius: 53% 48% 44% 56% / 46% 55% 47% 54%; }
+.menu-blob-3 { border-radius: 49% 51% 58% 43% / 55% 44% 51% 49%; }
+.menu-blob-4 { border-radius: 55% 45% 47% 53% / 43% 53% 49% 57%; }
+.menu-blob-5 { border-radius: 44% 57% 50% 50% / 51% 49% 57% 44%; }
+.menu-blob-6 { border-radius: 51% 49% 54% 47% / 47% 57% 45% 53%; }
+.menu-blob-7 { border-radius: 48% 53% 45% 55% / 54% 46% 53% 48%; }
+
 .menu-node-channel {
   width: 96px;
   height: 96px;
-  border-radius: 50%;
   padding: 8px;
   /* Painted above subchannel nodes/edges, which can sit visually "under"
      it once it scales up on selection — same reasoning the old
@@ -476,37 +760,146 @@ body.menu-no-scroll {
   z-index: 1;
 }
 
-/* Same shape as the sub-value badges on the Today page (.cal-chip-sub-badge)
-   — a short, wide, fully-rounded pill. */
+/* The zoomed page's enlarged blob keeps its hub node's .menu-blob-N for
+   color/border continuity, but not its shape — at this much bigger size
+   the hub's organic distortion reads as too blobby, so this flattens it
+   back toward a near-circle. Same specificity as .menu-blob-N, overrides
+   by coming later in source order. */
+.menu-node-channel-zoomed {
+  border-radius: 52% 48% 51% 49% / 51% 49% 52% 48%;
+}
+
+/* The zoomed page's own main blob (e.g. "ACADEMICS") is the biggest circle
+   on screen, so its label reads bigger than both the hub's (.menu-sector
+   .menu-node-label) and the subchannels' (.menu-node-sub-zoomed
+   .menu-node-label) too. */
+.menu-node-channel-zoomed .menu-node-label {
+  font-size: 18px;
+}
+
+/* The 4 subchannel nodes fanning out from the zoomed blob (v65, see
+   js/views/menu.js's zoomedSubNodesHtml) — actual circles, not even the
+   near-circle blob above, and a bigger label than the general bump
+   .menu-node-label just got, since these are the smallest nodes on screen
+   and need the extra size to stay readable. */
+.menu-node-sub-zoomed {
+  border-radius: 50%;
+}
+
+.menu-node-sub-zoomed .menu-node-label {
+  font-size: 15px;
+}
+
+/* Invisible pie-wedge hit area (v65) — one per outer-ring channel, apex at
+   Home's own center, clipped via js/views/menu.js's sectorClipPath to that
+   channel's 45°-wide slice of the whole stage. Wraps its channel node (see
+   channelNodesHtml), so hovering anywhere in the slice — not just the small
+   blob itself — counts; hovering the blob is just hovering a descendant of
+   its own sector, so it's covered by the same rule below for free. */
+.menu-sector {
+  position: absolute;
+  inset: 0;
+  /* Opts back in to pointer events — see .menu-tree-nodes's own rule. */
+  pointer-events: auto;
+}
+
+/* Blob expansion on hover (same ~20% scale-up the old .is-selected state
+   used) — .menu-node's own transition (transform 0.15s ease) is what
+   actually animates this. The border goes from its dim resting color to
+   the same channel's full-strength one (--node-color-strong). */
+.menu-sector:hover .menu-node-channel {
+  transform: translate(-50%, -50%) scale(1.2);
+  border-color: var(--node-color-strong, var(--accent));
+}
+
+/* Roughly the same footprint as the old pill (112x32) but pebble-shaped
+   instead of fully-rounded. */
 .menu-node-sub {
   width: 112px;
-  height: 32px;
-  border-radius: 999px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
   white-space: nowrap;
   overflow: hidden;
 }
 
-/* Sits behind the label (earlier in source order, no z-index needed) as a
-   translucent watermark — big enough to actually read inside the node, but
-   faint enough that the label stays the thing your eye lands on. */
-.menu-node-icon {
+/* Inner-ring solo-channel node (v65, see channels.js's `solo` flag) — small
+   plain circle (not the pebble shape above: too small to read as organic,
+   a clean circle stays legible). */
+.menu-node-solo {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--node-color-dim, var(--border-strong));
+  background: var(--surface2);
+  color: var(--text);
+  padding: 4px;
+}
+
+/* Wraps a hub channel blob's label (js/views/menu.js's channelNodesHtml) —
+   counter-rotates against .menu-channel-ring's own rotation so the content
+   stays upright while the button it's inside orbits with the rest of the
+   ring. Kept off the button itself so this transition (500ms, matching the
+   ring) never has to share the `transform` property with the button's own
+   hover scale-up (150ms) — see .menu-sector:hover's comment. */
+.menu-node-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  transform: rotate(var(--counter-rotate, 0deg));
+  transition: transform 500ms ease-in-out;
+}
+
+/* Translucent first-letter "block letter" watermark (v65, see
+   js/views/menu.js's channelLetterHtml) — sits behind .menu-node-label
+   (earlier in source order, no z-index needed), own channel color (set
+   inline, same hex channelColorVars' border uses) at low opacity so it
+   reads as a backdrop rather than competing with the label on top of it.
+   Sized per context below — ~70% of that context's own circle — since
+   .menu-node-channel's 96px hub circle and its 180px
+   .menu-node-channel-zoomed counterpart need very different font-sizes for
+   the same 70% feel. */
+.menu-node-letter {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 30px;
+  /* DM Sans instead of the rest of this page's Space Mono — a plain sans
+     block letter reads cleaner as a big translucent backdrop shape than
+     mono's fixed-width letterforms do at this size. */
+  font-family: 'DM Sans', sans-serif;
   line-height: 1;
-  opacity: 0.35;
+  font-weight: 700;
+  opacity: 0.3;
   pointer-events: none;
+}
+
+.menu-node-channel .menu-node-letter {
+  font-size: 67px;
+}
+
+/* Overrides the hub size above — same specificity (two classes each), so
+   this has to come after it in source order to win, same convention
+   .menu-node-channel-zoomed .menu-node-label already uses. */
+.menu-node-channel-zoomed .menu-node-letter {
+  font-size: 126px;
 }
 
 .menu-node-label {
   position: relative;
-  font-size: 11px;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   line-height: 1.25;
+}
+
+/* Hub channel blobs specifically (the only .menu-node-channel wrapped in a
+   .menu-sector — the zoomed page's own main blob and subchannels aren't)
+   read a bit smaller than the general bump above. */
+.menu-sector .menu-node-label {
+  font-size: 11px;
 }
 
 .menu-node-sub-label {
@@ -540,7 +933,8 @@ body.menu-no-scroll {
    anything while selectedIndex is -1 (nothing selected) — the whole tree
    sits at neutral/full opacity in that resting state. */
 .menu-node-channel.is-dimmed,
-.menu-node-sub.is-dimmed {
+.menu-node-sub.is-dimmed,
+.menu-node-solo.is-dimmed {
   opacity: 0.4;
   transform: translate(-50%, -50%) scale(0.82);
 }
@@ -556,8 +950,9 @@ body.menu-no-scroll {
     height: 28px;
   }
 
-  .menu-node-icon {
-    font-size: 22px;
+  .menu-node-solo {
+    width: 40px;
+    height: 40px;
   }
 
   .menu-node-label {
@@ -566,6 +961,15 @@ body.menu-no-scroll {
 
   .menu-node-sub-label {
     font-size: 9px;
+  }
+
+  /* 70% of this breakpoint's own 76px .menu-node-channel, same ratio the
+     base .menu-node-channel .menu-node-letter rule uses at 96px. Doesn't
+     need a .menu-node-channel-zoomed counterpart here — that blob's own
+     size (ZOOM_BLOB_SIZE, js/views/menu.js) is a fixed JS constant, not
+     CSS-driven, so it doesn't shrink at this breakpoint. */
+  .menu-node-channel .menu-node-letter {
+    font-size: 53px;
   }
 }
 
@@ -590,10 +994,15 @@ body.menu-no-scroll {
     height: 92px;
   }
 
-  /* The decorative watermark competes too much with the label at this
-     size — drop it, the label alone still says exactly as much. */
-  .menu-node-icon {
-    display: none;
+  .menu-node-solo {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Same 70%-of-the-circle ratio as the other .menu-node-channel
+     .menu-node-letter rules, at this breakpoint's own smaller 64px size. */
+  .menu-node-channel .menu-node-letter {
+    font-size: 45px;
   }
 }
 
@@ -2475,16 +2884,12 @@ details summary {
     overflow-x: auto;
   }
 
-  .nav-channel {
+  .nav-channel,
+  .nav-subchannel {
     padding: 6px 8px;
     font-size: 11px;
     white-space: nowrap;
     flex-shrink: 0;
-  }
-
-  .nav-dropdown {
-    right: auto;
-    left: 0;
   }
 }
 

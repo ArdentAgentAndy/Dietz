@@ -1,8 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=64';
-import { hexForNotionColor } from '../notionColors.js?v=64';
-import { escapeHtml, hexToRgba } from '../format.js?v=64';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=64';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=64';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=65';
+import { hexForNotionColor } from '../notionColors.js?v=65';
+import { escapeHtml, hexToRgba } from '../format.js?v=65';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=65';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=65';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -290,7 +290,7 @@ export function render(rootEl) {
     rebuild();
   } else {
     container.innerHTML = `
-      <section class="card"><h1 class="mono">Calendar</h1></section>
+      <section class="card"><h1 class="mono">Agenda</h1></section>
       <section class="card"><p class="muted">Loading…</p></section>
     `;
   }
@@ -1160,7 +1160,7 @@ function rebuild() {
 
   if (loadError) {
     container.innerHTML = `
-      <section class="card"><h1 class="mono">Calendar</h1></section>
+      <section class="card"><h1 class="mono">Agenda</h1></section>
       <section class="card"><p class="muted">Couldn't load: ${escapeHtml(loadError)}</p></section>
     `;
     return;
@@ -1181,7 +1181,7 @@ function rebuild() {
   container.innerHTML = `
     <section class="card">
       <div class="row-between">
-        <h1 class="mono">Calendar</h1>
+        <h1 class="mono">Agenda</h1>
         <div style="display:flex; gap:8px;">
           <button data-action="hide-completed" class="${hideCompleted ? 'active' : ''}">[H] ${hideCompleted ? 'Showing active only' : 'Hide completed'}</button>
           ${highlightButtonHtml('completed', 'Mark completed')}

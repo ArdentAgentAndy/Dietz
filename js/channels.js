@@ -40,23 +40,80 @@ export const MENU = { id: 'menu', label: 'Menu', route: '/' };
 // the rest of this file. Keep new nodes roughly within 60-940 on each axis
 // so they don't crowd the stage's edge.
 //
-// icon: a single emoji shown large/translucent inside a channel's node on
-// the Menu page (js/views/menu.js's nodesHtml) — purely decorative
-// (aria-hidden there), so it carries no meaning the label itself doesn't
-// already.
+// `solo: true` marks a "solo channel" (v65) — a one-page channel with
+// nothing to zoom into, rendered on the Menu page as a small node on an
+// inner ring close to Home rather than one of the 8 big outer pebbles, and
+// reachable there by its own direct mnemonic keybind (see menu.js's P/C)
+// instead of being mixed into the outer ring's Left/Right cycling order.
+// Doesn't affect the top-nav channel row (nav.js) at all — it ignores this
+// flag and keeps showing/cycling Contacts and Public exactly as before;
+// this is purely a Menu-page (js/views/menu.js) distinction.
 export const CHANNELS = [
   {
     id: 'contacts',
     label: 'Contacts',
-    icon: '👥',
     route: '/contacts',
+    solo: true,
+    // Inner-ring position, offset from the outer ring's N/S spoke angles
+    // (not stacked under a pebble) so it doesn't visually imply a
+    // relationship with the placeholder now sitting at its old outer slot.
+    pos: { x: 620, y: 420 },
+    subchannels: [],
+  },
+  {
+    // Outer-ring placeholder sitting where Contacts used to be (500,240) —
+    // not yet a real channel, just holding the slot. Behaves exactly like
+    // Resources below: selectable/zoomable, nothing to show, no route.
+    id: 'placeholder-1',
+    label: '???',
     pos: { x: 500, y: 240 },
+    subchannels: [],
+  },
+  {
+    // Not needed right now — parked as a third outer-ring placeholder
+    // alongside placeholder-1/placeholder-2, same "???", no icon, no route.
+    id: 'resources',
+    label: '???',
+    pos: { x: 323, y: 677 },
+    subchannels: [],
+  },
+  {
+    // Pulled back out to a placeholder for now — getting its own separate
+    // place elsewhere in the app rather than an outer-ring Menu slot (see
+    // PLAN.md's "Upcoming ideas"). Sight Reading itself is unaffected and
+    // still reachable directly at #/sight-reading.
+    id: 'practice',
+    label: '???',
+    pos: { x: 200, y: 500 },
+    subchannels: [],
+  },
+  {
+    // Pulled back out to a placeholder for now — becomes its own separate
+    // thing in a later version (see PLAN.md's "Upcoming ideas").
+    id: 'application',
+    label: '???',
+    pos: { x: 677, y: 677 },
+    subchannels: [],
+  },
+  {
+    id: 'public',
+    label: 'Public',
+    route: '/public',
+    solo: true,
+    pos: { x: 420, y: 580 },
+    subchannels: [],
+  },
+  {
+    // Outer-ring placeholder sitting where Public used to be (500,760) —
+    // see placeholder-1 above.
+    id: 'placeholder-2',
+    label: '???',
+    pos: { x: 500, y: 760 },
     subchannels: [],
   },
   {
     id: 'academics',
     label: 'Academics',
-    icon: '🎓',
     pos: { x: 740, y: 260 },
     subchannels: [
       { id: 'courses', label: 'Courses', route: '/courses', pos: { x: 910, y: 150 } },
@@ -67,50 +124,15 @@ export const CHANNELS = [
   {
     id: 'schedule',
     label: 'Schedule',
-    icon: '📅',
     pos: { x: 800, y: 500 },
     subchannels: [
-      { id: 'calendar', label: 'Calendar', route: '/calendar', pos: { x: 940, y: 420 } },
+      { id: 'calendar', label: 'Agenda', route: '/calendar', pos: { x: 940, y: 420 } },
       { id: 'canvas', label: 'Canvas', route: '/canvas', pos: { x: 940, y: 580 } },
-    ],
-  },
-  {
-    id: 'application',
-    label: 'Application',
-    icon: '🚀',
-    pos: { x: 677, y: 677 },
-    subchannels: [
-      { id: 'roadmap', label: 'Roadmap', route: '/roadmap', pos: { x: 800, y: 800 } },
-    ],
-  },
-  {
-    id: 'public',
-    label: 'Public',
-    icon: '🌐',
-    route: '/public',
-    pos: { x: 500, y: 760 },
-    subchannels: [],
-  },
-  {
-    id: 'resources',
-    label: 'Resources',
-    icon: '📚',
-    pos: { x: 323, y: 677 },
-    subchannels: [],
-  },
-  {
-    id: 'practice',
-    label: 'Practice',
-    icon: '🎹',
-    pos: { x: 200, y: 500 },
-    subchannels: [
-      { id: 'sight-reading', label: 'Sight Reading', route: '/sight-reading', pos: { x: 55, y: 560 } },
     ],
   },
   {
     id: 'records',
     label: 'Records',
-    icon: '🗂️',
     route: '/today',
     // Mirrors Academics (pos.x = 1000 - Academics' 740) across the tree's
     // vertical center line, same idea the old subchannelSlots trick aimed
