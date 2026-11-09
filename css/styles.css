@@ -835,6 +835,97 @@ body.home-page .card {
   padding: 4px;
 }
 
+/* The ??? shape at the center of a non-hub menu layer (v66, see
+   js/views/menu.js's buildLayerPlaceholder) — inert for now, so no pointer
+   cursor despite .menu-node's own. Its fill and edge are drawn by the SVG
+   below. */
+.menu-node-layer {
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+  cursor: default;
+}
+
+.menu-node-layer .menu-node-label {
+  font-size: 18px;
+}
+
+.menu-node-layer-name {
+  position: relative;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+
+/* The Inner layer's dashed radial triangles (js/views/menu.js's
+   innerRadialsHtml) — same fill as the serrated circle, same stroke as the
+   hub's sonar arcs, same dash as the zoomed page's reference arc. */
+.menu-layer-radial {
+  fill: var(--surface2);
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  stroke-dasharray: 5 7;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The Inner layer's pebbles (js/views/menu.js's innerPebblesHtml) — the hub's
+   pebble look and label size. Inert (no pointer cursor) unless it links to a
+   page. */
+.menu-node-layer-pebble {
+  cursor: default;
+}
+
+.menu-node-layer-pebble.menu-node-layer-link {
+  cursor: pointer;
+}
+
+.menu-node-layer-pebble .menu-node-label {
+  font-size: 11px;
+}
+
+/* A channel color too dark to show through the letter's usual low opacity
+   (js/channels.js's fullStrength — its border is handled by channelColorVars). */
+.menu-node-full-strength .menu-node-letter {
+  opacity: 1;
+}
+
+/* The top-left layer button's own SVG (js/views/menu.js's layerArrowHtml) —
+   sits over the nodes layer but only the arrow itself takes pointer events, so
+   the rest of this full-size SVG doesn't block the hub's sectors beneath it. */
+.menu-layer-arrow-layer {
+  z-index: 3;
+  pointer-events: none;
+}
+
+.menu-layer-arrow-layer .menu-back-arrow {
+  pointer-events: auto;
+}
+
+/* Thinner than the back arrow's, in step with these arrows' smaller size. */
+.menu-layer-arrow-layer .menu-back-arrow-head {
+  stroke-width: 8;
+}
+
+.menu-layer-arrow-layer .menu-back-arrow-tail {
+  stroke-width: 5;
+}
+
+.menu-layer-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.menu-layer-shape > * {
+  fill: var(--surface2);
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 /* Wraps a hub channel blob's label (js/views/menu.js's channelNodesHtml) —
    counter-rotates against .menu-channel-ring's own rotation so the content
    stays upright while the button it's inside orbits with the rest of the

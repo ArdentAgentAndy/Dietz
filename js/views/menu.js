@@ -1,6 +1,7 @@
-import { HOME, CHANNELS } from '../channels.js?v=65';
-import { escapeHtml } from '../format.js?v=65';
-import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=65';
+import { HOME, CHANNELS, INNER_LAYER_CHANNELS } from '../channels.js?v=66';
+import { escapeHtml } from '../format.js?v=66';
+import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=66';
+import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=66';
 
 // Solo channels (Contacts, Public) have no outer-ring slot of their own in
 // this rebuild yet — only the 8 non-solo channels (channels.js's `solo`
@@ -29,10 +30,31 @@ let zoomedSubIndex = -1;
 // own comment for why that matters for the animation.
 let rotationSteps = 4;
 
+// Which layer of the menu is showing (v66) — MAIN_LAYER is the hub/channel
+// menu itself; O steps one layer further out, I one layer further in, within
+// LAYER_NAMES' own bounds. Every other layer is a placeholder for now (see
+// buildLayerPlaceholder). Reset on every fresh page visit, same as
+// zoomedChannelId — but deliberately not on a layer change, so coming back to
+// the hub finds the ring exactly where it was left (rotationSteps untouched).
+const MAIN_LAYER = 0;
+const INNER_LAYER = -1;
+const LAYER_NAMES = { '-1': 'Inner', 1: 'Outer' };
+let currentLayer = MAIN_LAYER;
+// The Inner layer's own ring rotation, in INNER_RADIAL_COUNT steps — separate
+// from the hub's rotationSteps, and likewise never wrapped (see onKeyDown).
+let innerRotationSteps = 0;
+// The in-flight zoomTransition step's timer, or null when none is running —
+// doubles as the "ignore input until the new page has landed" flag.
+let zoomTimer = null;
+
 // Degrees per spoke step, and the current rotation in degrees — both used
 // by the rotating groups' transform and by each blob's counter-rotation.
 function rotationDeg() {
   return rotationSteps * (360 / SPOKE_COUNT);
+}
+
+function innerRotationDeg() {
+  return innerRotationSteps * (360 / INNER_RADIAL_COUNT);
 }
 
 function channelById(id) {
@@ -60,6 +82,10 @@ export function unmount() {
   zoomedChannelId = null;
   zoomedSubIndex = -1;
   rotationSteps = 4;
+  currentLayer = MAIN_LAYER;
+  innerRotationSteps = 0;
+  clearTimeout(zoomTimer);
+  zoomTimer = null;
   const app = container?.closest('#app');
   app?.classList.remove('app-no-scroll');
   app?.style.removeProperty('--topnav-h');
@@ -96,6 +122,39 @@ function onKeyDown(e) {
   if (e.key === 'h' || e.key === 'H') {
     e.preventDefault();
     goHome();
+    return;
+  }
+  if (zoomTimer) return;
+  // A placeholder layer has little of its own to act on — only I/O (step
+  // between layers), Escape/M (straight back to the hub, same "zoom back out
+  // to the hub" role they play on a zoomed channel below), and on the Inner
+  // layer Q/E (turn its ring, same as the hub's below), Enter (open whichever
+  // pebble sits in the bottom-right slot) and a pebble's first letter — both
+  // only for pebbles with a route (see INNER_LAYER_CHANNELS).
+  if (currentLayer !== MAIN_LAYER) {
+    if (currentLayer === INNER_LAYER && (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      innerRotationSteps += e.key.toLowerCase() === 'e' ? 1 : -1;
+      applyRotation(innerRotationDeg());
+    } else if (currentLayer === INNER_LAYER && e.key === 'Enter') {
+      e.preventDefault();
+      openInnerPebble(innerPebbleInBottomRightSlot());
+    } else if (e.key === 'i' || e.key === 'I') {
+      e.preventDefault();
+      goToLayer(currentLayer - 1);
+    } else if (e.key === 'o' || e.key === 'O') {
+      e.preventDefault();
+      goToLayer(currentLayer + 1);
+    } else if (e.key === 'Escape' || e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      goToLayer(MAIN_LAYER);
+    } else if (currentLayer === INNER_LAYER && /^[a-zA-Z]$/.test(e.key)) {
+      const channel = INNER_LAYER_CHANNELS.find((c) => c?.route && c.label[0].toUpperCase() === e.key.toUpperCase());
+      if (channel) {
+        e.preventDefault();
+        openInnerPebble(channel);
+      }
+    }
     return;
   }
   // 'M'/'m' also already jumps here globally from anywhere else in the app
@@ -156,10 +215,16 @@ function onKeyDown(e) {
   } else if (e.key === 'Enter') {
     e.preventDefault();
     enterBottomRightSlot();
+  } else if (e.key === 'i' || e.key === 'I') {
+    e.preventDefault();
+    goToLayer(currentLayer - 1);
+  } else if (e.key === 'o' || e.key === 'O') {
+    e.preventDefault();
+    goToLayer(currentLayer + 1);
   } else if (/^[a-zA-Z]$/.test(e.key)) {
     // Same channelLetterHtml/letterHtml watermark, as a direct shortcut —
-    // jumps straight into that channel (same flipChannelBlob zoom-in a
-    // click on its blob would trigger) without rotating to it first.
+    // jumps straight into that channel (same enterChannel zoom-in a click
+    // on its blob would trigger) without rotating to it first.
     const channel = channelByLetter(e.key);
     if (channel) {
       e.preventDefault();
@@ -186,15 +251,18 @@ function channelInBottomRightSlot() {
   return REGULAR[i];
 }
 
-// Zooms into `channel` — same flipChannelBlob animation a click on its own
-// hub blob would trigger, just found by id instead of by which element was
-// actually clicked. Shared by Enter (enterBottomRightSlot, found by the
-// ring's current rotation) and a letter keybind (onKeyDown, found by that
-// channel's own watermark letter).
+// Zooms into `channel` with the same zoom-in animation as going to a deeper
+// layer (see zoomTransition), pivoting on the channel's own blob — the
+// selector matches its pebble on the hub and its enlarged blob on the page it
+// arrives at. Shared by a click on its hub blob (buildHub), Enter
+// (enterBottomRightSlot, found by the ring's current rotation) and a letter
+// keybind (onKeyDown, found by that channel's own watermark letter).
 function enterChannel(channel) {
-  const el = container?.querySelector(`.menu-node-channel[data-channel="${channel.id}"]`);
-  if (!el) return;
-  flipChannelBlob(channel, el, () => { zoomedChannelId = channel.id; zoomedSubIndex = -1; });
+  zoomTransition(
+    false,
+    () => { zoomedChannelId = channel.id; zoomedSubIndex = -1; },
+    `.menu-node-channel[data-channel="${channel.id}"]`,
+  );
 }
 
 // Enter commits whatever's currently in the bottom-right slot.
@@ -205,10 +273,10 @@ function enterBottomRightSlot() {
 // Updates the rotation in place — no DOM rebuild, so the CSS transitions on
 // .menu-spoke-ring/.menu-channel-ring/.menu-node-content actually get to
 // play instead of snapping straight to the new angle.
-function applyRotation() {
+function applyRotation(ringDeg = rotationDeg()) {
   if (!container) return;
-  const deg = `${rotationDeg()}deg`;
-  const counterDeg = `${-rotationDeg()}deg`;
+  const deg = `${ringDeg}deg`;
+  const counterDeg = `${-ringDeg}deg`;
   const spokeRing = container.querySelector('.menu-spoke-ring');
   if (spokeRing) spokeRing.style.transform = `rotate(${deg})`;
   const channelRing = container.querySelector('.menu-channel-ring');
@@ -260,35 +328,20 @@ function nodeStyle(pos) {
 // deterministic hash, so every other channel still gets a stable color with
 // no field needed.
 function channelHex(channel) {
+  if (channel.hex) return channel.hex;
   return channel.color ? hexForNotionColor(channel.color) : hexForLabel(channel.label);
 }
 
-// Set as custom properties so CSS can use it for the blob's own BORDER (dim
-// at rest, strong on hover — see .menu-node-channel/.menu-sector:hover in
-// styles.css). The blob's fill stays the plain neutral --surface2 always —
-// only the border carries the per-channel color.
+// The blob's border color vars (js/pebbles.js) for a channel's own hex.
 function channelColorVars(channel) {
-  const hex = channelHex(channel);
-  return ` --node-color:${hex}; --node-color-dim:${hexToRgba(hex, 0.35)}; --node-color-strong:${hexToRgba(hex, 0.85)};`;
+  return pebbleColorVars(channelHex(channel), channel.fullStrength);
 }
 
-// Translucent first-letter "block letter" watermark, sat behind a node's
-// own label (earlier in DOM order, no z-index needed — same trick the old
-// icon watermark used), at low opacity so it reads as a backdrop, not
-// competing with the label text on top of it (see .menu-node-letter in
-// styles.css). Skipped for the `???` placeholders — there's no sensible
-// first letter for those. Takes an explicit hex rather than deriving one
-// from `label` itself, since a subchannel (zoomedSubNodesHtml) has no
-// color of its own and uses its parent channel's hex instead — hashing
-// the subchannel's own label (the way channelLetterHtml's hex works for an
-// actual channel) would give it an unrelated color, breaking the one-color
-// theme the rest of that zoomed page (blob, beams) already carries.
-function letterHtml(label, hex) {
-  const letter = /^[A-Za-z]/.test(label) ? label[0].toUpperCase() : null;
-  if (!letter) return '';
-  return `<span class="menu-node-letter" style="color:${hex};" aria-hidden="true">${letter}</span>`;
-}
-
+// letterHtml (js/pebbles.js) takes an explicit hex rather than deriving one
+// from `label` itself, since a subchannel (zoomedSubNodesHtml) has no color of
+// its own and uses its parent channel's hex instead — hashing the
+// subchannel's own label would give it an unrelated color, breaking the
+// one-color theme the rest of that zoomed page (blob, beams) already carries.
 function channelLetterHtml(channel) {
   return letterHtml(channel.label, channelHex(channel));
 }
@@ -475,14 +528,16 @@ function blobNormalGuideHtml() {
 // itself turns under it. A dotted guide line traces the same path back to
 // the octagon a regular spoke would (SPOKE_INNER_RADIUS to
 // SPOKE_OUTER_RADIUS), just fixed instead of rotating with the others.
+// `angle` defaults to the hub's slot; the Inner layer passes its own, since 5
+// radials land at a different bottom-right angle than the hub's 8.
 const SLOT_INDICATOR_RADIUS = 105;
 
-function slotIndicatorHtml() {
-  const inner = pointAt(45, SPOKE_INNER_RADIUS);
-  const outer = pointAt(45, SPOKE_OUTER_RADIUS);
+function slotIndicatorHtml(angle = 45) {
+  const inner = pointAt(angle, SPOKE_INNER_RADIUS);
+  const outer = pointAt(angle, SPOKE_OUTER_RADIUS);
   // The guide line stops at the indicator circle's own near edge, not its
   // center — same ray, just SLOT_INDICATOR_RADIUS short of outer.
-  const guideEnd = pointAt(45, SPOKE_OUTER_RADIUS - SLOT_INDICATOR_RADIUS);
+  const guideEnd = pointAt(angle, SPOKE_OUTER_RADIUS - SLOT_INDICATOR_RADIUS);
   return `
     <line class="menu-slot-guide" x1="${inner.x}" y1="${inner.y}" x2="${guideEnd.x}" y2="${guideEnd.y}"></line>
     <circle class="menu-slot-indicator" cx="${outer.x}" cy="${outer.y}" r="${SLOT_INDICATOR_RADIUS}"></circle>
@@ -531,7 +586,7 @@ const ARROW_LENGTH = 50;
 const ARROW_HALF_WIDTH = 32;
 const ARROW_TAIL_GAP = 22;
 
-function arrowGlyphHtml(center, directionDeg, groupAttrs, headClass, tailClass) {
+function arrowGlyphHtml(center, directionDeg, groupAttrs, headClass, tailClass, scale = 1) {
   const toRad = Math.PI / 180;
   const fx = Math.cos(directionDeg * toRad);
   const fy = Math.sin(directionDeg * toRad);
@@ -539,13 +594,17 @@ function arrowGlyphHtml(center, directionDeg, groupAttrs, headClass, tailClass) 
   const py = Math.sin((directionDeg + 90) * toRad);
   const { x: bx, y: by } = center;
 
-  const apex = { x: bx + fx * ARROW_LENGTH, y: by + fy * ARROW_LENGTH };
-  const base1 = { x: bx + px * ARROW_HALF_WIDTH, y: by + py * ARROW_HALF_WIDTH };
-  const base2 = { x: bx - px * ARROW_HALF_WIDTH, y: by - py * ARROW_HALF_WIDTH };
+  const length = ARROW_LENGTH * scale;
+  const halfWidth = ARROW_HALF_WIDTH * scale;
+  const tailGap = ARROW_TAIL_GAP * scale;
 
-  const tail = { x: bx - fx * ARROW_TAIL_GAP, y: by - fy * ARROW_TAIL_GAP };
-  const tail1 = { x: tail.x + px * ARROW_HALF_WIDTH, y: tail.y + py * ARROW_HALF_WIDTH };
-  const tail2 = { x: tail.x - px * ARROW_HALF_WIDTH, y: tail.y - py * ARROW_HALF_WIDTH };
+  const apex = { x: bx + fx * length, y: by + fy * length };
+  const base1 = { x: bx + px * halfWidth, y: by + py * halfWidth };
+  const base2 = { x: bx - px * halfWidth, y: by - py * halfWidth };
+
+  const tail = { x: bx - fx * tailGap, y: by - fy * tailGap };
+  const tail1 = { x: tail.x + px * halfWidth, y: tail.y + py * halfWidth };
+  const tail2 = { x: tail.x - px * halfWidth, y: tail.y - py * halfWidth };
 
   return `
     <g ${groupAttrs}>
@@ -823,8 +882,8 @@ function zoomedSubNodesHtml(channel) {
 // Each node is wrapped in a .menu-sector div (its own 45°-wide pie slice of
 // the whole stage, see sectorClipPath) — hovering anywhere in that slice,
 // not just the small blob itself, triggers the blob-expansion hover rule
-// (see .menu-sector:hover in styles.css).
-const BLOB_PRESET_COUNT = 8;
+// (see .menu-sector:hover in styles.css). Shapes cycle through
+// BLOB_PRESET_COUNT (js/pebbles.js).
 
 // The whole group rotates as one rigid body (position AND the blobs'
 // borders/shape along with it) via .menu-channel-ring's own transform, so
@@ -864,39 +923,42 @@ function buildHub() {
             </button>
             ${channelNodesHtml()}
           </div>
+          ${layerArrowHtml()}
         </div>
       </div>
     </div>
   `;
 
+  wireLayerArrow();
+
   container.querySelector('[data-action="home"]')?.addEventListener('click', goHome);
 
   // Clicking a channel's blob zooms into its own page (buildZoomed) — same
-  // logic for every channel, selected purely by id. See flipChannelBlob for
-  // the actual "zooms into" animation.
+  // logic for every channel, selected purely by id.
   container.querySelectorAll('[data-channel]').forEach((el) => {
     const channel = channelById(el.dataset.channel);
     if (!channel) return;
-    el.addEventListener('click', () => flipChannelBlob(channel, el, () => { zoomedChannelId = channel.id; zoomedSubIndex = -1; }));
+    el.addEventListener('click', () => enterChannel(channel));
   });
 }
 
-// How long the click-to-zoom (and zoom-back-out) animation takes — shared
-// by the FLIP transform below and the fade-in of whatever page-specific
-// content the destination page has that the origin page didn't, so both
-// finish together.
+// How long the zoom-back-out animation takes — shared by the FLIP transform
+// below and the fade-in of whatever page-specific content the hub has that
+// the zoomed page didn't, so both finish together.
 const ZOOM_TRANSITION_MS = 350;
 
-// The actual "zooms into"/"zooms back out of" effect — same animation
-// either direction, just with origin/destination swapped: a FLIP animation
-// (First-Last-Invert-Play). `originEl` is measured as the "first" state
-// before `setState` + build() switch pages; the SAME channel's blob on the
-// new page (matched by data-channel, so this works for either the hub's 8
-// or the zoomed page's 1) is the "last" state. Rather than faking a generic
-// scale-up, this measures both real rects and animates the *exact* delta
-// between them, so the blob visually grows/shrinks and slides from right
-// where it was into right where it lands.
+// The actual "zooms back out of a channel" effect (going in uses
+// zoomTransition instead): a FLIP animation (First-Last-Invert-Play).
+// `originEl` is measured as the "first" state before `setState` + build()
+// switch pages; the SAME channel's blob on the new page (matched by
+// data-channel) is the "last" state. Rather than faking a generic scale-down,
+// this measures both real rects and animates the *exact* delta between them,
+// so the blob visually shrinks and slides from right where it was into right
+// where it lands.
 function flipChannelBlob(channel, originEl, setState) {
+  // The back arrow can still be clicked while the channel is zooming in (keys
+  // are already held off in onKeyDown).
+  if (zoomTimer) return;
   const firstRect = originEl.getBoundingClientRect();
 
   setState();
@@ -933,9 +995,7 @@ function flipChannelBlob(channel, originEl, setState) {
 // Fades in everything on the just-rendered page except `keepEl` (the blob
 // still mid-FLIP) and the square frame (present on both pages already, so
 // fading it would just flicker it) — the hub's other 7 blobs/sectors, Home,
-// its spokes and ring when zooming back out; the sonar arcs and back arrow
-// when zooming in. Same logic either direction since it's just "whatever's
-// new on this page that isn't the flipped blob."
+// its spokes and ring.
 function fadeInRestOfPage(keepEl) {
   const candidates = container.querySelectorAll('.menu-tree-nodes > *, .menu-tree-edges > *');
   const targets = [...candidates].filter((n) => {
@@ -1054,7 +1114,7 @@ function setZoomOrbitRotation(root, deg, withTransition) {
 // side — see zoomArcBaseAngle/ARC_HALF_ANGLE_DEG for how the arc's two
 // ends line up with those two corners.
 function switchZoomedChannel(direction) {
-  if (!zoomedChannelId) return;
+  if (zoomTimer || !zoomedChannelId) return;
   const currentIdx = REGULAR.findIndex((c) => c.id === zoomedChannelId);
   if (currentIdx === -1) return;
   const n = REGULAR.length;
@@ -1101,8 +1161,259 @@ function goBackToHub(channel) {
   flipChannelBlob(channel, blob, () => { zoomedChannelId = null; zoomedSubIndex = -1; });
 }
 
+// A non-hub layer's whole page for now: one ??? shape at the center, captioned
+// with which layer this is. A plain div, not a button — nothing to click yet.
+// Each layer also carries the hub's thin ring (innerRingHtml), with the shape's
+// tips just inside it.
+// How far the tips stop short of the ring, in the stage's 0-1000 logical units
+// — 10px at the stage's full 640px size (1 unit = 0.64px).
+const LAYER_SHAPE_RING_GAP = 16;
+// Inner is a circle with a serrated edge, Outer (null) a plain circle. Radii are
+// in layerShapeHtml's own 0-100 viewBox — lower notchRadius cuts deeper.
+const LAYER_SHAPES = {
+  '-1': { points: 15, notchRadius: 43 },
+  1: null,
+};
+// Tips stop just short of the box's edge (50) so the stroke isn't clipped.
+const LAYER_SHAPE_TIP_RADIUS = 49;
+
+// The shape's outline as SVG: a polygon alternating tip/notch points, since a
+// CSS border can't follow a jagged edge, or a plain circle of the same reach.
+function layerShapeHtml(shape) {
+  let outline = `<circle cx="50" cy="50" r="${LAYER_SHAPE_TIP_RADIUS}"></circle>`;
+  if (shape) {
+    const points = [];
+    for (let i = 0; i < shape.points * 2; i++) {
+      const radius = i % 2 === 0 ? LAYER_SHAPE_TIP_RADIUS : shape.notchRadius;
+      const { x, y } = pointAtFrom({ x: 50, y: 50 }, -90 + i * (180 / shape.points), radius);
+      points.push(`${x},${y}`);
+    }
+    outline = `<polygon points="${points.join(' ')}"></polygon>`;
+  }
+  return `<svg class="menu-layer-shape" viewBox="0 0 100 100" aria-hidden="true">${outline}</svg>`;
+}
+
+// The Inner layer's radial lines — same span as the hub's sonar stacks
+// (SPOKE_INNER_RADIUS to SPOKE_OUTER_RADIUS), but each one a dashed triangle
+// with its tip on the thin ring, widening outward. 72° apart from north, which
+// also lands each one on a serration tooth (15 teeth = 24° each).
+const INNER_RADIAL_COUNT = 5;
+const INNER_RADIAL_BASE_HALF_WIDTH = 20;
+
+function innerRadialAngle(i) {
+  return -90 + i * (360 / INNER_RADIAL_COUNT);
+}
+
+function innerRadialsHtml() {
+  const toRad = Math.PI / 180;
+  let triangles = '';
+  for (let i = 0; i < INNER_RADIAL_COUNT; i++) {
+    const angle = innerRadialAngle(i);
+    const tip = pointAt(angle, SPOKE_INNER_RADIUS);
+    const baseCenter = pointAt(angle, SPOKE_OUTER_RADIUS);
+    const px = Math.cos((angle + 90) * toRad) * INNER_RADIAL_BASE_HALF_WIDTH;
+    const py = Math.sin((angle + 90) * toRad) * INNER_RADIAL_BASE_HALF_WIDTH;
+    triangles += `<polygon class="menu-layer-radial" points="${tip.x},${tip.y} ${baseCenter.x + px},${baseCenter.y + py} ${baseCenter.x - px},${baseCenter.y - py}"></polygon>`;
+  }
+  return triangles;
+}
+
+// One pebble on the end of each radial, centered on its base the way a hub
+// pebble sits on its spoke's end — colored and lettered the same way a hub
+// channel is when INNER_LAYER_CHANNELS has one for that slot, ??? otherwise.
+// One with a `route` opens it on click (wireInnerPebbles); the rest are inert.
+// Wrapped in the same .menu-channel-ring the hub's pebbles use, so
+// applyRotation turns them with the radials and keeps their labels upright.
+function innerPebblesHtml() {
+  const counterRotate = `${-innerRotationDeg()}deg`;
+  let pebbles = '';
+  for (let i = 0; i < INNER_RADIAL_COUNT; i++) {
+    const channel = INNER_LAYER_CHANNELS[i];
+    const link = channel?.route ? ` menu-node-layer-link" data-route="${channel.route}` : '';
+    pebbles += `
+      <div class="menu-node menu-node-channel menu-node-layer-pebble${channel?.fullStrength ? ' menu-node-full-strength' : ''} menu-blob-${i % BLOB_PRESET_COUNT}${link}" style="${nodeStyle(pointAt(innerRadialAngle(i), SPOKE_OUTER_RADIUS))} ${channel ? channelColorVars(channel) : ''}">
+        <span class="menu-node-content" style="--counter-rotate:${counterRotate};">
+          ${channel ? channelLetterHtml(channel) : ''}
+          <span class="menu-node-label mono">${channel ? escapeHtml(channel.label) : '???'}</span>
+        </span>
+      </div>
+    `;
+  }
+  return `<div class="menu-channel-ring" style="transform: rotate(${innerRotationDeg()}deg);">${pebbles}</div>`;
+}
+
+// Which INNER_LAYER_CHANNELS entry the rotation has brought to the bottom-right
+// slot (radial 2's angle) — same idea as the hub's channelInBottomRightSlot.
+function innerPebbleInBottomRightSlot() {
+  const i = (((2 - innerRotationSteps) % INNER_RADIAL_COUNT) + INNER_RADIAL_COUNT) % INNER_RADIAL_COUNT;
+  return INNER_LAYER_CHANNELS[i];
+}
+
+function openInnerPebble(channel) {
+  if (channel?.route) location.hash = '#' + channel.route;
+}
+
+function wireInnerPebbles() {
+  container.querySelectorAll('.menu-node-layer-link[data-route]').forEach((el) => {
+    el.addEventListener('click', () => { location.hash = '#' + el.dataset.route; });
+  });
+}
+
+// The radials in the same rotating <g> the hub's spokes use, plus the fixed
+// bottom-right slot marker at whichever radial angle is the bottom-right one.
+function innerLayerEdgesHtml() {
+  return `<g class="menu-spoke-ring" style="transform: rotate(${innerRotationDeg()}deg);">${innerRadialsHtml()}</g>${slotIndicatorHtml(innerRadialAngle(2))}`;
+}
+
+function buildLayerPlaceholder(name) {
+  // A % of the stage, not fixed px like the hub's nodes, so the shape scales with
+  // the ring it has to fit inside: the box whose tips (LAYER_SHAPE_TIP_RADIUS of
+  // its half-width, 50) land LAYER_SHAPE_RING_GAP short of SPOKE_INNER_RADIUS.
+  const tipRadius = SPOKE_INNER_RADIUS - LAYER_SHAPE_RING_GAP;
+  const sizePercent = (tipRadius * (50 / LAYER_SHAPE_TIP_RADIUS) * 2) / 10;
+  const sizeStyle = `width:${sizePercent}%; height:${sizePercent}%;`;
+  const edges = `<svg class="menu-tree-edges" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">${innerRingHtml()}${currentLayer === INNER_LAYER ? innerLayerEdgesHtml() : ''}</svg>`;
+  container.innerHTML = `
+    <div class="menu-stage">
+      <div class="menu-tree-stage">
+        ${frameHtml()}
+        <div class="menu-tree-viewport">
+          ${edges}
+          <div class="menu-tree-nodes">
+            <div class="menu-node menu-node-layer" style="${nodeStyle(HOME.pos)} ${sizeStyle}">
+              ${layerShapeHtml(LAYER_SHAPES[currentLayer])}
+              <span class="menu-node-label mono">???</span>
+              <span class="menu-node-layer-name mono">${name}</span>
+            </div>
+            ${currentLayer === INNER_LAYER ? innerPebblesHtml() : ''}
+          </div>
+          ${layerArrowHtml()}
+        </div>
+      </div>
+    </div>
+  `;
+  wireLayerArrow();
+  wireInnerPebbles();
+}
+
+// The touch equivalent of I/O: the back arrow's glyph in the top-left corner of
+// every layer, up going one layer out (O) and down one layer in (I). Each only
+// shows if that move exists: Outer has only down and Inner only up, both in the
+// same spot (LAYER_ARROW_MID), while the hub stacks its two either side of it.
+// Their own SVG after the nodes layer, unlike the back arrow, because the hub's
+// .menu-sector wedges cover the corners and would otherwise take the click.
+const LAYER_ARROW_SCALE = 0.6;
+const LAYER_ARROW_MID = { x: 75, y: 85 };
+const LAYER_ARROW_HUB_SPREAD = 32;
+const LAYER_ARROWS = [
+  { delta: 1, directionDeg: -90, sign: -1 },
+  { delta: -1, directionDeg: 90, sign: 1 },
+];
+
+function layerExists(layer) {
+  return layer === MAIN_LAYER || Boolean(LAYER_NAMES[layer]);
+}
+
+function layerArrowHtml() {
+  // A glyph's center is its head's base, not its visual middle — this shifts
+  // it so a flipped arrow covers exactly the same box as an unflipped one.
+  const glyphOffset = ((ARROW_LENGTH - ARROW_TAIL_GAP) / 2) * LAYER_ARROW_SCALE;
+  const spread = currentLayer === MAIN_LAYER ? LAYER_ARROW_HUB_SPREAD : 0;
+  const arrows = LAYER_ARROWS
+    .filter(({ delta }) => layerExists(currentLayer + delta))
+    .map(({ delta, directionDeg, sign }) => {
+      const center = { x: LAYER_ARROW_MID.x, y: LAYER_ARROW_MID.y + sign * (spread - glyphOffset) };
+      return arrowGlyphHtml(center, directionDeg, `class="menu-back-arrow" data-layer-delta="${delta}"`, 'menu-back-arrow-head', 'menu-back-arrow-tail', LAYER_ARROW_SCALE);
+    })
+    .join('');
+  return `<svg class="menu-tree-edges menu-layer-arrow-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">${arrows}</svg>`;
+}
+
+function wireLayerArrow() {
+  container.querySelectorAll('[data-layer-delta]').forEach((el) => {
+    el.addEventListener('click', () => goToLayer(currentLayer + Number(el.dataset.layerDelta)));
+  });
+}
+
+// How long each half of a zoom takes (the old page leaving, then the new one
+// arriving), and how far each one scales on its way. Reuses
+// .menu-tree-viewport's own --zoom-scale, so everything inside it moves as one
+// while the square frame (a sibling, see frameHtml) holds still.
+const ZOOM_FADE_MS = 200;
+const ZOOM_SCALE_SMALL = 0.6;
+const ZOOM_SCALE_LARGE = 1.6;
+
+// Moves to layer `next`, no-op past either end of LAYER_NAMES.
+function goToLayer(next) {
+  if (next === currentLayer) return;
+  if (next !== MAIN_LAYER && !LAYER_NAMES[next]) return;
+  zoomTransition(next > currentLayer, () => { currentLayer = next; });
+}
+
+// Swaps to whatever page `setState` + build() produce, as a zoom. Both halves
+// scale the same way, so it reads as one continuous motion: going out, the old
+// page shrinks away and the new one settles down from oversized; going in, the
+// old page grows past the camera and the new one grows up from small. With a
+// `focusSelector`, each half pivots on the element it matches on that half's
+// page; without one, on the stage's center.
+function zoomTransition(zoomingOut, setState, focusSelector) {
+  if (zoomTimer) return;
+  const viewport = container?.querySelector('.menu-tree-viewport');
+  if (!viewport) return;
+
+  const transition = `transform ${ZOOM_FADE_MS}ms ease, opacity ${ZOOM_FADE_MS}ms ease`;
+
+  setZoomOrigin(viewport, focusSelector);
+  viewport.style.transition = transition;
+  viewport.style.opacity = '0';
+  viewport.style.setProperty('--zoom-scale', zoomingOut ? ZOOM_SCALE_SMALL : ZOOM_SCALE_LARGE);
+
+  zoomTimer = setTimeout(() => {
+    setState();
+    build();
+
+    const newViewport = container.querySelector('.menu-tree-viewport');
+    newViewport.style.transition = 'none';
+    // Measured before the scale below, while the page is still at its true size.
+    setZoomOrigin(newViewport, focusSelector);
+    newViewport.style.opacity = '0';
+    newViewport.style.setProperty('--zoom-scale', zoomingOut ? ZOOM_SCALE_LARGE : ZOOM_SCALE_SMALL);
+    void newViewport.offsetWidth;
+    newViewport.style.transition = transition;
+    requestAnimationFrame(() => {
+      newViewport.style.opacity = '1';
+      newViewport.style.setProperty('--zoom-scale', 1);
+    });
+
+    zoomTimer = setTimeout(() => {
+      zoomTimer = null;
+      newViewport.style.transition = '';
+      newViewport.style.opacity = '';
+      newViewport.style.removeProperty('--zoom-scale');
+      newViewport.style.transformOrigin = '';
+    }, ZOOM_FADE_MS);
+  }, ZOOM_FADE_MS);
+}
+
+// Points `viewport`'s transform-origin at the on-screen center of the element
+// `focusSelector` matches inside it. Measured rather than computed from angles,
+// so it's right wherever the ring's current rotation has put a hub pebble.
+function setZoomOrigin(viewport, focusSelector) {
+  const el = focusSelector && viewport.querySelector(focusSelector);
+  if (!el) return;
+  const box = viewport.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  const x = ((rect.left + rect.width / 2 - box.left) / box.width) * 100;
+  const y = ((rect.top + rect.height / 2 - box.top) / box.height) * 100;
+  viewport.style.transformOrigin = `${x}% ${y}%`;
+}
+
 function build() {
   if (!container) return;
+  if (currentLayer !== MAIN_LAYER) {
+    buildLayerPlaceholder(LAYER_NAMES[currentLayer]);
+    return;
+  }
   const channel = zoomedChannelId ? channelById(zoomedChannelId) : null;
   if (channel) buildZoomed(channel);
   else buildHub();

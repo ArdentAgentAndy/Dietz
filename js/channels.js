@@ -1,3 +1,5 @@
+import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=66';
+
 // Top-nav structure: Menu (rendered to the right of the Settings gear, see
 // index.html's #top-nav-menu — always reachable, never part of the
 // arrow-key-cyclable channel row) plus the channels below, each holding
@@ -48,6 +50,22 @@ export const MENU = { id: 'menu', label: 'Menu', route: '/' };
 // Doesn't affect the top-nav channel row (nav.js) at all — it ignores this
 // flag and keeps showing/cycling Contacts and Public exactly as before;
 // this is purely a Menu-page (js/views/menu.js) distinction.
+// The Inner menu layer's pebbles (js/views/menu.js's innerPebblesHtml), one per
+// radial clockwise from the top: top, top-right, bottom-right, bottom-left,
+// top-left. null is a ??? placeholder. Same `color` (a Notion color name) as a
+// regular channel, or a literal `hex` — Research shares the Agenda's own color
+// for it rather than a second copy, and `fullStrength` draws its border and
+// letter undimmed since that color is too dark to show otherwise. One with a
+// `route` opens it (click, its first letter, or Enter in the bottom-right slot);
+// the rest are label + color only for now.
+export const INNER_LAYER_CHANNELS = [
+  { id: 'application', label: 'Application', color: 'purple', route: '/roadmap' },
+  { id: 'research', label: 'Research', hex: CATEGORY_COLOR_OVERRIDES.Research, fullStrength: true },
+  null,
+  null,
+  { id: 'projects', label: 'Projects', color: 'blue' },
+];
+
 export const CHANNELS = [
   {
     id: 'contacts',

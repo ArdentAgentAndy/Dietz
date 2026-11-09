@@ -1,4 +1,4 @@
-import { store } from './store.js?v=65';
+import { store } from './store.js?v=66';
 
 const CACHE_KEY = 'dietz:canvasCache';
 

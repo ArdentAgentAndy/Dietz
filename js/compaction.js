@@ -6,9 +6,9 @@
 // "compacted"), so it still shows up in the sheet and counts toward the
 // hours graph; the raw rows it replaces are deleted (locally and, once
 // synced, from the sheet) since their minutes now live in that row.
-import { store } from './store.js?v=65';
-import { formatDateISO } from './format.js?v=65';
-import { addCourseRevisionMinutes } from './courseState.js?v=65';
+import { store } from './store.js?v=66';
+import { formatDateISO } from './format.js?v=66';
+import { addCourseRevisionMinutes } from './courseState.js?v=66';
 
 const GROUP_LABELS = {
   revision: 'Revision',

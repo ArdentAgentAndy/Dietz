@@ -1,22 +1,22 @@
-import { syncActiveRoute } from './nav.js?v=65';
-import { isConfigured } from './sync.js?v=65';
+import { syncActiveRoute } from './nav.js?v=66';
+import { isConfigured } from './sync.js?v=66';
 
 const routes = [
-  { pattern: /^\/$/, load: () => import('./views/menu.js?v=65') },
-  { pattern: /^\/home$/, load: () => import('./views/home.js?v=65') },
-  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=65') },
-  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=65') },
-  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=65'), params: ['id'] },
-  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=65') },
-  { pattern: /^\/revision$/, load: () => import('./views/revision.js?v=65') },
-  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=65') },
-  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=65') },
-  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=65') },
-  { pattern: /^\/public$/, load: () => import('./views/public.js?v=65') },
-  { pattern: /^\/contacts$/, load: () => import('./views/contacts.js?v=65') },
-  { pattern: /^\/today$/, load: () => import('./views/today.js?v=65') },
-  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=65') },
-  { pattern: /^\/sight-reading$/, load: () => import('./views/sightReading.js?v=65') },
+  { pattern: /^\/$/, load: () => import('./views/menu.js?v=66') },
+  { pattern: /^\/home$/, load: () => import('./views/home.js?v=66') },
+  { pattern: /^\/logging$/, load: () => import('./views/logging.js?v=66') },
+  { pattern: /^\/courses$/, load: () => import('./views/courses.js?v=66') },
+  { pattern: /^\/course\/([^/]+)$/, load: () => import('./views/course.js?v=66'), params: ['id'] },
+  { pattern: /^\/lessons$/, load: () => import('./views/lessons.js?v=66') },
+  { pattern: /^\/revision$/, load: () => import('./views/revision.js?v=66') },
+  { pattern: /^\/canvas$/, load: () => import('./views/canvas.js?v=66') },
+  { pattern: /^\/calendar$/, load: () => import('./views/calendar.js?v=66') },
+  { pattern: /^\/roadmap$/, load: () => import('./views/roadmap.js?v=66') },
+  { pattern: /^\/public$/, load: () => import('./views/public.js?v=66') },
+  { pattern: /^\/contacts$/, load: () => import('./views/contacts.js?v=66') },
+  { pattern: /^\/today$/, load: () => import('./views/today.js?v=66') },
+  { pattern: /^\/settings$/, load: () => import('./views/settings.js?v=66') },
+  { pattern: /^\/sight-reading$/, load: () => import('./views/sightReading.js?v=66') },
 ];
 
 function currentPath() {

@@ -160,7 +160,12 @@ yet.
 
 Other small fixes/ideas, not yet scoped:
 
-- Main menu upgrade with I/O, diagonal singlers, orthogonal mainers,
-  singler channel mainer.
+- Main menu upgrade (v66, in progress). Done: I/O keybinds zoom between menu
+  layers (Inner / hub / Outer, `js/views/menu.js`'s `goToLayer`), with a `???`
+  placeholder circle on the two new layers. Going into a channel uses the same
+  zoom animation (I/O themselves don't apply inside a channel). Top-left up/down
+  triangles are the touch equivalent of O/I. The Inner layer's Application
+  pebble opens Roadmap (click, `A`, or Enter in the bottom-right slot). Still to do: diagonal singlers,
+  orthogonal mainers, singler channel mainer.
 - Brainstorm page, snap to grid, boxes self add.
 
