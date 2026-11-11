@@ -1,7 +1,7 @@
-import { seedData } from './seed.js?v=66';
+import { seedData } from './seed.js?v=67';
 
 const STORAGE_KEY = 'dietz:data';
-const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts'];
+const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems'];
 
 function emptyData() {
   // tombstones: every {table, id} this device has ever explicitly deleted,

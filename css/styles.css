@@ -2884,6 +2884,12 @@ details summary {
   width: auto;
 }
 
+/* Logging's Add project/research: "also add to Notion" + color picker. */
+.notion-new-option:not([hidden]) {
+  display: grid;
+  gap: 12px;
+}
+
 .components-builder {
   border-top: 1px solid var(--border);
   padding-top: 10px;
@@ -3640,3 +3646,884 @@ canvas#sr-staff-canvas { display: block; }
 }
 .sr-feedback.sr-correct { color: var(--green); }
 .sr-feedback.sr-wrong   { color: var(--red); }
+
+/* ---------- Projects index (#/projects, js/views/projects.js) ----------
+   Reuses the Menu's pebble look (.menu-node / .menu-node-channel /
+   .menu-blob-N, colors via js/pebbles.js's pebbleColorVars), just sized by
+   the track's width instead of fixed px, with the name below the pebble
+   rather than inside it so long names never get squeezed. */
+
+.projects-track {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  margin: 8px auto 0;
+}
+
+.projects-track-bonds {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Dashed "chem-bond" edges, same weight as the Menu's lines. */
+.projects-bond {
+  stroke: var(--border-strong);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  vector-effect: non-scaling-stroke;
+}
+
+.projects-bond.is-other-tier {
+  stroke-opacity: 0.45;
+}
+
+.projects-tier-link {
+  stroke-dasharray: 2 6;
+}
+
+.projects-tier-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: clamp(9px, 1.8vw, 12px);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.projects-tier-label.is-other-tier {
+  color: var(--muted);
+}
+
+.projects-tier-number {
+  color: var(--accent);
+}
+
+/* Two classes, so this beats the Menu's own .menu-node-channel size rules in
+   its @media blocks regardless of source order. */
+.projects-pebble.menu-node-channel {
+  width: clamp(44px, 11%, 84px);
+  height: auto;
+  aspect-ratio: 1;
+  padding: 0;
+  font: inherit;
+  /* Lets the letter watermark size itself as a share of this pebble's own
+     width (cqw below), whatever size the track gives it. */
+  container-type: inline-size;
+}
+
+.projects-pebble .menu-node-letter {
+  font-size: 70cqw;
+}
+
+.projects-pebble-name {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+/* .menu-node-content is a full-size box inside the pebble; the name hangs
+   off its bottom edge, so the pebble itself can't clip it. */
+.projects-pebble .menu-node-content {
+  overflow: visible;
+}
+
+button.projects-pebble:hover,
+button.projects-pebble:focus-visible {
+  transform: translate(-50%, -50%) scale(1.12);
+  border-color: var(--node-color-strong, var(--accent));
+  outline: none;
+}
+
+/* Dims the border and contents only, not the whole pebble: an opacity on the
+   pebble itself would also fade its fill and let the bonds show through. */
+.projects-pebble.is-other-tier {
+  border-color: color-mix(in srgb, var(--node-color-dim, var(--border-strong)) 55%, transparent);
+}
+
+.projects-pebble.is-other-tier .menu-node-content {
+  opacity: 0.55;
+}
+
+.projects-pebble.is-archived {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+/* Empty tier slot: an inert ??? outline, the same idea as the Menu's
+   placeholder slots. The ??? sits inside it rather than below. */
+.projects-pebble.is-empty {
+  cursor: default;
+  border: 2px dashed var(--border-strong);
+  /* The card's own color, so the bonds stop at its edge instead of showing
+     through. */
+  background: var(--surface);
+}
+
+.projects-page button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.projects-pebble.is-empty .projects-pebble-name {
+  position: static;
+  transform: none;
+  color: var(--muted);
+}
+
+/* Skills: a wrapping cluster of smaller pebbles in normal flow
+   (not absolutely placed like the track's). */
+.projects-group + .projects-group {
+  margin-top: 14px;
+}
+
+.projects-group-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 8px 0 4px;
+}
+
+.projects-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px 28px;
+  padding: 10px 6px 26px;
+}
+
+.projects-cluster .projects-pebble.menu-node-channel {
+  position: relative;
+  transform: none;
+  width: 60px;
+}
+
+.projects-cluster button.projects-pebble:hover,
+.projects-cluster button.projects-pebble:focus-visible {
+  transform: scale(1.12);
+}
+
+/* One project's page (#/projects/<slug>, js/views/project.js). */
+.project-head {
+  border-width: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.project-head h1 {
+  margin: 0;
+}
+
+/* Pushed to the far right of the header row. */
+.project-back {
+  margin-left: auto;
+}
+
+/* Today / This week / All time, beside the title in the header. */
+.project-hours-stats {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+/* Header's second row: "At B · 3.2", steps bar, n/m steps. */
+.project-progress {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.project-progress-bar {
+  flex: 1;
+  max-width: 320px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.project-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--bar-color);
+}
+
+/* Card title with its buttons on the right. */
+.project-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.project-card-head h2 {
+  margin: 0;
+  margin-right: auto;
+}
+
+.project-next-target {
+  font-size: 12px;
+}
+
+.project-pitch {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.project-pitch dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 10px;
+}
+
+.project-pitch dt:first-child {
+  margin-top: 0;
+}
+
+.project-pitch dd {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.project-pitch-hook {
+  font-size: 17px;
+}
+
+.project-pitch-form {
+  display: grid;
+  gap: 12px;
+}
+
+.project-pitch-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.project-pitch-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+/* Same look as dialog inputs (.modal-form input). */
+.project-pitch-form textarea,
+.ms-title-input,
+.ms-target input,
+.project-inline-form input,
+.project-inline-form textarea,
+.project-conn-add {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color-scheme: dark;
+}
+
+.project-pitch-form textarea:focus,
+.ms-title-input:focus,
+.ms-target input:focus,
+.project-inline-form input:focus,
+.project-inline-form textarea:focus,
+.project-conn-add:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Milestones: phase (A) > checkpoint (1) > step (1.1). */
+.ms-tree {
+  display: grid;
+  gap: 18px;
+}
+
+.ms-phase {
+  border-left: 3px solid var(--phase-color);
+  padding-left: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.ms-checkpoint {
+  margin-left: 6px;
+}
+
+.ms-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+
+.ms-code {
+  min-width: 2.2em;
+  font-weight: 700;
+}
+
+.ms-code-phase {
+  min-width: 26px;
+  text-align: center;
+  font-size: 18px;
+  color: var(--phase-color);
+}
+
+.ms-row-phase .ms-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ms-code-checkpoint {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px solid var(--phase-color);
+  font-size: 12px;
+}
+
+.ms-checkpoint.is-done .ms-code-checkpoint {
+  background: var(--phase-color);
+  color: var(--bg, #111);
+}
+
+.ms-title {
+  cursor: text;
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-title-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-meta {
+  font-size: 12px;
+}
+
+.ms-target input {
+  font-size: 12px;
+  padding: 2px 6px;
+  width: auto;
+  background: transparent;
+  border-color: var(--border);
+}
+
+.ms-steps {
+  list-style: none;
+  margin: 2px 0 0 36px;
+  padding: 0;
+}
+
+.ms-row-step .ms-code {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.ms-step.is-done > .ms-row .ms-title {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+/* Notion tasks linked to a step, listed under it. */
+.ms-tasks {
+  list-style: none;
+  margin: 0 0 4px 56px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ms-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ms-task-state {
+  width: 1em;
+  color: var(--muted);
+}
+
+.ms-task.is-done .ms-task-name {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.ms-task-date {
+  font-size: 11px;
+}
+
+.ms-task-unlink {
+  opacity: 0;
+  padding: 0 6px;
+}
+
+.ms-task:hover .ms-task-unlink,
+.ms-task-unlink:focus {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ms-task-unlink {
+    opacity: 1;
+  }
+}
+
+/* "link" picker dialog. */
+.ms-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.ms-picker-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.ms-picker-item.is-done {
+  color: var(--muted);
+}
+
+.project-error {
+  color: var(--red, #ff6b6b);
+  font-size: 13px;
+}
+
+/* Log / Resources add forms: fields in a row, wrapping on phones. */
+.project-inline-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.project-inline-form textarea,
+.project-inline-form input[name="url"] {
+  flex: 1 1 240px;
+  resize: vertical;
+}
+
+.project-inline-form input[name="label"] {
+  flex: 0 1 200px;
+}
+
+.project-log,
+.project-links {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.project-log li {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.project-links {
+  margin: 0 0 12px;
+}
+
+.project-links li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.project-log-date,
+.project-link-host {
+  font-size: 12px;
+}
+
+.project-log-text {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.project-row-delete {
+  opacity: 0;
+}
+
+.project-log li:hover .project-row-delete,
+.project-links li:hover .project-row-delete,
+.project-row-delete:focus {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .project-row-delete {
+    opacity: 1;
+  }
+}
+
+/* Connections: label + project chips (+ add dropdown). */
+.project-conn-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 34px;
+}
+
+.project-conn-label {
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.project-conn-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--chip-color);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  font-size: 13px;
+}
+
+.project-chip a {
+  color: var(--chip-color);
+  text-decoration: none;
+  padding-right: 6px;
+}
+
+.project-chip-remove {
+  padding: 0 6px;
+  font-size: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+}
+
+.project-conn-add {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+/* Whiteboard (#/projects/board, js/views/whiteboard.js). */
+a.btn {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.wb-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.wb-head h1 {
+  margin: 0;
+}
+
+.wb-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wb-toolbar button {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
+.wb-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.wb-swatches {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.wb-toolbar .wb-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--swatch);
+  border: 2px solid transparent;
+}
+
+.wb-toolbar .wb-swatch.is-current {
+  border-color: var(--text);
+}
+
+.wb-jumps {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.wb-toolbar .wb-jump {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* The board: dotted grid that pans/zooms with the content (applyView). */
+.wb-viewport {
+  position: relative;
+  height: calc(100vh - 230px);
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--surface);
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.09) 1px, transparent 1.2px);
+  touch-action: none;
+  cursor: grab;
+  outline: none;
+  user-select: none;
+}
+
+.wb-viewport:active {
+  cursor: grabbing;
+}
+
+.wb-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.wb-empty {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.wb-section {
+  position: absolute;
+  border: 1.5px dashed var(--item-color);
+  border-radius: 10px;
+}
+
+.wb-section.is-selected {
+  border-style: solid;
+}
+
+.wb-section-title {
+  position: absolute;
+  left: 10px;
+  top: -14px;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--item-color);
+  background: var(--surface);
+  border-radius: 6px;
+  cursor: move;
+  max-width: calc(100% - 20px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-section-input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  width: 220px;
+}
+
+.wb-box {
+  position: absolute;
+  border: 1.5px solid var(--item-color);
+  border-radius: 8px;
+  cursor: move;
+  box-sizing: border-box;
+}
+
+.wb-box.is-selected,
+.wb-section.is-selected {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.wb-box-text {
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.wb-box-input {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  user-select: text;
+}
+
+/* Connect handle (right edge) and resize handle (bottom-right corner). */
+.wb-port {
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--item-color);
+  border: 2px solid var(--surface);
+  cursor: crosshair;
+  opacity: 0;
+}
+
+.wb-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  opacity: 0;
+  background: linear-gradient(135deg, transparent 50%, var(--item-color) 50%);
+  border-bottom-right-radius: 8px;
+}
+
+.wb-box:hover .wb-port,
+.wb-box.is-selected .wb-port,
+.wb-box:hover .wb-resize,
+.wb-box.is-selected .wb-resize,
+.wb-section.is-selected .wb-resize {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .wb-port,
+  .wb-resize {
+    opacity: 1;
+  }
+}
+
+.wb-edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.wb-edge {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+
+.wb-edge.is-selected {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.wb-edge-hit {
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.wb-hint {
+  font-size: 11px;
+  margin: 8px 2px 0;
+}
+
+.ms-check {
+  width: auto;
+  margin: 0;
+}
+
+/* Row buttons stay out of the way until the row is hovered/focused. */
+.ms-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.ms-row:hover .ms-actions,
+.ms-row:focus-within .ms-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ms-actions {
+    opacity: 1;
+  }
+}
+
+.ms-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.ms-btn-danger:hover {
+  color: var(--red, #ff6b6b);
+}

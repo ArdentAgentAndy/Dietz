@@ -1,7 +1,7 @@
-import { store } from './store.js?v=66';
-import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=66';
+import { store } from './store.js?v=67';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=67';
 
-const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts'];
+const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
 const RETRY_BASE_MS = 3000;
 const RETRY_MAX_MS = 60000;
@@ -93,7 +93,9 @@ async function pullBootstrap(config) {
   }
 
   for (const table of TABLE_NAMES) {
-    store.data[table] = data[table] || [];
+    // A table the backend doesn't return at all (a newly added table before
+    // Code.gs is redeployed) keeps its local rows instead of being emptied.
+    if (Array.isArray(data[table])) store.data[table] = data[table];
   }
 
   // Re-apply anything still queued in the outbox on top of what the server

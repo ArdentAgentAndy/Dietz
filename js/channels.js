@@ -1,4 +1,4 @@
-import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=66';
+import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=67';
 
 // Top-nav structure: Menu (rendered to the right of the Settings gear, see
 // index.html's #top-nav-menu — always reachable, never part of the
@@ -63,7 +63,7 @@ export const INNER_LAYER_CHANNELS = [
   { id: 'research', label: 'Research', hex: CATEGORY_COLOR_OVERRIDES.Research, fullStrength: true },
   null,
   null,
-  { id: 'projects', label: 'Projects', color: 'blue' },
+  { id: 'projects', label: 'Projects', color: 'blue', route: '/projects' },
 ];
 
 export const CHANNELS = [

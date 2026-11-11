@@ -55,6 +55,23 @@ var TABLES = {
   // mastery-count mechanic; lastReviewed is unused today but reserved for
   // a future real spaced-repetition scheduler.
   Questions: { columns: ['id', 'deckId', 'deckName', 'type', 'prompt', 'answer', 'optionsJson', 'correctStreak', 'mastered', 'lastReviewed'], key: ['id'] },
+  // Project pages (#/projects/<slug>, js/projectPlan.js). Projects: one row
+  // per project, id = the project's slug, holding its pitch.
+  // ProjectMilestones: one row per phase/checkpoint/step (kind), parentId
+  // links it to the level above, sortOrder orders siblings. Codes (A, 3,
+  // 3.1) are computed from order on the frontend, never stored. taskIds:
+  // comma-joined Notion task ids linked to a step. Projects' buildsOn/skills
+  // are comma-joined project slugs ("leads to" / "used in" are the same
+  // links read the other way); links is a JSON [{ label, url }] list.
+  // ProjectLog: dated notes, one row each.
+  Projects: { columns: ['id', 'pitch_hook', 'pitch_problem', 'pitch_approach', 'pitch_novel', 'pitch_results', 'pitch_ask', 'buildsOn', 'skills', 'links'], key: ['id'] },
+  ProjectLog: { columns: ['id', 'projectId', 'date', 'text'], key: ['id'] },
+  ProjectMilestones: { columns: ['id', 'projectId', 'kind', 'parentId', 'title', 'sortOrder', 'done', 'targetDate', 'taskIds'], key: ['id'] },
+  // Projects whiteboard (#/projects/board, js/views/whiteboard.js). kind:
+  // 'box' (text note), 'section' (titled frame), 'edge' (dashed connector
+  // between two boxes, fromId -> toId). x/y/w/h in board pixels; color is a
+  // Notion color name.
+  BoardItems: { columns: ['id', 'kind', 'x', 'y', 'w', 'h', 'text', 'color', 'fromId', 'toId'], key: ['id'] },
 };
 
 function checkToken_(token) {
@@ -614,6 +631,63 @@ function notionSchema_() {
   };
 }
 
+// Add or remove one option of the Project/Lead select (js/views/logging.js's
+// add/delete project + research dialogs). Notion's API replaces a select's
+// whole option list on a database PATCH: options left out are deleted (and
+// every task using one loses that value, no undo), new ones are added. So
+// this reads the current list, changes the one name, and writes it back.
+// Existing options are sent by id only, since Notion won't change an existing
+// option's name/color through the API anyway.
+var EDITABLE_SELECT_PROPS_ = { Project: true, Lead: true };
+var NOTION_COLORS_ = { default: true, gray: true, brown: true, orange: true, yellow: true, green: true, blue: true, purple: true, pink: true, red: true };
+
+function notionSelectOption_(property, op, name, color) {
+  if (!EDITABLE_SELECT_PROPS_[property]) return { error: 'property not editable: ' + property };
+  if (op !== 'add' && op !== 'remove') return { error: 'bad op: ' + op };
+  name = String(name || '').trim();
+  if (!name) return { error: 'missing name' };
+  // Notion rejects commas in select option names.
+  if (name.indexOf(',') !== -1) return { error: 'Notion option names cannot contain commas' };
+
+  var props = PropertiesService.getScriptProperties();
+  var notionToken = props.getProperty('NOTION_TOKEN');
+  var databaseId = props.getProperty('NOTION_DATABASE_ID');
+  if (!notionToken || !databaseId) return { error: 'notion not configured' };
+  var headers = { Authorization: 'Bearer ' + notionToken, 'Notion-Version': '2022-06-28' };
+  var url = 'https://api.notion.com/v1/databases/' + databaseId;
+
+  var getResponse = UrlFetchApp.fetch(url, { method: 'get', headers: headers, muteHttpExceptions: true });
+  if (getResponse.getResponseCode() !== 200) return { error: 'notion api error: ' + getResponse.getContentText() };
+  var prop = JSON.parse(getResponse.getContentText()).properties[property];
+  if (!prop || !prop.select) return { error: property + ' is not a select property' };
+
+  var options = prop.select.options || [];
+  var exists = options.some(function (o) { return o.name === name; });
+  if (op === 'add' && exists) return { ok: true, unchanged: true };
+  if (op === 'remove' && !exists) return { ok: true, unchanged: true };
+
+  var next = options
+    .filter(function (o) { return op === 'add' || o.name !== name; })
+    .map(function (o) { return { id: o.id }; });
+  if (op === 'add') {
+    var option = { name: name };
+    if (color && NOTION_COLORS_[color]) option.color = color;
+    next.push(option);
+  }
+
+  var properties = {};
+  properties[property] = { select: { options: next } };
+  var patchResponse = UrlFetchApp.fetch(url, {
+    method: 'patch',
+    contentType: 'application/json',
+    headers: headers,
+    payload: JSON.stringify({ properties: properties }),
+    muteHttpExceptions: true,
+  });
+  if (patchResponse.getResponseCode() !== 200) return { error: 'notion api error: ' + patchResponse.getContentText() };
+  return { ok: true };
+}
+
 function doPost(e) {
   var body;
   try {
@@ -670,6 +744,10 @@ function doPost(e) {
 
   if (body.action === 'notion-delete-task') {
     return jsonOut_(notionDeleteTask_(body.pageId));
+  }
+
+  if (body.action === 'notion-select-option') {
+    return jsonOut_(notionSelectOption_(body.property, body.op, body.name, body.color));
   }
 
   var lock = LockService.getScriptLock();

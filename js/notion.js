@@ -1,4 +1,4 @@
-import { store } from './store.js?v=66';
+import { store } from './store.js?v=67';
 
 const CACHE_KEY = 'dietz:notionCache';
 const SCHEMA_CACHE_KEY = 'dietz:notionSchemaCache';
@@ -137,6 +137,24 @@ export async function updateTask(pageId, fields) {
     body: JSON.stringify({ token: config.token, action: 'notion-update-task', pageId, fields }),
   });
   return res.json();
+}
+
+// Add or remove one option of Notion's Project or Lead select (see
+// notionSelectOption_ in Code.gs). Removing one clears it from every task
+// that used it, and Notion has no undo for that. color: a Notion color name,
+// only used when adding. Refreshes the cached schema on success.
+export async function editNotionSelectOption(property, op, name, color) {
+  const config = getConfig();
+  if (!config) return { ok: false, error: 'Apps Script not configured (see Settings)' };
+
+  const res = await fetch(config.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({ token: config.token, action: 'notion-select-option', property, op, name, color }),
+  });
+  const data = await res.json();
+  if (data.ok) await fetchNotionSchema().catch(() => {});
+  return data;
 }
 
 // "Delete" archives the page in Notion (its own trash, recoverable there).

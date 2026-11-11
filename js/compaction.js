@@ -6,9 +6,10 @@
 // "compacted"), so it still shows up in the sheet and counts toward the
 // hours graph; the raw rows it replaces are deleted (locally and, once
 // synced, from the sheet) since their minutes now live in that row.
-import { store } from './store.js?v=66';
-import { formatDateISO } from './format.js?v=66';
-import { addCourseRevisionMinutes } from './courseState.js?v=66';
+import { store } from './store.js?v=67';
+import { formatDateISO } from './format.js?v=67';
+import { addCourseRevisionMinutes } from './courseState.js?v=67';
+import { addProjectMinutes } from './projectHours.js?v=67';
 
 const GROUP_LABELS = {
   revision: 'Revision',
@@ -124,6 +125,12 @@ export function compactOldSessions() {
   // since the compacted daily-total row that replaces them only tracks
   // (date, group), not which course within the group it came from.
   for (const [courseId, minutes] of courseSums) addCourseRevisionMinutes(courseId, minutes);
+
+  // Same reason, per project: the project page's hours (js/projectHours.js)
+  // would otherwise lose every session older than yesterday.
+  for (const s of toCompact) {
+    if (groupOf.get(s.categoryId) === 'project') addProjectMinutes(s.categoryId, s.date, s.minutes);
+  }
 
   for (const [key, minutes] of sums) {
     const [date, group] = key.split('|');

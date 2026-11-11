@@ -1,7 +1,7 @@
-import { HOME, CHANNELS, INNER_LAYER_CHANNELS } from '../channels.js?v=66';
-import { escapeHtml } from '../format.js?v=66';
-import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=66';
-import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=66';
+import { HOME, CHANNELS, INNER_LAYER_CHANNELS } from '../channels.js?v=67';
+import { escapeHtml } from '../format.js?v=67';
+import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=67';
+import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=67';
 
 // Solo channels (Contacts, Public) have no outer-ring slot of their own in
 // this rebuild yet — only the 8 non-solo channels (channels.js's `solo`

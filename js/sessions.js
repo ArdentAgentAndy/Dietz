@@ -1,5 +1,5 @@
-import { store } from './store.js?v=66';
-import { formatDateISO } from './format.js?v=66';
+import { store } from './store.js?v=67';
+import { formatDateISO } from './format.js?v=67';
 
 // goalHours: daily target shown as a dashed reference line on the hours graph.
 // No dedicated Homework series — homework is logged against whichever
@@ -18,12 +18,21 @@ export const GRAPH_SERIES = [
 // into Revision's line instead of dropping them from the graph.
 export const GROUP_ALIASES = { homework: 'revision' };
 
+// The "<Group> total" categories js/compaction.js creates to hold its daily
+// totals (ids compacted-project, compacted-research, …). They carry a real
+// group, but they're bookkeeping, not an actual project/lead/course, so they
+// must never show up as one. Matched by id rather than by their archived
+// flag, which a sync or an old Sheet row can lose.
+export function isCompactedCategory(cat) {
+  return Boolean(cat?.id) && String(cat.id).startsWith('compacted-');
+}
+
 // Non-archived categories eligible for a timer card, in a given group.
 // Revision categories only show while their course is still active.
 export function liveCategoriesByGroup(group) {
   const courses = store.table('Courses');
   return store.table('Categories').filter((cat) => {
-    if (cat.archived || cat.group !== group) return false;
+    if (cat.archived || cat.group !== group || isCompactedCategory(cat)) return false;
     if (group === 'revision') {
       const course = courses.find((c) => c.id === cat.courseId);
       return Boolean(course && course.status === 'active');

@@ -1,8 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=66';
-import { hexForNotionColor } from '../notionColors.js?v=66';
-import { escapeHtml, hexToRgba } from '../format.js?v=66';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=66';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=66';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=67';
+import { hexForNotionColor } from '../notionColors.js?v=67';
+import { escapeHtml, hexToRgba } from '../format.js?v=67';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=67';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=67';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -542,10 +542,11 @@ function visibleTasks() {
   });
 }
 
-// Priority: done (gray stripes) > urgent (red stripes) > filtered view (flat
-// solid color, sub-value's own color when there is one) > default unfiltered
+// Priority: done (gray stripes) > urgent (red stripes) > default
 // (category-colored border/fill, decorative center line above the bottom
-// row, drawn via ::before using the --chip-line-color var set here).
+// row, drawn via ::before using the --chip-line-color var set here). A
+// filtered view looks exactly like the unfiltered one: same colors, same
+// emblem and line, so a card reads the same either way.
 function chipStyle(task) {
   const config = SUB_FILTER_BY_CATEGORY[task.category];
   const catColor = categoryColorForTask(task);
@@ -563,11 +564,6 @@ function chipStyle(task) {
     // Outline sits outside the existing category border (positive offset)
     // instead of replacing or overlapping it.
     return `border: 2px solid ${hexToRgba(catColor, borderAlpha)}; outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: 2px; background-color: ${hexToRgba(catColor, 0.12)}; background-image: ${whiteStripes};`;
-  }
-
-  if (categoryFilter) {
-    const flatColor = subColor || catColor;
-    return `border: 2px solid ${hexToRgba(flatColor, 0.6)}; background-color: ${hexToRgba(flatColor, 0.18)};`;
   }
 
   return `border: 2px solid ${hexToRgba(catColor, borderAlpha)}; background-color: ${hexToRgba(catColor, 0.18)}; --chip-line-color: ${hexToRgba(subColor || catColor, 0.7)};`;
@@ -597,7 +593,7 @@ function taskChipHtml(task) {
   const meta = [time, task.duration ? `${task.duration}m` : ''].filter(Boolean).join(' · ');
   const done = isFieldActive(task, 'completed');
   const urgent = isFieldActive(task, 'urgent');
-  const showDecoration = !done && !urgent && !categoryFilter;
+  const showDecoration = !done && !urgent;
   const hasDeadline = Boolean(task.deadline?.start);
   const isMarked = deleteMode && markedForDelete.has(task.id);
   const canLinkTarget = schedulingItem && !schedulingBusy && !activeHighlight && !deleteMode;

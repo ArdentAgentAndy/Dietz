@@ -1,8 +1,9 @@
-import { store } from '../store.js?v=66';
-import { timerState, startTimer, stopTimer } from '../timer.js?v=66';
+import { store } from '../store.js?v=67';
+import { timerState, startTimer, stopTimer } from '../timer.js?v=67';
 import {
   GRAPH_SERIES,
   GROUP_ALIASES,
+  isCompactedCategory,
   liveCategoriesByGroup,
   totalMinutesForCategory,
   totalMinutesForDay,
@@ -10,7 +11,7 @@ import {
   compactedSessions,
   datesForRange,
   minutesByGroupForDates,
-} from '../sessions.js?v=66';
+} from '../sessions.js?v=67';
 import {
   formatDateISO,
   formatDisplayDate,
@@ -20,10 +21,10 @@ import {
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
-} from '../format.js?v=66';
-import { archiveCourseById, deleteCourseById } from './courses.js?v=66';
-import { hexForCourse, hexForLabel, hexForNotionColor } from '../notionColors.js?v=66';
-import { fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=66';
+} from '../format.js?v=67';
+import { archiveCourseById, deleteCourseById } from './courses.js?v=67';
+import { hexForCourse, hexForLabel, hexForNotionColor } from '../notionColors.js?v=67';
+import { fetchNotionSchema, getCachedNotionSchema, getCachedNotionTasks, editNotionSelectOption } from '../notion.js?v=67';
 
 let container = null;
 let tickIntervalId = null;
@@ -212,9 +213,33 @@ function notionSubColor(cat) {
 // field free-text for a deliberately local-only name with no Notion
 // counterpart. Empty (no suggestions, never blocks) on a cache miss.
 function notionOptionsDatalistHtml(group) {
-  const schema = getCachedNotionSchema();
-  const names = (group === 'project' ? schema?.project : schema?.lead) || [];
+  const names = notionOptionNames(group);
   return `<datalist id="category-name-options">${names.map((n) => `<option value="${escapeHtml(n)}"></option>`).join('')}</datalist>`;
+}
+
+// The Notion select a project/research category corresponds to.
+function notionPropertyFor(group) {
+  return group === 'project' ? 'Project' : 'Lead';
+}
+
+function notionOptionNames(group) {
+  const schema = getCachedNotionSchema();
+  return (group === 'project' ? schema?.project : schema?.lead) || [];
+}
+
+const NOTION_OPTION_COLORS = ['default', 'gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'];
+
+// Adds/removes the matching Notion option in the background. The local
+// category change has already happened, so a failure just gets reported.
+function syncNotionOption(group, op, name, color) {
+  editNotionSelectOption(notionPropertyFor(group), op, name, color)
+    .then((res) => {
+      if (!res.ok) throw new Error(res.error || 'unknown error');
+      if (container) rebuild();
+    })
+    .catch((err) => {
+      alert(`Couldn't ${op === 'add' ? 'add' : 'remove'} "${name}" ${op === 'add' ? 'to' : 'from'} Notion's ${notionPropertyFor(group)} options: ${err.message}`);
+    });
 }
 
 // The finer "project/course/lead" sub-identity — only exists for groups
@@ -227,7 +252,7 @@ function notionOptionsDatalistHtml(group) {
 // hexForNotionColor(task[config.colorProp])), not a coincidentally-different
 // one. Homework/Piano have no sub-identity.
 function sessionSubColor(cat) {
-  if (!cat) return null;
+  if (!cat || isCompactedCategory(cat)) return null;
   if (cat.group === 'revision' && cat.courseId) {
     const course = store.table('Courses').find((c) => c.id === cat.courseId);
     if (course) return hexForCourse(course);
@@ -243,7 +268,7 @@ function sessionSubColor(cat) {
 // shape column already says which group it is, so the prefix would be
 // redundant here).
 function sessionSubText(cat) {
-  if (!cat) return '';
+  if (!cat || isCompactedCategory(cat)) return '';
   if (cat.group === 'revision' || cat.group === 'project' || cat.group === 'research') return cat.name;
   return '';
 }
@@ -703,12 +728,31 @@ function openManageCategoryDialog(cat) {
     return `Deleting "${escapeHtml(categoryLabel(cat))}" permanently removes this card AND any of its logged time that hasn't already rolled into a daily total. This cannot be undone.`;
   }
 
+  // On delete, offer to also remove the Notion option, but only when it
+  // exists and no other category of this group still uses the name.
+  function notionRemoveOptionHtml() {
+    if (!isNamed || !notionOptionNames(cat.group).includes(cat.name)) return '';
+    const sameName = store.table('Categories').some((c) => c.id !== cat.id && c.group === cat.group && c.name === cat.name);
+    if (sameName) return '';
+    const field = cat.group === 'project' ? 'project' : 'lead';
+    const taskCount = getCachedNotionTasks().filter((t) => t[field] === cat.name).length;
+    return `
+      <label class="checkbox-label">
+        <input type="checkbox" name="removeNotion">
+        <span>Also delete "${escapeHtml(cat.name)}" from Notion's ${notionPropertyFor(cat.group)} options. ${taskCount
+          ? `${taskCount} task${taskCount === 1 ? '' : 's'} will lose ${taskCount === 1 ? 'its' : 'their'} ${notionPropertyFor(cat.group)} tag, and Notion can't undo this.`
+          : 'No tasks use it.'}</span>
+      </label>
+    `;
+  }
+
   function renderConfirm(action) {
     const isDelete = action === 'delete';
     dialog.innerHTML = `
       <div class="modal-form">
         <h2 class="mono">${isDelete ? 'Delete' : 'Archive'} ${escapeHtml(title)}?</h2>
         <p class="confirm-warning${isDelete ? ' is-danger' : ''}">${isDelete ? deleteMessage() : archiveMessage()}</p>
+        ${isDelete ? notionRemoveOptionHtml() : ''}
         <div class="modal-actions">
           <button type="button" data-action="back">Go back</button>
           <button type="button" class="${isDelete ? 'btn-danger' : 'btn-primary'}" data-action="confirm">${isDelete ? 'Delete' : 'Archive'}</button>
@@ -718,8 +762,10 @@ function openManageCategoryDialog(cat) {
     dialog.querySelector('[data-action="back"]').addEventListener('click', renderMain);
     dialog.querySelector('[data-action="confirm"]').addEventListener('click', () => {
       if (timerState.current?.categoryId === cat.id) stopTimer();
+      const removeNotion = Boolean(dialog.querySelector('[name="removeNotion"]')?.checked);
       if (action === 'archive') doArchive();
       else doDelete();
+      if (removeNotion) syncNotionOption(cat.group, 'remove', cat.name);
       dialog.close();
       rebuild();
     });
@@ -757,8 +803,19 @@ function openAddCategoryDialog(group) {
       </label>
       ${notionOptionsDatalistHtml(group)}
       <p class="muted" style="font-size:12px;">
-        Pick a suggestion to match a real Notion ${group === 'project' ? 'Project' : 'Lead'} value — its color then carries over here and across Sessions automatically.
+        Pick a suggestion to match a real Notion ${notionPropertyFor(group)} value — its color then carries over here and across Sessions automatically.
       </p>
+      <div class="notion-new-option" hidden>
+        <label class="checkbox-label">
+          <input type="checkbox" name="addNotion" checked>
+          Also add it to Notion's ${notionPropertyFor(group)} options
+        </label>
+        <label>Notion color
+          <select name="notionColor">
+            ${NOTION_OPTION_COLORS.map((c) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </label>
+      </div>
       <div class="modal-actions">
         <button type="button" data-action="cancel">Cancel</button>
         <button type="submit" class="btn-primary">Add</button>
@@ -767,15 +824,27 @@ function openAddCategoryDialog(group) {
   `;
 
   const form = dialog.querySelector('form');
+  const nameInput = form.querySelector('[name="name"]');
+  const newOption = form.querySelector('.notion-new-option');
+  const existing = notionOptionNames(group);
+  // The Notion part only shows for a name Notion doesn't have yet.
+  const updateNewOption = () => {
+    const name = nameInput.value.trim();
+    newOption.hidden = !name || existing.includes(name);
+  };
+  nameInput.addEventListener('input', updateNewOption);
+
   form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
   form.addEventListener('submit', () => {
     const data = new FormData(form);
+    const name = String(data.get('name')).trim();
     store.upsert('Categories', {
       group,
-      name: data.get('name'),
+      name,
       courseId: '',
       archived: false,
     });
+    if (!newOption.hidden && data.get('addNotion')) syncNotionOption(group, 'add', name, data.get('notionColor'));
     rebuild();
   });
 
