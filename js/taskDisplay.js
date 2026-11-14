@@ -87,7 +87,7 @@ const CHICAGO_TZ = 'America/Chicago';
 // a task due late evening Chicago time (which crosses into the next UTC
 // calendar day) still lands on the day it was actually meant for. Same
 // technique js/views/public.js's chicagoDay already uses.
-function chicagoDay(date) {
+export function chicagoDay(date) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: CHICAGO_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
   const get = (type) => parts.find((p) => p.type === type).value;
   return `${get('year')}-${get('month')}-${get('day')}`;

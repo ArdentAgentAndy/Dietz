@@ -928,12 +928,15 @@ function publicPayload_() {
 }
 
 // A Canvas deadline (plain yyyy-mm-dd or ISO string) or a Notion date/
-// deadline property ({start,end} or null) -> yyyy-mm-dd, or null. Matches
-// the frontend's own deadline.slice(0,10)/eventDay() convention (see
-// canvas.js/calendar.js) so this never disagrees with what the app shows.
+// deadline property ({start,end} or null) -> yyyy-mm-dd in the script's
+// timezone, or null. Timed values are converted, not sliced: Canvas
+// deadlines are UTC ("...Z"), so a raw slice put late-evening deadlines on
+// the next day. Matches the frontend's eventDay()/taskDay() (Chicago day).
 function digestDay_(value) {
   var start = typeof value === 'string' ? value : (value && value.start);
-  return start ? start.slice(0, 10) : null;
+  if (!start) return null;
+  if (start.length <= 10) return start;
+  return Utilities.formatDate(new Date(start), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
 // Same input -> 24-hour "HH:mm" if it carries a time, else '' (an all-day

@@ -3,6 +3,7 @@ import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask
 import { hexForCourse, hexForNotionColor } from '../notionColors.js?v=67';
 import { escapeHtml, hexToRgba } from '../format.js?v=67';
 import { store } from '../store.js?v=67';
+import { chicagoDay } from '../taskDisplay.js?v=67';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -360,7 +361,10 @@ function visibleEvents() {
 
 function eventDay(event) {
   if (!event.deadline) return null;
-  return event.deadline.slice(0, 10);
+  // Timed Canvas deadlines arrive as UTC ISO strings ("...T04:00:00.000Z"),
+  // so a raw slice puts anything due after ~6pm Chicago on the NEXT day.
+  if (event.deadline.length <= 10) return event.deadline; // all-day — already a plain date
+  return chicagoDay(new Date(event.deadline));
 }
 
 // Linked events source their flag from the Notion task (and `pending` while
