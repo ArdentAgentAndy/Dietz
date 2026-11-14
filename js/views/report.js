@@ -31,7 +31,23 @@ const saveTimers = new Map();
 let symbols = []; // prepared for rendering (hover data)
 let symbolRows = new Map(); // id -> nomenclature row, for tooltips
 let tooltip = null;
-let greekOpen = false;
+// Which nomenclature group's chips the toolbar shows (a group id, '' for
+// ungrouped, NO_TAB for none) — remembered per report, per browser.
+const NO_TAB = '__none__';
+let symbolTab = null;
+// View mode: read-only, editing chrome hidden. Remembered per browser.
+let viewing = false;
+
+const VIEW_KEY = 'dietz:reportViewing';
+const tabKey = () => `dietz:reportSymbolTab:${slug}`;
+
+function readPref(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+function writePref(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* convenience only */ }
+}
 
 const BLOCK_LABELS = { paragraph: 'Paragraph', equation: 'Equation', bullets: 'Bullets', table: 'Table', figure: 'Figure' };
 
@@ -40,9 +56,6 @@ const BLOCK_LABELS = { paragraph: 'Paragraph', equation: 'Equation', bullets: 'B
 // if none), %e = the selection (nothing if none) — see insertMath. So
 // selecting 5x+3 and pressing ∫ puts it under the integral.
 const TEMPLATE_BUTTONS = [
-  ['a⁄b', '(%s)/(⬚)', 'Fraction: a/b or (x+1)/(2y). Wraps the selection.'],
-  ['xₐ', '%e_(⬚)', 'Subscript: f_a'],
-  ['xᵃ', '%e^(⬚)', 'Superscript: x^2'],
   ['√', '√(%s)', 'Square root: sqrt + space. Wraps the selection.'],
   ['∫', '∫_(⬚)^(⬚) %s', 'Integral: int + space. Wraps the selection.'],
   ['∑', '∑_(⬚)^(⬚) %s', 'Sum: sum + space. Wraps the selection.'],
@@ -55,7 +68,10 @@ const TEMPLATE_BUTTONS = [
   ['𝐱', 'bf', 'Bold: rbf', '\\boldsymbol{%s}'],
   ['[ ]', 'mat(%s, ⬚; ⬚, ⬚)', 'Matrix: mat(a, b; c, d) — , between columns, ; between rows'],
   ['×', '×', 'times'], ['⋅', '⋅', 'cdot'], ['⊗', '⊗', 'otimes'], ['±', '±', 'pm or +-'],
-  ['≈', '≈', 'approx or ~='], ['≤', '≤', 'leq or <='], ['≥', '≥', 'geq or >='], ['→', '→', '->'],
+  ['≈', '≈', 'approx or ~='], ['≤', '≤', 'leq or <='], ['≥', '≥', 'geq or >='],
+  ['≼', '≼', 'Matrix inequality (negative semidefinite): preceq + space'],
+  ['≻', '≻', 'Matrix inequality (positive definite): succ + space'],
+  ['→', '→', '->'],
   ['∞', '∞', 'inf'], ['∂', '∂', 'partial'], ['∇', '∇', 'nabla'], ['°', '°', 'deg'],
 ];
 
@@ -66,7 +82,8 @@ export function render(rootEl, params) {
   slug = params.id;
   active = null;
   pendingRebuild = false;
-  greekOpen = false;
+  symbolTab = readPref(tabKey());
+  viewing = readPref(VIEW_KEY) === '1';
   container.closest('#app')?.classList.add('app-report');
 
   tooltip = document.createElement('div');
@@ -100,7 +117,7 @@ export function unmount() {
     container.removeEventListener('focusin', onFocusIn);
     container.removeEventListener('mousedown', onMouseDown);
     container.removeEventListener('mouseover', onMouseOver);
-    container.closest('#app')?.classList.remove('app-report');
+    container.closest('#app')?.classList.remove('app-report', 'report-viewing');
   }
   tooltip?.remove();
   tooltip = null;
@@ -289,6 +306,7 @@ function openField(key) {
 // --- Events --------------------------------------------------------------
 
 function onFocusIn(e) {
+  if (viewing) return;
   const rf = e.target.closest?.('.rf');
   if (rf && !rf.classList.contains('is-editing') && container.contains(rf)) activate(rf);
 }
@@ -344,7 +362,20 @@ function onClick(e) {
       insertMath(ta, hasSelection && btn.dataset.wrap ? btn.dataset.wrap : btn.dataset.insert, active.mode);
       return;
     }
-    case 'greek-toggle': greekOpen = !greekOpen; renderToolbar(); return;
+    case 'symbol-tab': {
+      const tab = btn.dataset.tab;
+      symbolTab = tab === currentTab() ? NO_TAB : tab;
+      writePref(tabKey(), symbolTab);
+      renderToolbar();
+      return;
+    }
+    case 'toggle-view': {
+      if (active) deactivate();
+      viewing = !viewing;
+      writePref(VIEW_KEY, viewing ? '1' : '0');
+      rebuild();
+      return;
+    }
     case 'start-report': mutate(() => R.startReport(slug)); return;
     case 'nom-add-group': {
       let row;
@@ -413,27 +444,41 @@ function chipHtml(s) {
   return `<button type="button" class="rt-chip" data-action="tb-insert" data-insert="${escapeHtml(s.symbol)}" data-sym="${escapeHtml(s.id)}">${renderMath(s.symbol)}</button>`;
 }
 
-function toolbarHtml() {
+// The nomenclature's groups as toolbar tabs: [{ id, name, symbols }], only
+// the ones with a filled-in symbol. id '' = the ungrouped symbols.
+function symbolTabs() {
   const { ungrouped, groups } = R.nomenclature(slug);
   const filled = (list) => list.filter((s) => String(s.symbol || '').trim());
-  const symbolGroups = [
-    ...(filled(ungrouped).length ? [{ name: '', symbols: filled(ungrouped) }] : []),
-    ...groups.map((g) => ({ name: g.name || 'Untitled group', symbols: filled(g.symbols) })).filter((g) => g.symbols.length),
+  return [
+    ...(filled(ungrouped).length ? [{ id: '', name: 'Ungrouped', symbols: filled(ungrouped) }] : []),
+    ...groups.map((g) => ({ id: g.id, name: g.name || 'Untitled group', symbols: filled(g.symbols) })).filter((g) => g.symbols.length),
   ];
+}
+
+// The open tab's id, or null when none is open. Defaults to the first tab
+// (also when the remembered one has since been deleted).
+function currentTab(tabs = symbolTabs()) {
+  if (symbolTab === NO_TAB) return null;
+  return tabs.some((t) => t.id === symbolTab) ? symbolTab : (tabs[0]?.id ?? null);
+}
+
+function toolbarHtml() {
+  const tabs = symbolTabs();
+  const openId = currentTab(tabs);
+  const open = tabs.find((t) => t.id === openId);
+  const toolBtn = ([label, insert, title, wrap]) => `<button type="button" class="rt-btn" data-action="tb-insert" data-insert="${escapeHtml(insert)}"${wrap ? ` data-wrap="${escapeHtml(wrap)}"` : ''} title="${escapeHtml(title)}">${escapeHtml(label)}</button>`;
   return `
-    <div class="rt-row">
-      ${TEMPLATE_BUTTONS.map(([label, insert, title, wrap]) => `<button type="button" class="rt-btn" data-action="tb-insert" data-insert="${escapeHtml(insert)}"${wrap ? ` data-wrap="${escapeHtml(wrap)}"` : ''} title="${escapeHtml(title)}">${escapeHtml(label)}</button>`).join('')}
-      <button type="button" class="rt-btn rt-greek-toggle${greekOpen ? ' active' : ''}" data-action="greek-toggle" title="Greek letters (or ; then a letter: ;w = ω)">αβ</button>
+    <div class="rt-line">
+      ${TEMPLATE_BUTTONS.map(toolBtn).join('')}
+      <span class="rt-sep" aria-hidden="true"></span>
+      ${GREEK_LETTERS.map((g) => `<button type="button" class="rt-btn rt-btn-greek" data-action="tb-insert" data-insert="${g}" title="${GREEK_KEY_FOR[g] ? `;${GREEK_KEY_FOR[g]}` : 'Greek'}">${g}</button>`).join('')}
     </div>
-    ${greekOpen ? `<div class="rt-row rt-greek">${GREEK_LETTERS.map((g) => `<button type="button" class="rt-btn" data-action="tb-insert" data-insert="${g}"${GREEK_KEY_FOR[g] ? ` title=";${GREEK_KEY_FOR[g]}"` : ''}>${g}</button>`).join('')}</div>` : ''}
-    <div class="rt-row rt-symbols">
-      ${symbolGroups.length ? symbolGroups.map((g) => `
-        <span class="rt-group">
-          ${g.name ? `<span class="rt-group-label mono">${escapeHtml(g.name)}</span>` : ''}
-          ${g.symbols.map(chipHtml).join('')}
-        </span>
-      `).join('') : '<span class="muted rt-empty">Symbols you add to the nomenclature appear here.</span>'}
-    </div>
+    ${tabs.length ? `
+      <div class="rt-line rt-tabs">
+        ${tabs.map((t) => `<button type="button" class="rt-tab${t.id === openId ? ' active' : ''}" data-action="symbol-tab" data-tab="${escapeHtml(t.id)}" title="${t.id === openId ? 'Hide' : 'Show'} these symbols">${escapeHtml(t.name)} <span class="rt-tab-count">${t.symbols.length}</span></button>`).join('')}
+      </div>
+      ${open ? `<div class="rt-line rt-symbols">${open.symbols.map(chipHtml).join('')}</div>` : ''}
+    ` : '<div class="rt-line"><span class="muted rt-empty">Symbols you add to the nomenclature appear here.</span></div>'}
     <div class="rt-foot">
       <span class="rt-hint mono muted">Click into a field, then a button inserts at the cursor.</span>
       <details class="rt-help">
@@ -646,10 +691,12 @@ function rebuild() {
 
   refreshSymbols();
   const outline = R.reportOutline(slug);
+  container.closest('#app')?.classList.toggle('report-viewing', viewing);
   container.innerHTML = `
     <section class="card report-head" style="border-color:${hexToRgba(project.hex, 0.6)};">
       <h1 class="mono" style="color:${project.hex};">${escapeHtml(project.name)} <span class="report-head-sub">Report</span></h1>
       <span class="report-status mono muted" data-status>Saved</span>
+      <button type="button" class="${viewing ? 'active' : ''}" data-action="toggle-view" title="${viewing ? 'Back to editing' : 'Read-only view, without the editing controls'}">${viewing ? 'Edit' : 'View'}</button>
       <a href="#/projects/${encodeURIComponent(slug)}" class="btn btn-back">&larr; Project</a>
     </section>
     <div class="report-toolbar card">${toolbarHtml()}</div>

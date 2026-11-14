@@ -4736,11 +4736,21 @@ a.btn {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
-.rt-row {
+/* Each toolbar line is exactly one row: it scrolls sideways instead of
+   wrapping, so the toolbar stays short (tools + Greek, the group tabs, and
+   the open group's symbols). */
+.rt-line {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   align-items: center;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+
+.rt-line > * {
+  flex-shrink: 0;
 }
 
 .rt-btn,
@@ -4749,9 +4759,21 @@ a.btn {
   text-transform: none;
   letter-spacing: 0;
   font-size: 14px;
-  min-width: 34px;
-  padding: 4px 8px;
+  min-width: 32px;
+  padding: 4px 7px;
   line-height: 1.2;
+}
+
+.rt-btn-greek {
+  min-width: 26px;
+  padding: 4px 5px;
+}
+
+.rt-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--border-strong);
 }
 
 .rt-chip {
@@ -4763,35 +4785,28 @@ a.btn {
   font-size: 1.05em;
 }
 
-.rt-greek .rt-btn {
-  min-width: 30px;
-  padding: 3px 6px;
-}
-
-.rt-symbols {
-  gap: 10px;
+/* Nomenclature group tabs: one open at a time; click it again to hide. */
+.rt-tabs {
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
 
-.rt-group {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
-
-.rt-group + .rt-group {
-  padding-left: 10px;
-  border-left: 1px solid var(--border-strong);
-}
-
-.rt-group-label {
+.rt-tab {
   font-size: 10px;
-  text-transform: uppercase;
+  padding: 4px 9px;
   letter-spacing: 0.08em;
   color: var(--muted);
-  margin-right: 2px;
+}
+
+.rt-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.rt-tab-count {
+  opacity: 0.6;
+  margin-left: 2px;
 }
 
 .rt-empty {
@@ -5304,6 +5319,32 @@ a.btn {
   margin-top: 16px;
   display: flex;
   justify-content: center;
+}
+
+/* View mode (header's View button): the report as a read-only document —
+   no toolbar, add/move/delete buttons, empty placeholders or figure paths.
+   Symbol hover still works. */
+#app.report-viewing .report-toolbar,
+#app.report-viewing .report-add-row,
+#app.report-viewing .report-foot,
+#app.report-viewing .report-empty button,
+#app.report-viewing .rb-actions,
+#app.report-viewing .rb-table-ops,
+#app.report-viewing .rb-figure-src,
+#app.report-viewing .nom-actions,
+#app.report-viewing .nom-add-row,
+#app.report-viewing .report-nom .project-card-head button,
+#app.report-viewing .report-lettered,
+#app.report-viewing .rf-placeholder {
+  display: none;
+}
+
+#app.report-viewing .rf {
+  cursor: default;
+}
+
+#app.report-viewing .rf:hover {
+  background: none;
 }
 
 /* No hover on touch screens: the row/block buttons sit in the flow under

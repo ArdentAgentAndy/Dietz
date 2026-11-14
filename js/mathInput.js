@@ -98,7 +98,9 @@ const SYMBOL_TEX = {
   '≤': '\\leq', '≥': '\\geq', '≡': '\\equiv', '∝': '\\propto', '∼': '\\sim', '→': '\\rightarrow',
   '←': '\\leftarrow', '⇒': '\\Rightarrow', '⇔': '\\Leftrightarrow', '↔': '\\leftrightarrow',
   '∈': '\\in', '∉': '\\notin', '⊂': '\\subset', '∀': '\\forall', '∃': '\\exists', '⊥': '\\perp',
-  '∥': '\\parallel', '‖': '\\|', '′': "'", 'ħ': '\\hbar', 'ℓ': '\\ell', '⟨': '\\langle',
+  '∥': '\\parallel', '‖': '\\|', '′': "'",
+  // Matrix (semi)definiteness: A ≼ 0, W ≻ 0.
+  '≼': '\\preccurlyeq', '≽': '\\succcurlyeq', '≺': '\\prec', '≻': '\\succ', 'ħ': '\\hbar', 'ℓ': '\\ell', '⟨': '\\langle',
   '⟩': '\\rangle', '…': '\\ldots', '⋯': '\\cdots', '∘': '\\circ', '°': '{}^{\\circ}',
   '⬚': '{\\color{#8a8a8a}\\square}',
 };
@@ -110,6 +112,7 @@ const WORDS = {
   nabla: '∇', inf: '∞', infty: '∞', times: '×', cdot: '⋅', otimes: '⊗', oplus: '⊕', pm: '±',
   mp: '∓', approx: '≈', neq: '≠', leq: '≤', geq: '≥', equiv: '≡', propto: '∝', perp: '⊥',
   parallel: '∥', deg: '°', hbar: 'ħ', ell: 'ℓ', forall: '∀', exists: '∃', circ: '∘',
+  preceq: '≼', succeq: '≽', prec: '≺', succ: '≻',
 };
 
 // Templates: inserted with their first ⬚ selected, so you type straight

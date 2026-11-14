@@ -55,6 +55,8 @@ test('equation autocorrect: words, templates, sequences', () => {
   assert.deepEqual(autocorrectEquation('x int', 5), { value: 'x ∫', pos: 3 });
   assert.deepEqual(autocorrectEquation('d/d', 3), { value: '(d⬚)/(d⬚)', select: [2, 3] });
   assert.deepEqual(autocorrectEquation('a<=>', 4), { value: 'a⇔', pos: 2 });
+  assert.deepEqual(autocorrectEquation('M preceq', 8), { value: 'M ≼', pos: 3 });
+  assert.equal(linearToLatex('W ≻ 0, A ≼ 0'), 'W \\succ 0,\\; A \\preccurlyeq 0');
   assert.equal(autocorrectEquation('qdot', 4), null);
   assert.equal(autocorrectEquation('\\alpha', 6), null);
 });
