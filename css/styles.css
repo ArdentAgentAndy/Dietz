@@ -5010,11 +5010,7 @@ a.btn {
 }
 
 .nom-col-units {
-  width: 170px;
-}
-
-.nom-col-actions {
-  width: 190px;
+  width: 220px;
 }
 
 .nom-table th {
@@ -5035,21 +5031,37 @@ a.btn {
   vertical-align: middle;
 }
 
-.nom-actions {
-  text-align: right;
-  white-space: nowrap;
+/* A row's group picker / ↑ ↓ ✕ float over the right end of the row on
+   hover (like the report blocks'), instead of taking a column of their own
+   — so Units reaches the right edge of the card. */
+.nom-units,
+.nom-group-row td {
+  position: relative;
 }
 
-.nom-actions .ms-btn,
-.nom-group-select {
+.nom-actions {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 120ms;
 }
 
-.nom-table tr:hover .ms-btn,
-.nom-table tr:hover .nom-group-select,
-.nom-group-select:focus {
+.nom-table tr:hover .nom-actions,
+.nom-actions:focus-within {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .nom-group-select {
@@ -5294,14 +5306,24 @@ a.btn {
   justify-content: center;
 }
 
+/* No hover on touch screens: the row/block buttons sit in the flow under
+   their row instead of floating over it, always visible. */
 @media (max-width: 640px) {
   .nom-col-sym { width: 90px; }
-  .nom-col-units { width: 90px; }
-  .nom-col-actions { width: 80px; }
-  .nom-actions .ms-btn,
-  .nom-group-select,
+  .nom-col-units { width: 110px; }
+  .nom-actions,
+  .rb > .rb-actions {
+    position: static;
+    transform: none;
+    margin-top: 4px;
+    border: none;
+    background: none;
+    padding: 0;
+  }
+  .nom-actions,
   .rb-actions,
   .rb-table-ops {
     opacity: 1;
+    pointer-events: auto;
   }
 }

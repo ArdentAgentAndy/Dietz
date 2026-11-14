@@ -481,8 +481,10 @@ function symbolRowHtml(s, groups) {
     <tr class="nom-row">
       <td class="nom-sym">${fieldHtml(`n|${s.id}|symbol`, { mode: 'eq', placeholder: 'symbol', rebuild: true })}</td>
       <td class="nom-desc">${fieldHtml(`n|${s.id}|description`, { mode: 'text', placeholder: 'description', rebuild: true })}</td>
-      <td class="nom-units">${fieldHtml(`n|${s.id}|units`, { mode: 'text', placeholder: 'units, e.g. m s^-1', rebuild: true })}</td>
-      <td class="nom-actions">${nomActions(s.id, groupSelect)}</td>
+      <td class="nom-units">
+        ${fieldHtml(`n|${s.id}|units`, { mode: 'text', placeholder: 'units, e.g. m s^-1', rebuild: true })}
+        <span class="nom-actions">${nomActions(s.id, groupSelect)}</span>
+      </td>
     </tr>
   `;
 }
@@ -491,7 +493,7 @@ function symbolRowHtml(s, groups) {
 function addSymbolRowHtml(groupId) {
   return `
     <tr class="nom-add-row">
-      <td colspan="4"><button type="button" class="ms-btn" tabindex="-1" data-action="nom-add-symbol" data-group="${groupId}">+ Symbol</button></td>
+      <td colspan="3"><button type="button" class="ms-btn" tabindex="-1" data-action="nom-add-symbol" data-group="${groupId}">+ Symbol</button></td>
     </tr>
   `;
 }
@@ -508,15 +510,17 @@ function nomenclatureHtml() {
       </div>
       ${empty ? '<p class="muted">Define each symbol once here (symbol, what it is, its units), so equations don\'t need "where…" lists. They become chips in the toolbar, and hovering one anywhere shows its description and units.</p>' : `
         <table class="nom-table">
-          <colgroup><col class="nom-col-sym"><col><col class="nom-col-units"><col class="nom-col-actions"></colgroup>
-          <thead><tr><th>Symbol</th><th>Description</th><th>Units</th><th></th></tr></thead>
+          <colgroup><col class="nom-col-sym"><col><col class="nom-col-units"></colgroup>
+          <thead><tr><th>Symbol</th><th>Description</th><th>Units</th></tr></thead>
           <tbody>
             ${ungrouped.map((s) => symbolRowHtml(s, groups)).join('')}
             ${ungrouped.length ? addSymbolRowHtml('') : ''}
             ${groups.map((g) => `
               <tr class="nom-group-row">
-                <td colspan="3">${fieldHtml(`n|${g.id}|name`, { mode: 'plain', placeholder: 'Group name', cls: 'nom-group-name', rebuild: true })}</td>
-                <td class="nom-actions">${nomActions(g.id)}</td>
+                <td colspan="3">
+                  ${fieldHtml(`n|${g.id}|name`, { mode: 'plain', placeholder: 'Group name', cls: 'nom-group-name', rebuild: true })}
+                  <span class="nom-actions">${nomActions(g.id)}</span>
+                </td>
               </tr>
               ${g.symbols.map((s) => symbolRowHtml(s, groups)).join('')}
               ${addSymbolRowHtml(g.id)}
