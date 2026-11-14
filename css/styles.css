@@ -5122,14 +5122,13 @@ a.btn {
   gap: 6px;
 }
 
+/* The block's ↑ ↓ ✕ float over its top-right corner on hover instead of
+   taking a column of their own, so text runs the full width of the card. */
 .rb {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  position: relative;
 }
 
 .rb-body {
-  flex: 1;
   min-width: 0;
 }
 
@@ -5139,6 +5138,22 @@ a.btn {
   opacity: 0;
   transition: opacity 120ms;
   white-space: nowrap;
+}
+
+.rb > .rb-actions {
+  position: absolute;
+  top: -12px;
+  right: 0;
+  z-index: 2;
+  padding: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.rb:hover > .rb-actions {
+  pointer-events: auto;
 }
 
 .rb:hover > .rb-actions,
