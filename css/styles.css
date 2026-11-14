@@ -3825,9 +3825,229 @@ button.projects-pebble:focus-visible {
   margin: 0;
 }
 
-/* Pushed to the far right of the header row. */
+/* Whiteboard's own back link, pushed to the far right of its header row. */
 .project-back {
   margin-left: auto;
+}
+
+/* Pitch + back buttons, pushed to the far right of the header row. */
+.project-head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* GitHub split button: looks like one normal button; the open link and the
+   copy control are its two halves, divided by a hairline. */
+.project-gh {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.project-gh-add {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.project-gh-open {
+  color: inherit;
+  text-decoration: none;
+  padding: 8px 12px 8px 14px;
+}
+
+.project-gh-part {
+  border: none;
+  border-left: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 10px;
+  text-transform: none;
+}
+
+.project-gh-open:hover,
+.project-gh-part:hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.project-gh-part.is-copied {
+  color: var(--green);
+}
+
+/* "← Projects": a solid baby-blue (--accent) button with a pressable
+   bottom edge — the darker ledge under it flattens on :active, so it reads
+   as a physical key rather than a text link. */
+.btn-back,
+a.btn.btn-back {
+  display: inline-block;
+  text-decoration: none;
+  color: var(--bg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 55%, #000);
+  transform: translateY(0);
+  transition: transform 80ms ease, box-shadow 80ms ease, filter 120ms ease;
+}
+
+.btn-back:hover,
+a.btn.btn-back:hover {
+  color: var(--bg);
+  border-color: var(--accent);
+  filter: brightness(1.06);
+}
+
+.btn-back:active,
+a.btn.btn-back:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 color-mix(in srgb, var(--accent) 55%, #000);
+}
+
+/* The pitch, opened from the header's Pitch button. */
+/* Report / Readme: two big side-by-side buttons under the header card. */
+.project-doc-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0; /* stands in for .card + .card's spacing, which a non-card breaks */
+}
+
+.project-doc-btn {
+  padding: 28px 20px;
+  font-size: 16px;
+  letter-spacing: 0.12em;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border-width: 2px;
+}
+
+@media (max-width: 520px) {
+  .project-doc-buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The shared dialog is 420px wide by default; the pitch and readme widen it
+   (the class is added on open and removed on close, see project.js's
+   openPitchDialog/openReadmeDialog). */
+dialog#modal-dialog.is-wide {
+  width: min(960px, 92vw);
+  max-height: 88vh;
+  padding: 28px 32px;
+}
+
+.project-pitch-dialog {
+  gap: 16px;
+}
+
+.project-pitch-dialog h2 {
+  margin: 0;
+}
+
+.project-pitch-dialog .project-pitch dd {
+  font-size: 16px;
+}
+
+.project-pitch-dialog .project-pitch-hook {
+  font-size: 20px;
+}
+
+.project-pitch-dialog textarea {
+  font-size: 15px;
+  min-height: 90px;
+}
+
+.project-readme-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.project-readme-head a {
+  font-size: 12px;
+  text-decoration: none;
+}
+
+/* GitHub-rendered README HTML, styled for the dark theme. */
+.readme-body {
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.readme-body h1,
+.readme-body h2,
+.readme-body h3 {
+  margin: 1.2em 0 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.readme-body h1:first-child,
+.readme-body > div:first-child h1 {
+  margin-top: 0;
+}
+
+.readme-body a {
+  color: var(--accent);
+}
+
+.readme-body a[data-readme-anchor] {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.readme-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.readme-body code {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.88em;
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+
+.readme-body pre {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+
+.readme-body pre code {
+  background: none;
+  padding: 0;
+}
+
+.readme-body table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.readme-body th,
+.readme-body td {
+  border: 1px solid var(--border-strong);
+  padding: 6px 10px;
+}
+
+.readme-body blockquote {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--muted);
+}
+
+/* GitHub wraps headings in an anchor-link div; hide its link icon. */
+.readme-body .anchor,
+.readme-body .octicon {
+  display: none;
 }
 
 /* Today / This week / All time, beside the title in the header. */
@@ -3928,8 +4148,7 @@ button.projects-pebble:focus-visible {
 .ms-title-input,
 .ms-target input,
 .project-inline-form input,
-.project-inline-form textarea,
-.project-conn-add {
+.project-inline-form textarea {
   font-family: 'DM Sans', sans-serif;
   font-size: 14px;
   color: var(--text);
@@ -3944,8 +4163,7 @@ button.projects-pebble:focus-visible {
 .ms-title-input:focus,
 .ms-target input:focus,
 .project-inline-form input:focus,
-.project-inline-form textarea:focus,
-.project-conn-add:focus {
+.project-inline-form textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -4190,59 +4408,6 @@ button.projects-pebble:focus-visible {
   .project-row-delete {
     opacity: 1;
   }
-}
-
-/* Connections: label + project chips (+ add dropdown). */
-.project-conn-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  min-height: 34px;
-}
-
-.project-conn-label {
-  width: 80px;
-  flex-shrink: 0;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.project-conn-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.project-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 4px 3px 10px;
-  border: 1px solid var(--chip-color);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
-  font-size: 13px;
-}
-
-.project-chip a {
-  color: var(--chip-color);
-  text-decoration: none;
-  padding-right: 6px;
-}
-
-.project-chip-remove {
-  padding: 0 6px;
-  font-size: 10px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-}
-
-.project-conn-add {
-  font-size: 12px;
-  padding: 3px 8px;
 }
 
 /* Whiteboard (#/projects/board, js/views/whiteboard.js). */
@@ -4526,4 +4691,602 @@ a.btn {
 
 .ms-btn-danger:hover {
   color: var(--red, #ff6b6b);
+}
+
+/* ---------------------------------------------------------------------
+   Report editor (#/projects/<slug>/report, js/views/report.js)
+   --------------------------------------------------------------------- */
+
+#app.app-report {
+  max-width: 1080px;
+}
+
+.report-head {
+  border-width: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.report-head h1 {
+  margin: 0;
+}
+
+.report-head-sub {
+  color: var(--muted);
+  font-size: 0.6em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-status {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* Symbol toolbar: sticks under the top nav while scrolling the report. */
+.report-toolbar.card {
+  position: sticky;
+  top: calc(var(--topnav-h, 62px) + 6px);
+  z-index: 5;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.rt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.rt-btn,
+.rt-chip {
+  font-family: 'DM Sans', sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+  min-width: 34px;
+  padding: 4px 8px;
+  line-height: 1.2;
+}
+
+.rt-chip {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface2));
+}
+
+.rt-chip .katex {
+  font-size: 1.05em;
+}
+
+.rt-greek .rt-btn {
+  min-width: 30px;
+  padding: 3px 6px;
+}
+
+.rt-symbols {
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.rt-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.rt-group + .rt-group {
+  padding-left: 10px;
+  border-left: 1px solid var(--border-strong);
+}
+
+.rt-group-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.rt-empty {
+  font-size: 13px;
+}
+
+.rt-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rt-hint {
+  font-size: 11px;
+}
+
+.rt-hint.is-flash {
+  animation: rt-hint-flash 0.4s ease-in-out 2;
+}
+
+@keyframes rt-hint-flash {
+  50% { color: var(--accent); }
+}
+
+.rt-help {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.rt-help summary {
+  cursor: pointer;
+  font-size: 11px;
+  text-align: right;
+}
+
+.rt-help ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  line-height: 1.5;
+}
+
+.rt-help kbd {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface2);
+}
+
+/* Fields: rendered until clicked, then a textarea + live preview. */
+.rf {
+  min-height: 1.6em;
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  margin: 0 -6px;
+  cursor: text;
+  line-height: 1.6;
+  outline: none;
+  overflow-wrap: anywhere;
+}
+
+.rf:hover {
+  background: var(--surface2);
+}
+
+.rf:focus-visible {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.rf.is-editing {
+  background: none;
+  padding: 0;
+  margin: 0;
+}
+
+.rf-placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.rf-input {
+  display: block;
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  font-family: 'Space Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  color-scheme: dark;
+}
+
+.rf-input:focus {
+  outline: none;
+}
+
+/* After ; in an equation: the next letter comes out Greek. */
+.rf-input.is-greek-next {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 1px var(--yellow);
+}
+
+.rf-preview {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--accent-dim);
+  overflow-x: auto;
+}
+
+.rf-preview:empty {
+  display: none;
+}
+
+.rf-display {
+  text-align: center;
+}
+
+.rf .katex-display,
+.rf-preview .katex-display {
+  margin: 0.2em 0;
+}
+
+/* ➢ bullets (Word's Wingdings arrow, as in the reports), not discs. */
+.rf-bullets {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.rf-bullets li {
+  position: relative;
+  padding-left: 1.5em;
+  text-align: justify;
+}
+
+.rf-bullets li::before {
+  content: '➢';
+  position: absolute;
+  left: 0.15em;
+  color: var(--muted);
+}
+
+/* Paragraphs read like the report: justified. */
+.rb--paragraph .rf:not(.is-editing) {
+  text-align: justify;
+}
+
+.math-fallback {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+
+/* Hover card for a nomenclature symbol. */
+.sym-tip {
+  position: fixed;
+  z-index: 50;
+  max-width: 320px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sym-tip[hidden] {
+  display: none;
+}
+
+.sym-tip-sym {
+  font-size: 18px;
+}
+
+.sym-tip-units {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.sym-tip-group {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-sym] {
+  cursor: help;
+}
+
+.rf [data-sym]:hover,
+.rt-chip[data-sym]:hover {
+  color: var(--accent);
+}
+
+/* Nomenclature table. */
+.nom-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.nom-col-sym {
+  width: 150px;
+}
+
+.nom-col-units {
+  width: 170px;
+}
+
+.nom-col-actions {
+  width: 190px;
+}
+
+.nom-table th {
+  text-align: left;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.nom-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.nom-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.nom-actions .ms-btn,
+.nom-group-select {
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.nom-table tr:hover .ms-btn,
+.nom-table tr:hover .nom-group-select,
+.nom-group-select:focus {
+  opacity: 1;
+}
+
+.nom-group-select {
+  font-size: 11px;
+  max-width: 100px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 2px 4px;
+  color-scheme: dark;
+}
+
+.nom-table .nom-add-row td {
+  border-bottom: none;
+  padding: 2px 8px 6px;
+}
+
+/* Always visible (unlike the per-row actions, which show on hover). */
+.nom-table .nom-add-row .ms-btn {
+  opacity: 0.6;
+}
+
+.nom-table .nom-add-row .ms-btn:hover {
+  opacity: 1;
+}
+
+.nom-group-row td {
+  padding-top: 14px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.nom-group-name {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+/* Sections and blocks. */
+.report-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.report-section-code {
+  font-size: 18px;
+  color: var(--accent);
+}
+
+.report-section-title {
+  flex: 1;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.report-lettered {
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.report-blocks {
+  display: grid;
+  gap: 6px;
+}
+
+.rb {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.rb-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rb-actions {
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms;
+  white-space: nowrap;
+}
+
+.rb:hover > .rb-actions,
+.report-section-head:hover .rb-actions {
+  opacity: 1;
+}
+
+.rb-eq {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rb-eq > .rf {
+  flex: 1;
+  min-width: 0;
+}
+
+.rb-eq-num {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rb-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.rb-caption > .rf {
+  flex: 0 1 auto;
+  min-width: 120px;
+}
+
+.rb-caption > .rf.is-editing {
+  flex: 1;
+}
+
+.rb-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rb-table-wrap {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+
+.rb-table {
+  border-collapse: collapse;
+  margin: 0 auto;
+  min-width: 60%;
+}
+
+.rb-table th,
+.rb-table td {
+  border: 1px solid var(--border-strong);
+  padding: 2px 8px;
+  min-width: 80px;
+  text-align: center;
+  font-weight: 400;
+}
+
+.rb-table th {
+  background: var(--surface2);
+  font-weight: 600;
+}
+
+.rb-table-ops {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.rb-table:hover + .rb-table-ops,
+.rb-table-wrap:hover + .rb-table-ops,
+.rb-table-ops:hover,
+.rb-table:focus-within ~ .rb-table-ops,
+.rb-table-wrap:focus-within + .rb-table-ops {
+  opacity: 1;
+}
+
+.rb-figure-src {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rb-figure-img {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 8px auto;
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.rb-figure-note {
+  font-size: 13px;
+  text-align: center;
+}
+
+.report-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+
+.report-section:hover .report-add-row,
+.report-add-row:focus-within {
+  opacity: 1;
+}
+
+.report-add-section {
+  margin-left: auto;
+}
+
+.report-empty {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.report-foot {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .nom-col-sym { width: 90px; }
+  .nom-col-units { width: 90px; }
+  .nom-col-actions { width: 80px; }
+  .nom-actions .ms-btn,
+  .nom-group-select,
+  .rb-actions,
+  .rb-table-ops {
+    opacity: 1;
+  }
 }

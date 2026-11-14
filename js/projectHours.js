@@ -15,10 +15,10 @@
 // course id. One key per week that had any time, 'week:<Monday yyyy-MM-dd>';
 // the all-time total is just their sum. Hours logged before this existed
 // were already compacted away, so tallies start from when it shipped.
-import { store } from './store.js?v=67';
-import { formatDateISO } from './format.js?v=67';
-import { getCourseState, setCourseState } from './courseState.js?v=67';
-import { isCompactedCategory } from './sessions.js?v=67';
+import { store } from './store.js?v=68';
+import { formatDateISO } from './format.js?v=68';
+import { getCourseState, setCourseState } from './courseState.js?v=68';
+import { isCompactedCategory } from './sessions.js?v=68';
 
 const WEEK_PREFIX = 'week:';
 

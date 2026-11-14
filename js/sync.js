@@ -1,8 +1,14 @@
-import { store } from './store.js?v=67';
-import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=67';
+import { store } from './store.js?v=68';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=68';
 
-const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems'];
+const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems', 'ReportNomenclature', 'ReportBlocks'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
+// Which tables the deployed backend actually has, from the last bootstrap.
+// A table added on the frontend before Code.gs is redeployed makes the old
+// backend throw "Unknown table" for the whole batch — which used to block
+// every other change from syncing too. Ops for a table not in this list are
+// held in the outbox until a bootstrap shows the backend knows it.
+const SERVER_TABLES_KEY = 'dietz:serverTables';
 const RETRY_BASE_MS = 3000;
 const RETRY_MAX_MS = 60000;
 const PERIODIC_MS = 3 * 60 * 1000;
@@ -57,6 +63,21 @@ function needsInitialPush() {
   return localStorage.getItem(INITIAL_PUSH_KEY) !== 'true';
 }
 
+// null until the first bootstrap on this device (then nothing is held back).
+function serverTables() {
+  try {
+    const list = JSON.parse(localStorage.getItem(SERVER_TABLES_KEY) || 'null');
+    return Array.isArray(list) ? new Set(list) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function heldOps() {
+  const known = serverTables();
+  return known ? store.data.outbox.filter((op) => !known.has(op.table)) : [];
+}
+
 async function postOps(config, ops) {
   for (let i = 0; i < ops.length; i += 200) {
     const res = await fetch(config.url, {
@@ -71,7 +92,9 @@ async function postOps(config, ops) {
 
 async function pushAllLocalData(config) {
   const ops = [];
+  const known = serverTables();
   for (const table of TABLE_NAMES) {
+    if (known && !known.has(table)) continue;
     for (const row of store.table(table)) ops.push({ op: 'upsert', table, row });
   }
   await postOps(config, ops);
@@ -82,6 +105,7 @@ async function pullBootstrap(config) {
   const res = await fetch(`${config.url}?action=bootstrap&token=${encodeURIComponent(config.token)}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error);
+  localStorage.setItem(SERVER_TABLES_KEY, JSON.stringify(TABLE_NAMES.filter((t) => Array.isArray(data[t]))));
 
   // A backend hiccup, a misconfigured URL, or a sheet with renamed/missing
   // tabs can all come back as "everything's empty" — that must never be
@@ -168,17 +192,29 @@ async function flushOutbox() {
       store.data.outbox = [];
       store.persist();
     } else {
-      const batch = store.data.outbox.slice(0, 200);
+      // No table list yet (first sync since this check was added): learn it
+      // from a pull first, or one unknown-table op would fail the push below
+      // before the pull ever gets to run. The pull re-applies the outbox on
+      // top of what it receives, so nothing queued is lost.
+      if (!serverTables()) await pullBootstrap(config);
+      const held = new Set(heldOps());
+      const batch = store.data.outbox.filter((op) => !held.has(op)).slice(0, 200);
       if (batch.length) {
         await postOps(config, batch);
-        store.data.outbox = store.data.outbox.slice(batch.length);
+        const sent = new Set(batch);
+        store.data.outbox = store.data.outbox.filter((op) => !sent.has(op));
         store.persist();
       }
     }
 
     await pullBootstrap(config);
     retryDelay = RETRY_BASE_MS;
-    setStatus('synced');
+    const held = heldOps();
+    if (held.length) {
+      const tables = [...new Set(held.map((op) => op.table))].join(', ');
+      console.warn(`Dietz sync: holding ${held.length} change(s) for ${tables} — the deployed Code.gs doesn't have that table yet; redeploy it.`);
+    }
+    setStatus('synced', held.length);
   } catch (err) {
     console.error('Dietz sync failed', err);
     setStatus('error', store.data.outbox.length);

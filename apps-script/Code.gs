@@ -64,7 +64,8 @@ var TABLES = {
   // are comma-joined project slugs ("leads to" / "used in" are the same
   // links read the other way); links is a JSON [{ label, url }] list.
   // ProjectLog: dated notes, one row each.
-  Projects: { columns: ['id', 'pitch_hook', 'pitch_problem', 'pitch_approach', 'pitch_novel', 'pitch_results', 'pitch_ask', 'buildsOn', 'skills', 'links'], key: ['id'] },
+  // github: the repo URL, set from the project page's GitHub button.
+  Projects: { columns: ['id', 'pitch_hook', 'pitch_problem', 'pitch_approach', 'pitch_novel', 'pitch_results', 'pitch_ask', 'buildsOn', 'skills', 'links', 'github'], key: ['id'] },
   ProjectLog: { columns: ['id', 'projectId', 'date', 'text'], key: ['id'] },
   ProjectMilestones: { columns: ['id', 'projectId', 'kind', 'parentId', 'title', 'sortOrder', 'done', 'targetDate', 'taskIds'], key: ['id'] },
   // Projects whiteboard (#/projects/board, js/views/whiteboard.js). kind:
@@ -72,6 +73,15 @@ var TABLES = {
   // between two boxes, fromId -> toId). x/y/w/h in board pixels; color is a
   // Notion color name.
   BoardItems: { columns: ['id', 'kind', 'x', 'y', 'w', 'h', 'text', 'color', 'fromId', 'toId'], key: ['id'] },
+  // Project reports (#/projects/<slug>/report, js/report.js).
+  // ReportNomenclature: kind 'group' (name) or 'symbol' (symbol, description,
+  // units; groupId = its group). ReportBlocks: kind 'section' (text = title,
+  // data {"lettered"}) or a block in one (sectionId): paragraph, bullets,
+  // equation, table (data {"rows"}), figure (text = image path/URL);
+  // caption for tables/figures. Text is math shorthand, stored literally
+  // (see isReportTextColumn_).
+  ReportNomenclature: { columns: ['id', 'projectId', 'kind', 'groupId', 'name', 'symbol', 'description', 'units', 'sortOrder'], key: ['id'] },
+  ReportBlocks: { columns: ['id', 'projectId', 'kind', 'sectionId', 'sortOrder', 'text', 'caption', 'data'], key: ['id'] },
 };
 
 function checkToken_(token) {
@@ -150,8 +160,16 @@ function isDateLikeColumn_(tableName, col) {
   return tableName === 'Settings' || /date|start|end/i.test(col);
 }
 
+// Report text is math shorthand: "1/2" would become a date, "-omega" or
+// "=…" a formula, "2" a number. Every text column there gets the same
+// literal-text guard (sortOrder stays a number).
+function isReportTextColumn_(tableName, col) {
+  return (tableName === 'ReportNomenclature' || tableName === 'ReportBlocks') && col !== 'sortOrder';
+}
+
 function forSheetValue_(tableName, col, value) {
-  if (isDateLikeColumn_(tableName, col) && value !== '' && value !== undefined && value !== null) {
+  if ((isDateLikeColumn_(tableName, col) || isReportTextColumn_(tableName, col))
+    && value !== '' && value !== undefined && value !== null) {
     return "'" + value;
   }
   return value;

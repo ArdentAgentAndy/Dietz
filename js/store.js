@@ -1,7 +1,7 @@
-import { seedData } from './seed.js?v=67';
+import { seedData } from './seed.js?v=68';
 
 const STORAGE_KEY = 'dietz:data';
-const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems'];
+const TABLES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems', 'ReportNomenclature', 'ReportBlocks'];
 
 function emptyData() {
   // tombstones: every {table, id} this device has ever explicitly deleted,
@@ -37,6 +37,20 @@ class Store {
       this.seed();
       this.persist();
     }
+    // Another tab/preview of the app (same storage) saved: adopt its data.
+    // Every change is saved the moment it's made, so the stored copy is
+    // always the newest — without this, an instance left open would write
+    // its stale in-memory copy back over it on its next save (a sync, or
+    // any edit). The 'storage' event only fires in the *other* instances.
+    window.addEventListener('storage', (e) => {
+      if (e.key !== STORAGE_KEY || !e.newValue) return;
+      try {
+        this.data = JSON.parse(e.newValue);
+        this.notify();
+      } catch (err) {
+        console.error('Ignoring unreadable store update from another tab', err);
+      }
+    });
   }
 
   seed() {

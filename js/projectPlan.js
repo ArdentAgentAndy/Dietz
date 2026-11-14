@@ -14,7 +14,7 @@
 // Codes are never stored, they come from order every time: phases are
 // lettered A, B, C; checkpoints are numbered 1, 2, 3 continuously across
 // phases; steps are <checkpoint>.<n>, e.g. 3.1. So reordering renumbers.
-import { store } from './store.js?v=67';
+import { store } from './store.js?v=68';
 
 // The pitch: what you'd say to a professor. Order = display order.
 export const PITCH_FIELDS = [
@@ -26,7 +26,8 @@ export const PITCH_FIELDS = [
   { key: 'pitch_ask', label: 'Ask', hint: 'Optional: what you want from them (advice, lab, funding).' },
 ];
 
-// The project's own row (pitch, connections, links); { id } if none yet.
+// The project's own row (pitch, links); { id } if none yet. Rows may still
+// carry buildsOn/skills from the removed Connections card (v68); unused.
 export function getProjectRow(projectId) {
   return store.table('Projects').find((p) => p.id === projectId) || { id: projectId };
 }
@@ -37,26 +38,30 @@ export function savePitch(projectId, fields) {
   store.upsert('Projects', { id: projectId, ...fields });
 }
 
-// --- Connections: buildsOn / skills are comma-joined project slugs ---------
+// --- GitHub repo: set from the project page's GitHub button ------------
 
-export function slugList(value) {
-  return String(value || '').split(',').map((s) => s.trim()).filter(Boolean);
+// "owner/repo", "github.com/owner/repo", or any github.com URL into the repo
+// (…/tree/main/x, .git) -> { owner, repo }, else null.
+export function parseGithubRepo(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const short = text.match(/^([\w.-]+)\/([\w.-]+)$/);
+  if (short) return { owner: short[1], repo: short[2].replace(/\.git$/, '') };
+  let url;
+  try { url = new URL(/^[a-z]+:\/\//i.test(text) ? text : `https://${text}`); } catch (e) { return null; }
+  if (url.hostname.replace(/^www\./, '') !== 'github.com') return null;
+  const [owner, repo] = url.pathname.split('/').filter(Boolean);
+  return owner && repo ? { owner, repo: repo.replace(/\.git$/, '') } : null;
 }
 
-export function addToList(projectId, field, slug) {
-  const list = slugList(getProjectRow(projectId)[field]);
-  if (!list.includes(slug)) store.upsert('Projects', { id: projectId, [field]: [...list, slug].join(',') });
+export function getGithubRepo(projectId) {
+  return parseGithubRepo(getProjectRow(projectId).github);
 }
 
-export function removeFromList(projectId, field, slug) {
-  const list = slugList(getProjectRow(projectId)[field]);
-  store.upsert('Projects', { id: projectId, [field]: list.filter((s) => s !== slug).join(',') });
-}
-
-// Every project id whose `field` list contains this one (the reverse view:
-// "leads to" from others' buildsOn, "used in" from others' skills).
-export function projectsListing(field, slug) {
-  return store.table('Projects').filter((p) => slugList(p[field]).includes(slug)).map((p) => p.id);
+// Stored as the canonical https://github.com/owner/repo ('' clears it).
+export function saveGithubRepo(projectId, repo) {
+  const github = repo ? `https://github.com/${repo.owner}/${repo.repo}` : '';
+  store.upsert('Projects', { id: projectId, github });
 }
 
 // --- Resources: links as a JSON [{ label, url }] list --------------------

@@ -1,4 +1,4 @@
-import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=67';
+import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=68';
 
 // Top-nav structure: Menu (rendered to the right of the Settings gear, see
 // index.html's #top-nav-menu — always reachable, never part of the
@@ -79,17 +79,23 @@ export const CHANNELS = [
     subchannels: [],
   },
   {
-    // Outer-ring placeholder sitting where Contacts used to be (500,240) —
-    // not yet a real channel, just holding the slot. Behaves exactly like
-    // Resources below: selectable/zoomable, nothing to show, no route.
-    id: 'placeholder-1',
-    label: '???',
+    // v68 — takes over the top outer-ring slot (500,240) placeholder-1 used
+    // to hold. T keybind on the hub. Diagram/Report have no route (no page)
+    // yet, so they're label-only like a ??? slot — menu.js only navigates
+    // when a sub has a route. The zoomed view's last 2 slots fill with ???
+    // on their own.
+    id: 'tools',
+    label: 'Tools',
+    color: 'gray',
     pos: { x: 500, y: 240 },
-    subchannels: [],
+    subchannels: [
+      { id: 'diagram', label: 'Diagram' },
+      { id: 'report', label: 'Report' },
+    ],
   },
   {
     // Not needed right now — parked as a third outer-ring placeholder
-    // alongside placeholder-1/placeholder-2, same "???", no icon, no route.
+    // alongside placeholder-2, same "???", no icon, no route.
     id: 'resources',
     label: '???',
     pos: { x: 323, y: 677 },
@@ -122,8 +128,9 @@ export const CHANNELS = [
     subchannels: [],
   },
   {
-    // Outer-ring placeholder sitting where Public used to be (500,760) —
-    // see placeholder-1 above.
+    // Outer-ring placeholder sitting where Public used to be (500,760) — not
+    // yet a real channel, just holding the slot: selectable/zoomable,
+    // nothing to show, no route.
     id: 'placeholder-2',
     label: '???',
     pos: { x: 500, y: 760 },

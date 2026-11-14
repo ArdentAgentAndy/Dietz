@@ -1,8 +1,8 @@
-import { escapeHtml } from '../format.js?v=67';
-import { fetchNotionSchema } from '../notion.js?v=67';
-import { allProjects } from '../projects.js?v=67';
-import { TIERS, TIER_SLOTS, CURRENT_TIER, SKILL_TAGS } from '../projectThemes.js?v=67';
-import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=67';
+import { escapeHtml } from '../format.js?v=68';
+import { fetchNotionSchema } from '../notion.js?v=68';
+import { allProjects } from '../projects.js?v=68';
+import { TIERS, TIER_SLOTS, CURRENT_TIER, SKILL_TAGS } from '../projectThemes.js?v=68';
+import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=68';
 
 // The Projects index (#/projects), reached from the Menu's Inner layer. Two
 // themes (see js/projectThemes.js):
