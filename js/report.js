@@ -15,7 +15,7 @@
 //
 // Numbers are never stored, they come from order: lettered sections A, B, …;
 // equations (A.1), (A.2) per section; tables and figures 1, 2, … overall.
-import { store } from './store.js?v=68';
+import { store } from './store.js?v=69';
 
 const NOM = 'ReportNomenclature';
 const BLK = 'ReportBlocks';

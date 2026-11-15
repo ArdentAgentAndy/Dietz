@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=68';
-import { escapeHtml, hexToRgba } from '../format.js?v=68';
-import { hexForNotionColor } from '../notionColors.js?v=68';
+import { store } from '../store.js?v=69';
+import { escapeHtml, hexToRgba } from '../format.js?v=69';
+import { hexForNotionColor } from '../notionColors.js?v=69';
 
 // Projects whiteboard (#/projects/board): one brainstorming board shared by
 // every project. Not the plan itself (that lives on each project page); just

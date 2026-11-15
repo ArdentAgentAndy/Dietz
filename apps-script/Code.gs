@@ -60,14 +60,16 @@ var TABLES = {
   // ProjectMilestones: one row per phase/checkpoint/step (kind), parentId
   // links it to the level above, sortOrder orders siblings. Codes (A, 3,
   // 3.1) are computed from order on the frontend, never stored. taskIds:
-  // comma-joined Notion task ids linked to a step. Projects' buildsOn/skills
+  // comma-joined Notion task ids linked to a step (targetDate and taskIds
+  // are unused by the UI for now). description / doneWhen: a step's notes,
+  // kept literal (see isReportTextColumn_). Projects' buildsOn/skills
   // are comma-joined project slugs ("leads to" / "used in" are the same
   // links read the other way); links is a JSON [{ label, url }] list.
   // ProjectLog: dated notes, one row each.
   // github: the repo URL, set from the project page's GitHub button.
   Projects: { columns: ['id', 'pitch_hook', 'pitch_problem', 'pitch_approach', 'pitch_novel', 'pitch_results', 'pitch_ask', 'buildsOn', 'skills', 'links', 'github'], key: ['id'] },
   ProjectLog: { columns: ['id', 'projectId', 'date', 'text'], key: ['id'] },
-  ProjectMilestones: { columns: ['id', 'projectId', 'kind', 'parentId', 'title', 'sortOrder', 'done', 'targetDate', 'taskIds'], key: ['id'] },
+  ProjectMilestones: { columns: ['id', 'projectId', 'kind', 'parentId', 'title', 'sortOrder', 'done', 'targetDate', 'taskIds', 'description', 'doneWhen'], key: ['id'] },
   // Projects whiteboard (#/projects/board, js/views/whiteboard.js). kind:
   // 'box' (text note), 'section' (titled frame), 'edge' (dashed connector
   // between two boxes, fromId -> toId). x/y/w/h in board pixels; color is a
@@ -164,6 +166,7 @@ function isDateLikeColumn_(tableName, col) {
 // "=…" a formula, "2" a number. Every text column there gets the same
 // literal-text guard (sortOrder stays a number).
 function isReportTextColumn_(tableName, col) {
+  if (tableName === 'ProjectMilestones') return col === 'description' || col === 'doneWhen';
   return (tableName === 'ReportNomenclature' || tableName === 'ReportBlocks') && col !== 'sortOrder';
 }
 

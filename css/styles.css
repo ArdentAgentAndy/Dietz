@@ -812,6 +812,18 @@ body.home-page .card {
   border-color: var(--node-color-strong, var(--accent));
 }
 
+/* Touch screens have no hover, so the wedges have nothing to do there, and
+   they can swallow taps: each is a full-stage box clipped to its slice, and
+   Safari doesn't always honor clip-path when hit-testing (worse under the
+   ring's rotate()), so the last wedge took every tap and no channel opened.
+   Let taps fall through to the blobs themselves (.menu-node keeps
+   pointer-events: auto). */
+@media (hover: none), (pointer: coarse) {
+  .menu-sector {
+    pointer-events: none;
+  }
+}
+
 /* Roughly the same footprint as the old pill (112x32) but pebble-shaped
    instead of fully-rounded. */
 .menu-node-sub {
@@ -3905,27 +3917,29 @@ a.btn.btn-back:active {
   box-shadow: 0 0 0 color-mix(in srgb, var(--accent) 55%, #000);
 }
 
-/* The pitch, opened from the header's Pitch button. */
-/* Report / Readme: two big side-by-side buttons under the header card. */
+/* Roadmap / Report / Readme / Log / Resources: big buttons under the header card. */
 .project-doc-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
   margin: 16px 0; /* stands in for .card + .card's spacing, which a non-card breaks */
 }
 
 .project-doc-btn {
-  padding: 28px 20px;
-  font-size: 16px;
-  letter-spacing: 0.12em;
+  padding: 8px;
+  font-size: 15px;
+  letter-spacing: 0.1em;
   border-radius: var(--radius);
   background: var(--surface);
   border-width: 2px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 760px) {
   .project-doc-buttons {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -4004,6 +4018,67 @@ dialog#modal-dialog.is-wide {
 .readme-editor:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* The warning screen before a README push (js/views/project.js showConfirm). */
+.readme-confirm {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--yellow, #e0b84f);
+  border-radius: var(--radius-sm);
+  background: rgba(224, 184, 79, 0.08);
+}
+
+.readme-confirm p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.readme-confirm-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--yellow, #e0b84f);
+}
+
+.readme-confirm-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.readme-confirm-facts dt {
+  color: var(--muted);
+}
+
+.readme-confirm-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.readme-added {
+  color: var(--green, #6fcf97);
+}
+
+.readme-removed {
+  color: var(--red, #ff6b6b);
+}
+
+.readme-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.readme-expiry {
+  margin: 8px 0 0;
+  font-size: 11px;
+}
+
+.readme-expiry.is-warning {
+  color: var(--yellow, #e0b84f);
 }
 
 .readme-status {
@@ -4162,10 +4237,6 @@ dialog#modal-dialog.is-wide {
   margin-right: auto;
 }
 
-.project-next-target {
-  font-size: 12px;
-}
-
 .project-pitch {
   margin: 0;
   display: grid;
@@ -4213,7 +4284,7 @@ dialog#modal-dialog.is-wide {
 /* Same look as dialog inputs (.modal-form input). */
 .project-pitch-form textarea,
 .ms-title-input,
-.ms-target input,
+.ms-field textarea,
 .project-inline-form input,
 .project-inline-form textarea {
   font-family: 'DM Sans', sans-serif;
@@ -4228,28 +4299,26 @@ dialog#modal-dialog.is-wide {
 
 .project-pitch-form textarea:focus,
 .ms-title-input:focus,
-.ms-target input:focus,
+.ms-field textarea:focus,
 .project-inline-form input:focus,
 .project-inline-form textarea:focus {
   outline: none;
   border-color: var(--accent);
 }
 
-/* Milestones: phase (A) > checkpoint (1) > step (1.1). */
+/* Milestones: phase (A) > checkpoint (1) > step (1.1). Each level reads
+   differently: a phase is a framed block with a tinted header band in the
+   project color; a checkpoint is a bordered box inside it; steps are plain
+   divided rows inside the checkpoint box. */
 .ms-tree {
   display: grid;
-  gap: 18px;
+  gap: 20px;
 }
 
 .ms-phase {
-  border-left: 3px solid var(--phase-color);
-  padding-left: 12px;
-  display: grid;
-  gap: 8px;
-}
-
-.ms-checkpoint {
-  margin-left: 6px;
+  border: 1px solid color-mix(in srgb, var(--phase-color) 40%, transparent);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
 .ms-row {
@@ -4259,23 +4328,65 @@ dialog#modal-dialog.is-wide {
   min-height: 30px;
 }
 
+.ms-row-phase {
+  padding: 8px 10px 8px 6px;
+  background: color-mix(in srgb, var(--phase-color) 14%, transparent);
+}
+
+/* A phase's steps-done bar: along the bottom of its header band. */
+.ms-phase-progress {
+  height: 4px;
+  background: color-mix(in srgb, var(--phase-color) 18%, transparent);
+}
+
+.ms-phase-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--phase-color);
+  transition: width 200ms;
+}
+
+.ms-phase-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--phase-color) 30%, transparent);
+}
+
+.ms-checkpoint {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+}
+
+.ms-row-checkpoint {
+  padding: 6px 10px 6px 4px;
+}
+
 .ms-code {
   min-width: 2.2em;
   font-weight: 700;
 }
 
+/* Phase letter: a filled badge. */
 .ms-code-phase {
-  min-width: 26px;
-  text-align: center;
-  font-size: 18px;
-  color: var(--phase-color);
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--phase-color);
+  color: var(--bg, #111);
+  font-size: 16px;
 }
 
 .ms-row-phase .ms-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
+/* Checkpoint number: an outlined circle (filled once all its steps are done). */
 .ms-code-checkpoint {
   display: inline-grid;
   place-items: center;
@@ -4291,6 +4402,11 @@ dialog#modal-dialog.is-wide {
   color: var(--bg, #111);
 }
 
+.ms-row-checkpoint .ms-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .ms-title {
   cursor: text;
   flex: 1;
@@ -4302,22 +4418,33 @@ dialog#modal-dialog.is-wide {
   min-width: 0;
 }
 
+/* Done/total counts: the last thing on every row, one right-aligned column. */
 .ms-meta {
+  flex: none;
+  width: 5ch; /* fits "12/34"; left-aligned so the buttons sit right up against it */
+  margin-left: -4px;
+  text-align: left;
   font-size: 12px;
 }
 
-.ms-target input {
-  font-size: 12px;
-  padding: 2px 6px;
-  width: auto;
-  background: transparent;
-  border-color: var(--border);
-}
-
+/* Steps: plain rows under the checkpoint's header, divided by hairlines. */
 .ms-steps {
   list-style: none;
-  margin: 2px 0 0 36px;
-  padding: 0;
+  margin: 0;
+  padding: 0 10px 0 28px;
+  border-top: 1px solid var(--border);
+}
+
+.ms-step + .ms-step {
+  border-top: 1px solid var(--border);
+}
+
+.ms-row-step {
+  min-height: 34px;
+}
+
+.ms-row-step .ms-title {
+  font-size: 14px;
 }
 
 .ms-row-step .ms-code {
@@ -4330,76 +4457,175 @@ dialog#modal-dialog.is-wide {
   color: var(--muted);
 }
 
-/* Notion tasks linked to a step, listed under it. */
-.ms-tasks {
-  list-style: none;
-  margin: 0 0 4px 56px;
+/* Fold toggles: phase, checkpoint, step. */
+.ms-fold {
+  flex: none;
+  width: 30px;
+  height: 30px;
   padding: 0;
-  display: grid;
-  gap: 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  letter-spacing: normal;
 }
 
-.ms-task {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.ms-fold:hover,
+.ms-fold:focus-visible {
+  color: var(--text);
+  background: var(--surface2);
+}
+
+.ms-has-detail {
   font-size: 13px;
 }
 
-.ms-task-state {
-  width: 1em;
+/* An open step: its description and done-when. */
+.ms-step-detail {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px 40px;
+}
+
+.ms-field {
+  display: grid;
+  gap: 4px;
+}
+
+.ms-field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.project-pick-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mode-color, var(--accent));
+  background: var(--mode-tint, transparent);
+}
+
+/* Roadmap card's [←] / [→] phase switcher, next to Open roadmap. */
+.project-roadmap-nav {
+  display: flex;
+  gap: 6px;
+}
+
+/* A calendar task card shows its step on the roadmap when clicked. */
+.project-week .cal-chip.is-readonly {
+  cursor: pointer;
+}
+
+/* A step row flashed from its calendar task (3 pulses, like canvas-flash). */
+.ms-row.ms-flash {
+  border-radius: var(--radius-sm);
+  animation: ms-flash 0.5s ease-in-out 3;
+}
+
+@keyframes ms-flash {
+  50% {
+    background: color-mix(in srgb, var(--phase-color) 28%, transparent);
+    box-shadow: 0 0 0 2px var(--phase-color);
+  }
+}
+
+/* Calendar card's [C] / [X] mode buttons, between the title and the week nav. */
+.project-week-modes {
+  display: flex;
+  gap: 6px;
+  margin-right: 12px;
+}
+
+/* Picking a day: every day column is a target, outlined in the project color on hover. */
+.project-week.is-picking .cal-day-col {
+  cursor: pointer;
+}
+
+.project-week.is-picking .cal-day-col:hover {
+  outline: 2px dashed var(--mode-color, var(--accent));
+  outline-offset: -2px;
+}
+
+.project-week.is-picking .cal-chip {
+  pointer-events: none;
+}
+
+/* Roadmap card: the days a step is on, and its "+ day" link button. */
+.ms-link-day {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
   color: var(--muted);
 }
 
-.ms-task.is-done .ms-task-name {
-  color: var(--muted);
+.ms-link-day.is-done {
   text-decoration: line-through;
 }
 
-.ms-task-date {
-  font-size: 11px;
-}
-
-.ms-task-unlink {
+.ms-link-btn {
+  flex: none;
   opacity: 0;
-  padding: 0 6px;
+  transition: opacity 120ms;
 }
 
-.ms-task:hover .ms-task-unlink,
-.ms-task-unlink:focus {
+.ms-row:hover .ms-link-btn,
+.ms-link-btn:focus-visible,
+.ms-link-btn.is-active {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .ms-task-unlink {
+  .ms-link-btn {
     opacity: 1;
   }
 }
 
-/* "link" picker dialog. */
-.ms-picker {
-  list-style: none;
+/* Roadmap card: a phase's own Edit / Done, and the phase being edited. */
+.ms-phase-edit {
+  flex: none;
+}
+
+.ms-phase-edit.is-active {
+  border-color: var(--phase-color);
+  color: var(--phase-color);
+}
+
+.ms-phase.is-editing {
+  border-color: var(--phase-color);
+  box-shadow: 0 0 0 1px var(--phase-color);
+}
+
+.ms-title.is-static {
+  cursor: default;
+}
+
+.ms-check:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.ms-field-text {
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 4px;
-  max-height: 50vh;
-  overflow-y: auto;
+  font-size: 14px;
+  white-space: pre-wrap;
+  line-height: 1.45;
 }
 
-.ms-picker-item {
+.ms-field textarea {
   width: 100%;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: normal;
-  font-family: 'DM Sans', sans-serif;
-}
-
-.ms-picker-item.is-done {
-  color: var(--muted);
+  background: var(--surface);
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .project-error {
@@ -4411,14 +4637,13 @@ dialog#modal-dialog.is-wide {
 .project-inline-form {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: stretch;
   flex-wrap: wrap;
 }
 
-.project-inline-form textarea,
+.project-inline-form input[name="text"],
 .project-inline-form input[name="url"] {
   flex: 1 1 240px;
-  resize: vertical;
 }
 
 .project-inline-form input[name="label"] {

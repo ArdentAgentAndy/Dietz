@@ -2,7 +2,7 @@
 // Code.gs: githubReadmeGet_ / githubMarkdown_ / githubReadmePut_). The
 // GitHub token lives only in the backend's Script Properties; this side just
 // sends the Dietz token, in the POST body (never in a URL).
-import { store } from './store.js?v=68';
+import { store } from './store.js?v=69';
 
 function getConfig() {
   const settings = store.table('Settings');
@@ -49,6 +49,26 @@ export function renderMarkdown(repo, text) {
 // -> { ok, sha, commitUrl } | { error }
 export function saveReadme(repo, path, content, sha, message) {
   return call('github-readme-put', { repo, path, content, sha, message }, 'sha');
+}
+
+// The fine-grained token in Script Properties (GITHUB_TOKEN) expires on this
+// day. When it does, editing falls back to read-only until a new one is made
+// (same steps: Contents read & write, the same repos) and pasted in. Update
+// this date with it.
+export const GITHUB_TOKEN_EXPIRES = '2027-08-01';
+const EXPIRY_WARN_DAYS = 30;
+
+// -> { text, level: 'ok' | 'soon' | 'expired' } for the Readme window.
+export function tokenExpiryNote(today = new Date()) {
+  const [y, m, d] = GITHUB_TOKEN_EXPIRES.split('-').map(Number);
+  const expires = new Date(y, m - 1, d);
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.round((expires - start) / 86400000);
+  const label = expires.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  if (days < 0) return { level: 'expired', text: `GitHub token expired ${label}. Make a new one and replace GITHUB_TOKEN.` };
+  if (days === 0) return { level: 'soon', text: `GitHub token expires today (${label}). Make a new one.` };
+  if (days <= EXPIRY_WARN_DAYS) return { level: 'soon', text: `GitHub token expires in ${days} day${days === 1 ? '' : 's'} (${label}). Make a new one soon.` };
+  return { level: 'ok', text: `Token expires ${label}` };
 }
 
 // The backend has no GitHub token/allow-list (or predates this proxy): the

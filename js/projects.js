@@ -1,8 +1,8 @@
-import { store } from './store.js?v=68';
-import { getCachedNotionSchema } from './notion.js?v=68';
-import { hexForLabel, hexForNotionColor } from './notionColors.js?v=68';
-import { PROJECT_THEMES } from './projectThemes.js?v=68';
-import { isCompactedCategory } from './sessions.js?v=68';
+import { store } from './store.js?v=69';
+import { getCachedNotionSchema } from './notion.js?v=69';
+import { hexForLabel, hexForNotionColor } from './notionColors.js?v=69';
+import { PROJECT_THEMES } from './projectThemes.js?v=69';
+import { isCompactedCategory } from './sessions.js?v=69';
 
 // The seeded catch-all "Project work" category (js/seed.js) — a logging
 // bucket, not a real project, so it never gets a pebble.

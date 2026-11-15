@@ -1,4 +1,4 @@
-import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=68';
+import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=69';
 
 // Top-nav structure: Menu (rendered to the right of the Settings gear, see
 // index.html's #top-nav-menu — always reachable, never part of the

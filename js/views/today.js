@@ -1,6 +1,6 @@
-import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=68';
-import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=68';
-import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=68';
+import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=69';
+import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=69';
+import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=69';
 import {
   resolvableCategory,
   resolveCategoryForTask,
@@ -12,7 +12,7 @@ import {
   existingTodayMinutesForTask,
   addMinutesToTodaySession,
   closeStaleTodayTimer,
-} from '../todaySessions.js?v=68';
+} from '../todaySessions.js?v=69';
 
 let container = null;
 let allTasks = [];

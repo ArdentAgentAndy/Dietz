@@ -1,8 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=68';
-import { hexForNotionColor } from '../notionColors.js?v=68';
-import { escapeHtml, hexToRgba } from '../format.js?v=68';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=68';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=68';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=69';
+import { hexForNotionColor } from '../notionColors.js?v=69';
+import { escapeHtml, hexToRgba } from '../format.js?v=69';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=69';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=69';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -83,8 +83,16 @@ const pendingDeleteTempIds = new Set();
 // handler and the create success handler below).
 const pendingEditFields = new Map();
 
+// True while readOnlyWeekHtml renders for another page (a project's week):
+// chips show the saved state only, ignoring this page's modes.
+let renderingReadOnly = false;
+// That page's own mode while it renders, or null: { kind: 'completed' |
+// 'delete', pending, touched, marked } (Sets of task ids). See readOnlyWeekHtml.
+let readOnlyMode = null;
+
 function isFieldActive(task, kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
+  if (renderingReadOnly) return readOnlyMode?.kind === kind ? readOnlyMode.pending.has(task.id) : Boolean(task[cfg.field]);
   return activeHighlight === kind ? pending.has(task.id) : Boolean(task[cfg.field]);
 }
 
@@ -595,7 +603,9 @@ function taskChipHtml(task) {
   const urgent = isFieldActive(task, 'urgent');
   const showDecoration = !done && !urgent;
   const hasDeadline = Boolean(task.deadline?.start);
-  const isMarked = deleteMode && markedForDelete.has(task.id);
+  const isMarked = renderingReadOnly
+    ? readOnlyMode?.kind === 'delete' && readOnlyMode.marked.has(task.id)
+    : deleteMode && markedForDelete.has(task.id);
   const canLinkTarget = schedulingItem && !schedulingBusy && !activeHighlight && !deleteMode;
   // Unlike 'completed'/'urgent' (any task), 'public' only applies to
   // Meeting/Date — Examination is public unconditionally with no flag, and
@@ -604,14 +614,17 @@ function taskChipHtml(task) {
   // becoming clickable to no effect.
   const isPublicCandidate = task.category === 'Meeting' || task.category === 'Date';
   const isHighlightable = activeHighlight === 'public' ? isPublicCandidate : Boolean(activeHighlight);
-  const interactionClass = (isHighlightable || deleteMode) ? 'is-highlightable' : (canLinkTarget ? 'is-link-target' : 'is-editable');
+  const interactionClass = renderingReadOnly ? (readOnlyMode ? 'is-highlightable' : 'is-readonly')
+    : (isHighlightable || deleteMode) ? 'is-highlightable' : (canLinkTarget ? 'is-link-target' : 'is-editable');
   const isPublicMarked = Boolean(task.public) && isPublicCandidate;
   // Selected-so-far indicator while marking for a highlight mode — a static
   // (non-animated) dotted border, distinct from the marching-ants hover
   // effect, so you can see at a glance which cards you've actively clicked
   // this session. Cards that were already true before the mode started (and
   // so already in `pending`) don't get it unless also clicked.
-  const isPendingSelected = activeHighlight && pending.has(task.id) && touchedThisSession.has(task.id);
+  const isPendingSelected = renderingReadOnly
+    ? readOnlyMode?.kind === 'completed' && readOnlyMode.pending.has(task.id) && readOnlyMode.touched.has(task.id)
+    : activeHighlight && pending.has(task.id) && touchedThisSession.has(task.id);
   const classes = [
     'cal-chip',
     done ? 'is-done' : '',
@@ -630,7 +643,7 @@ function taskChipHtml(task) {
   // sits just above the center line; clicking the link glyph jumps back to
   // the Canvas tab and flashes the matching card there.
   return `
-    <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}" draggable="${(activeHighlight || deleteMode || schedulingItem) ? 'false' : 'true'}">
+    <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}" draggable="${(renderingReadOnly || activeHighlight || deleteMode || schedulingItem) ? 'false' : 'true'}">
       ${isMarked ? '<div class="cal-chip-delete-mark">&#10006;</div>' : ''}
       <span class="cal-chip-ants"></span>
       ${isPublicMarked ? '<span class="cal-chip-public-mark cal-chip-public-mark-left"></span><span class="cal-chip-public-mark cal-chip-public-mark-right"></span>' : ''}
@@ -662,8 +675,8 @@ function dayPlusButtonHtml(dateKey) {
   return `<button type="button" class="cal-day-plus" data-add-date="${dateKey}" title="[+] Add task on this day">+</button>`;
 }
 
-function weekViewHtml(tasks) {
-  const start = startOfWeek(anchor);
+function weekViewHtml(tasks, weekAnchor = anchor) {
+  const start = startOfWeek(weekAnchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const byDay = {};
   for (const t of tasks) {
@@ -685,14 +698,42 @@ function weekViewHtml(tasks) {
           <div class="cal-day-col${isToday ? ' is-today' : ''}" data-date="${key}">
             <div class="cal-day-head mono">
               <span>${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></span>
-              ${dayPlusButtonHtml(key)}
+              ${renderingReadOnly ? '' : dayPlusButtonHtml(key)}
             </div>
-            <div class="cal-day-items">${items.map(taskChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
+            <div class="cal-day-items">${items.map((t) => taskChipHtml(t)).join('') || '<p class="muted cal-empty">—</p>'}</div>
           </div>
         `;
       }).join('')}
     </div>
   `;
+}
+
+// The same week grid and chips, for another page (a project's own week):
+// no "+", no dragging, no click-to-edit. `tasks` is already filtered. `mode`
+// (optional): that page's complete / mass-delete selection, drawn the way
+// this page draws its own (see readOnlyMode).
+export function readOnlyWeekHtml(tasks, weekAnchor, mode = null) {
+  renderingReadOnly = true;
+  readOnlyMode = mode;
+  try {
+    return weekViewHtml(tasks, weekAnchor);
+  } finally {
+    renderingReadOnly = false;
+    readOnlyMode = null;
+  }
+}
+
+// The Agenda's colors for its complete and mass-delete modes.
+export const MODE_COLORS = { completed: '#9b9a97', delete: '#ff6b6b' };
+
+// "Nov 9 – 15, 2026" for the week holding `weekAnchor`.
+export function weekRangeLabel(weekAnchor) {
+  const start = startOfWeek(weekAnchor);
+  const end = addDays(start, 6);
+  const sameMonth = start.getMonth() === end.getMonth();
+  const startLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const endLabel = end.toLocaleDateString(undefined, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' });
+  return `${startLabel} – ${endLabel}, ${end.getFullYear()}`;
 }
 
 function monthViewHtml(tasks) {
@@ -1140,14 +1181,7 @@ function openTaskDialog(existing, defaultDate) {
 }
 
 function rangeLabel() {
-  if (viewMode === 'week') {
-    const start = startOfWeek(anchor);
-    const end = addDays(start, 6);
-    const sameMonth = start.getMonth() === end.getMonth();
-    const startLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    const endLabel = end.toLocaleDateString(undefined, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' });
-    return `${startLabel} – ${endLabel}, ${end.getFullYear()}`;
-  }
+  if (viewMode === 'week') return weekRangeLabel(anchor);
   return anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 

@@ -1,79 +1,385 @@
-import { escapeHtml, hexToRgba, formatDateISO, formatShortDate } from '../format.js?v=68';
-import { projectBySlug } from '../projects.js?v=68';
-import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../projectHours.js?v=68';
+import { escapeHtml, hexToRgba, formatDateISO, formatShortDate } from '../format.js?v=69';
+import { projectBySlug } from '../projects.js?v=69';
+import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../projectHours.js?v=69';
 import {
   PITCH_FIELDS, getPitch, savePitch,
   parseGithubRepo, getGithubRepo, saveGithubRepo,
-  milestoneTree, milestoneProgress,
+  milestoneTree, milestoneProgress, linkTask, linkedTaskIds,
   addMilestone, updateMilestone, moveMilestone, deleteMilestone, descendantCount,
-  linkTask, unlinkTask, allLinkedTaskIds,
   getLinks, normalizeUrl, addLink, removeLink,
   logEntries, addLogEntry, deleteLogEntry,
-} from '../projectPlan.js?v=68';
+} from '../projectPlan.js?v=69';
+import { store } from '../store.js?v=69';
 import {
-  fetchNotionTasks, getCachedNotionTasks, createTask, pushCheckboxUpdates,
-  addCachedNotionTask, patchCachedNotionTask,
-} from '../notion.js?v=68';
-import { taskDay } from '../taskDisplay.js?v=68';
-import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable } from '../github.js?v=68';
+  fetchNotionTasks, getCachedNotionTasks, createTask, addCachedNotionTask,
+  pushCheckboxUpdates, patchCachedNotionTask, deleteTask, removeCachedNotionTask,
+} from '../notion.js?v=69';
+import { taskDay } from '../taskDisplay.js?v=69';
+import { startOfDay } from '../taskDisplay.js?v=69';
+import { readOnlyWeekHtml, weekRangeLabel, MODE_COLORS } from './calendar.js?v=69';
+import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable, tokenExpiryNote } from '../github.js?v=69';
 
 // One project's own page (#/projects/<slug>): header (name, logged hours,
-// milestone position, back + Pitch buttons), the milestones (phases A, B,
-// ... -> checkpoints 1, 2, ... -> steps 3.1, 3.2, ...), the log, and
-// resources (links). The pitch opens in a dialog from the header's Pitch
+// milestone position, back + Pitch buttons), big Roadmap / Report / Readme /
+// Log / Resources buttons, and this project's week calendar (read-only).
+// Roadmap, Log and Resources are pages of this same module
+// (#/projects/<slug>/<section>); Roadmap holds the milestones (phases A, B, ... ->
+// checkpoints 1, 2, ... -> steps 3.1, 3.2, ...). The pitch opens in a dialog from the header's Pitch
 // button. Data: js/projectPlan.js. Built on Spindock first, the same page
 // serves every project.
 
 let container = null;
 let slug = null;
+let section = null; // null: the project page; 'roadmap' | 'log' | 'resources': that page
 // UI state that survives rebuilds.
 let editingId = null; // milestone whose title is being edited inline
 let editingIsNew = false; // that milestone was just added (empty title -> discard)
-let busyStepId = null; // step whose Notion task is being created
-let saveError = null; // last failed Notion write, shown on the Milestones card
 let currentProject = null; // { name, slug, hex, ... } from the last rebuild
+let fieldTimer = null; // debounced save of a step's description / done-when
+let pendingField = null; // the textarea that save is for
+let rebuildHeld = false; // a rebuild skipped while a step field had focus
+let selfWrite = false; // a step field's own save (needs no rebuild)
+let weekAnchor = startOfDay(new Date()); // the week the project calendar shows
+// Linking a step to the calendar: { stepId, name } while picking a day (the
+// calendar is tinted the project's color), busy while the task is created.
+let picking = null;
+let pickBusy = false;
+let pickError = null;
+// The calendar's complete [C] / mass-delete [X] modes, as in the Agenda:
+// null, or { kind: 'completed' | 'delete', pending, touched, marked }.
+let calMode = null;
+let calError = null;
+// A step to flash once the Roadmap page renders (set by clicking its task in
+// the project page's calendar). Module-level, so it survives the route change.
+let pendingFlashStepId = null;
 
 export function render(rootEl, params) {
   container = rootEl;
   slug = params.id;
+  section = params.section || null;
   editingId = null;
   editingIsNew = false;
-  busyStepId = null;
-  saveError = null;
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('dietz:store-changed', onStoreChanged);
   container.addEventListener('click', onClick);
   container.addEventListener('change', onChange);
+  container.addEventListener('input', onInput);
+  container.addEventListener('focusout', onFocusOut);
+  weekAnchor = startOfDay(new Date());
+  picking = null;
+  pickBusy = false;
+  pickError = null;
+  phaseEditId = null;
+  calMode = null;
+  calError = null;
   rebuild();
-  // Fresh task states (linked steps check off from them). A failure just
-  // keeps the cached ones.
-  fetchNotionTasks().then(() => { if (container && !editingId) rebuild(); }).catch(() => {});
+  // The week calendar draws from the cached Notion tasks right away; this
+  // refreshes them (a failure just keeps the cached ones).
+  if (!section) fetchNotionTasks().then(() => { if (container && !editingId) rebuild(); }).catch(() => {});
+}
+
+// This project's tasks (category Project, project = its name), read-only, in
+// the Calendar's own week grid. Tasks get added elsewhere, not from here.
+function projectTasks(project = currentProject) {
+  return project ? getCachedNotionTasks().filter((t) => t.category === 'Project' && t.project === project.name) : [];
+}
+
+// [C] / [X]: labeled by key only. Active: the mode's color, plus [Esc] to cancel.
+function modeButtonsHtml() {
+  const btn = (kind, key) => {
+    const active = calMode?.kind === kind;
+    const color = MODE_COLORS[kind];
+    const style = active ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
+    const title = active ? (kind === 'delete' ? 'Confirm delete [Enter]' : 'Save [Enter]') : '';
+    const disabled = (calMode && !active) || picking;
+    return `<button type="button" data-action="cal-mode" data-kind="${kind}" class="mono${active ? ' active' : ''}"${style}${disabled ? ' disabled' : ''}${title ? ` title="${title}"` : ''}>[${key}]</button>`;
+  };
+  return `
+    <div class="project-week-modes">
+      ${btn('completed', 'C')}
+      ${btn('delete', 'X')}
+      ${calMode ? '<button type="button" data-action="cal-mode-cancel" class="mono" title="Cancel">[Esc]</button>' : ''}
+    </div>
+  `;
+}
+
+function projectWeekHtml(project) {
+  const tasks = projectTasks(project);
+  return `
+    <section class="card cal-grid-card project-week${picking ? ' is-picking' : ''}${calMode ? ' is-mode' : ''}">
+      <div class="project-card-head">
+        <h2 class="mono">Calendar</h2>
+        ${modeButtonsHtml()}
+        <div class="cal-nav">
+          <button type="button" data-action="week-prev" aria-label="Previous week">[Q]</button>
+          <span class="mono cal-range-label">${weekRangeLabel(weekAnchor)}</span>
+          <button type="button" data-action="week-today">[T] Today</button>
+          <button type="button" data-action="week-next" aria-label="Next week">[E]</button>
+        </div>
+      </div>
+      ${picking ? `
+        <div class="project-pick-banner">
+          <span class="mono">${pickBusy ? 'Saving…' : `Pick a day for <strong>${escapeHtml(picking.name)}</strong>`}</span>
+          <button type="button" data-action="pick-cancel" ${pickBusy ? 'disabled' : ''}>Cancel</button>
+        </div>
+      ` : ''}
+      ${pickError ? `<p class="project-error">${escapeHtml(pickError)}</p>` : ''}
+      ${calError ? `<p class="project-error">${escapeHtml(calError)}</p>` : ''}
+      ${readOnlyWeekHtml(tasks, weekAnchor, calMode)}
+    </section>
+  `;
+}
+
+// "[A] (3.2) Mesh solver": the Notion task a step's link creates.
+function linkedTaskName(phase, step) {
+  const title = String(step.title || '').trim();
+  return `[${phase.code}] (${step.code})${title ? ` ${title}` : ''}`;
+}
+
+function startPick(stepId) {
+  if (pickBusy) return;
+  for (const phase of milestoneTree(slug)) {
+    for (const cp of phase.checkpoints) {
+      const step = cp.steps.find((s) => s.id === stepId);
+      if (step) {
+        picking = { stepId, name: linkedTaskName(phase, step) };
+        pickError = null;
+        rebuild();
+        container.querySelector('.project-week')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+    }
+  }
+}
+
+function cancelPick() {
+  picking = null;
+  pickError = null;
+  rebuild();
+}
+
+// A day clicked while picking: the Notion task (category Project, this
+// project) on that day, linked to the step.
+async function pickDay(day) {
+  if (!picking || pickBusy || !currentProject) return;
+  const { stepId, name } = picking;
+  pickBusy = true;
+  rebuild();
+  let result;
+  try {
+    result = await createTask({ name, category: 'Project', project: currentProject.name, date: day });
+  } catch (err) {
+    result = { ok: false, error: err.message };
+  }
+  if (!container) return;
+  pickBusy = false;
+  if (result.ok && result.task) {
+    addCachedNotionTask(result.task);
+    picking = null;
+    linkTask(stepId, result.task.id); // rebuilds via the store change
+  } else {
+    pickError = result.error || 'Failed to create the task';
+  }
+  rebuild();
+}
+
+// Same tint as the Agenda's modes (#app.has-mode-tint), in the project's color.
+function applyPickTint(hex) {
+  const app = document.getElementById('app');
+  if (!app) return;
+  if (hex) {
+    app.classList.add('has-mode-tint');
+    app.style.setProperty('--mode-color', hex);
+    app.style.setProperty('--mode-tint', hexToRgba(hex, 0.05));
+  } else {
+    app.classList.remove('has-mode-tint');
+    app.style.removeProperty('--mode-color');
+    app.style.removeProperty('--mode-tint');
+  }
+}
+
+// --- Calendar modes ([C] complete, [X] mass delete), as in the Agenda ---
+
+function startCalMode(kind) {
+  if (calMode || picking || section) return;
+  calError = null;
+  calMode = {
+    kind,
+    pending: new Set(kind === 'completed' ? projectTasks().filter((t) => t.mark).map((t) => t.id) : []),
+    touched: new Set(),
+    marked: new Set(),
+  };
+  rebuild();
+}
+
+function cancelCalMode() {
+  calMode = null;
+  rebuild();
+}
+
+// The mode's own key / button again (or Enter): save / confirm.
+function finishCalMode() {
+  if (!calMode) return;
+  if (calMode.kind === 'completed') saveCompleted();
+  else confirmDelete();
+}
+
+function toggleChip(id) {
+  if (!calMode) return;
+  if (calMode.kind === 'delete') {
+    if (calMode.marked.has(id)) calMode.marked.delete(id); else calMode.marked.add(id);
+  } else {
+    if (calMode.pending.has(id)) calMode.pending.delete(id); else calMode.pending.add(id);
+    calMode.touched.add(id);
+  }
+  rebuild();
+}
+
+// Applied right away, then written to Notion; a failure rolls it back.
+async function saveCompleted() {
+  const { pending } = calMode;
+  const changed = projectTasks().filter((t) => Boolean(t.mark) !== pending.has(t.id));
+  calMode = null;
+  calError = null;
+  if (!changed.length) { rebuild(); return; }
+  for (const t of changed) patchCachedNotionTask(t.id, { mark: pending.has(t.id) });
+  rebuild();
+  let result;
+  try {
+    result = await pushCheckboxUpdates('?', changed.map((t) => ({ pageId: t.id, value: pending.has(t.id) })));
+  } catch (err) {
+    result = { ok: false, error: err.message };
+  }
+  if (!result.ok) {
+    for (const t of changed) patchCachedNotionTask(t.id, { mark: Boolean(t.mark) });
+    calError = result.error || 'Failed to save completed flags to Notion';
+    rebuild();
+  }
+}
+
+// Asks first (they go to Notion's trash). Removed right away; any that fail
+// to delete come back.
+async function confirmDelete() {
+  const ids = [...calMode.marked];
+  if (!ids.length) { cancelCalMode(); return; }
+  if (!confirm(`Delete ${ids.length} task${ids.length === 1 ? '' : 's'}? They'll be moved to Notion's trash, recoverable there.`)) return;
+  const removed = projectTasks().filter((t) => calMode.marked.has(t.id));
+  calMode = null;
+  calError = null;
+  for (const id of ids) removeCachedNotionTask(id);
+  rebuild();
+  const results = await Promise.all(ids.map((id) => deleteTask(id).catch((err) => ({ ok: false, error: err.message }))));
+  const failed = removed.filter((t) => !results[ids.indexOf(t.id)]?.ok);
+  if (failed.length) {
+    for (const t of failed) addCachedNotionTask(t);
+    calError = `${failed.length} task${failed.length === 1 ? '' : 's'} failed to delete. Check Notion and try again.`;
+    rebuild();
+  }
+}
+
+function shiftWeek(days) {
+  const d = new Date(weekAnchor);
+  d.setDate(d.getDate() + days);
+  weekAnchor = days ? d : startOfDay(new Date());
+  rebuild();
 }
 
 export function unmount() {
+  saveStepField();
+  picking = null;
+  calMode = null;
+  applyPickTint(null);
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('dietz:store-changed', onStoreChanged);
   if (container) {
     container.removeEventListener('click', onClick);
     container.removeEventListener('change', onChange);
+    container.removeEventListener('input', onInput);
+    container.removeEventListener('focusout', onFocusOut);
   }
   container = null;
 }
 
 // Any data change (this page's own edits, or another device's via sync).
-// Not while a title is being typed, so a rebuild can't throw that away. An
-// open dialog (pitch, task picker) also holds rebuilds off; see rebuild().
+// Not while a title or a step's field is being typed, so a rebuild can't
+// throw that away (a held one runs when the field loses focus). An open
+// dialog (pitch) also holds rebuilds off; see rebuild().
 function onStoreChanged() {
-  if (!container || editingId) return;
+  if (!container || editingId || selfWrite) return;
+  if (document.activeElement?.matches?.('[data-step-field]') && container.contains(document.activeElement)) {
+    rebuildHeld = true;
+    return;
+  }
   rebuild();
 }
 
+// Step description / done-when: saved as you type (debounced), and on blur.
+function saveStepField() {
+  clearTimeout(fieldTimer);
+  fieldTimer = null;
+  const el = pendingField;
+  pendingField = null;
+  if (!el) return;
+  const row = store.table('ProjectMilestones').find((m) => m.id === el.dataset.id);
+  if (row && String(row[el.dataset.stepField] || '') !== el.value) {
+    // The textarea already shows it: no rebuild for this one (a rebuild
+    // between mousedown and click would swallow the click).
+    selfWrite = true;
+    try { updateMilestone(el.dataset.id, { [el.dataset.stepField]: el.value }); } finally { selfWrite = false; }
+  }
+}
+
+function onInput(e) {
+  const field = e.target.closest?.('[data-step-field]');
+  if (!field) return;
+  if (pendingField && pendingField !== field) saveStepField();
+  pendingField = field;
+  clearTimeout(fieldTimer);
+  fieldTimer = setTimeout(saveStepField, 600);
+}
+
+function onFocusOut(e) {
+  if (!e.target.closest?.('[data-step-field]')) return;
+  saveStepField();
+  if (!rebuildHeld) return;
+  // A change from elsewhere arrived while typing. Once focus has landed:
+  // still in a step field -> keep holding; otherwise rebuild now.
+  setTimeout(() => {
+    if (!container || editingId || !rebuildHeld) return;
+    if (document.activeElement?.matches?.('[data-step-field]') && container.contains(document.activeElement)) return;
+    rebuildHeld = false;
+    rebuild();
+  }, 0);
+}
+
 function onKeyDown(e) {
-  if (e.key !== 'Escape' || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (document.querySelector('dialog[open]')) return;
   if (e.target.closest?.('input, textarea, select')) return;
+  // The calendar's modes, project page only: C / X start one (the same key
+  // again, or Enter, saves / confirms), Esc cancels.
+  if (!section) {
+    const key = e.key.toLowerCase();
+    const kind = key === 'c' ? 'completed' : key === 'x' ? 'delete' : null;
+    if (kind && !e.repeat) {
+      e.preventDefault();
+      if (!calMode) startCalMode(kind);
+      else if (calMode.kind === kind) finishCalMode();
+      return;
+    }
+    if (e.key === 'Enter' && calMode) { e.preventDefault(); finishCalMode(); return; }
+    // Week nav, as in the Agenda: Q back, E forward, T today.
+    const nav = { q: -7, e: 7, t: 0 }[key];
+    if (nav !== undefined && !pickBusy) { e.preventDefault(); shiftWeek(nav); return; }
+    // The Roadmap card's phase: ← / →.
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); shiftCardPhase(e.key === 'ArrowLeft' ? -1 : 1); return; }
+  }
+  if (e.key !== 'Escape') return;
   e.preventDefault();
-  location.hash = '#/projects';
+  if (calMode) { cancelCalMode(); return; }
+  if (picking && !pickBusy) { cancelPick(); return; }
+  if (phaseEditId && !section) { phaseEditId = null; rebuild(); return; }
+  location.hash = section ? `#/projects/${encodeURIComponent(slug)}` : '#/projects';
 }
 
 function hoursText(minutes) {
@@ -98,13 +404,12 @@ function hoursStatsHtml(name) {
   `;
 }
 
-// "At B · 3.2" plus a steps-done bar, under the title row.
+// The steps-done bar and count, under the title row.
 function progressHtml(progress, hex) {
   if (!progress.total) return '';
   const pct = Math.round((progress.done / progress.total) * 100);
   return `
     <div class="project-progress mono">
-      <span>${progress.current ? `<span class="muted">At</span> <strong>${escapeHtml(progress.current)}</strong>` : '<strong>All steps done</strong>'}</span>
       <span class="project-progress-bar" style="--bar-color:${hex};"><span style="width:${pct}%;"></span></span>
       <span class="muted">${progress.done}/${progress.total} steps</span>
     </div>
@@ -348,6 +653,7 @@ function openReadmeDialog() {
     previewHtml: '',
     status: '', // HTML line under the content (errors, "saved")
     busy: false,
+    confirming: null, // { message } while the push warning screen is up
   };
   const dirty = () => Boolean(state.readme) && state.draft !== state.readme.content;
 
@@ -379,8 +685,9 @@ function openReadmeDialog() {
         </div>
         ${body}
         ${state.status ? `<p class="readme-status">${state.status}</p>` : ''}
+        ${expiryHtml()}
         <div class="modal-actions">
-          ${editable && state.tab === 'edit' ? `
+          ${editable && state.tab === 'edit' && !state.confirming ? `
             <input type="text" class="readme-message" data-readme-message placeholder="Commit message (default: Update README)" autocomplete="off">
             <button type="button" class="btn-primary" data-readme-save ${dirty() && !state.busy ? '' : 'disabled'}>${state.busy ? 'Saving…' : 'Save to GitHub'}</button>
           ` : ''}
@@ -426,15 +733,74 @@ function openReadmeDialog() {
     render(`<div class="readme-body">${state.previewHtml}</div>`);
   };
 
-  const showEdit = () => {
+  // The token's expiry (js/github.js): a quiet note normally, a warning
+  // within 30 days or once it's past. Shown whenever editing is on, and when
+  // it's off because the token has expired.
+  const expiryHtml = () => {
+    const note = tokenExpiryNote();
+    if (state.readOnly && note.level !== 'expired') return '';
+    if (!state.readme && !state.readOnly) return '';
+    return `<p class="readme-expiry mono${note.level === 'ok' ? ' muted' : ' is-warning'}">${escapeHtml(note.text)}</p>`;
+  };
+
+  const showEdit = (message = '') => {
+    state.confirming = null;
     render(`<textarea class="readme-editor" data-readme-text spellcheck="true"></textarea>`);
     const ta = dialog.querySelector('[data-readme-text]');
     ta.value = state.draft;
+    const input = dialog.querySelector('[data-readme-message]');
+    if (input && message) input.value = message;
     ta.focus();
   };
 
+  // Lines added / removed between the README on GitHub and the draft (a
+  // per-line count, enough for the warning screen).
+  const lineChanges = () => {
+    const count = (text) => {
+      const m = new Map();
+      for (const line of text.split('\n')) m.set(line, (m.get(line) || 0) + 1);
+      return m;
+    };
+    const before = count(state.readme.content);
+    const after = count(state.draft);
+    let added = 0;
+    let removed = 0;
+    for (const [line, n] of after) added += Math.max(0, n - (before.get(line) || 0));
+    for (const [line, n] of before) removed += Math.max(0, n - (after.get(line) || 0));
+    return { added, removed };
+  };
+
+  // The warning screen before anything is pushed: what, where, and the
+  // message. Only "Commit & push" sends it.
+  const showConfirm = (message) => {
+    state.confirming = { message };
+    state.status = '';
+    const { added, removed } = lineChanges();
+    const shownMessage = message.trim() || 'Update README';
+    render(`
+      <div class="readme-confirm">
+        <p class="readme-confirm-title">⚠ Push this to GitHub?</p>
+        <p>This commits straight to <strong class="mono">${escapeHtml(repoName)}</strong> on its default branch. It shows up on GitHub right away and stays in the repo's history.</p>
+        <dl class="readme-confirm-facts mono">
+          <dt>File</dt><dd>${escapeHtml(state.readme.path)}</dd>
+          <dt>Message</dt><dd>${escapeHtml(shownMessage)}</dd>
+          <dt>Changes</dt><dd><span class="readme-added">+${added}</span> <span class="readme-removed">−${removed}</span> lines</dd>
+        </dl>
+        <div class="readme-confirm-actions">
+          <button type="button" data-readme-back>Back to editing</button>
+          <button type="button" class="btn-primary readme-push" data-readme-push>Commit &amp; push</button>
+        </div>
+      </div>
+    `);
+    dialog.querySelector('[data-readme-back]').addEventListener('click', () => showEdit(message));
+    dialog.querySelector('[data-readme-push]').addEventListener('click', () => push(message));
+    dialog.querySelector('[data-readme-back]').focus();
+  };
+
   const setTab = (tab) => {
-    const message = dialog.querySelector('[data-readme-message]')?.value;
+    if (state.busy) return;
+    const message = dialog.querySelector('[data-readme-message]')?.value ?? state.confirming?.message;
+    state.confirming = null;
     state.tab = tab;
     state.status = '';
     if (tab === 'edit') showEdit();
@@ -443,24 +809,27 @@ function openReadmeDialog() {
     if (input && message) input.value = message;
   };
 
-  async function save() {
+  // "Save to GitHub" only opens the warning screen; push() does the commit.
+  function save() {
     if (!dirty() || state.busy) return;
-    const message = dialog.querySelector('[data-readme-message]')?.value || '';
+    showConfirm(dialog.querySelector('[data-readme-message]')?.value || '');
+  }
+
+  async function push(message) {
+    if (!dirty() || state.busy) return;
     state.busy = true;
-    state.status = '';
-    dialog.querySelector('[data-readme-save]').disabled = true;
-    dialog.querySelector('[data-readme-save]').textContent = 'Saving…';
+    const pushBtn = dialog.querySelector('[data-readme-push]');
+    if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Pushing…'; }
+    dialog.querySelector('[data-readme-back]')?.setAttribute('disabled', '');
     const result = await saveReadme(repoName, state.readme.path, state.draft, state.readme.sha, message).catch((err) => ({ error: err.message }));
     state.busy = false;
     if (!dialog.open) return;
     if (result.error) {
       state.status = `<span class="project-error">${escapeHtml(result.error)}</span>`;
-      const draft = state.draft;
-      showEdit();
-      dialog.querySelector('[data-readme-text]').value = draft;
-      dialog.querySelector('[data-readme-message]').value = message;
+      showEdit(message); // the draft and message are kept
       return;
     }
+    state.confirming = null;
     state.readme = { ...state.readme, sha: result.sha, content: state.draft };
     state.status = `Saved to GitHub. <a href="${escapeHtml(result.commitUrl)}" target="_blank" rel="noopener noreferrer">View the commit ↗</a>`;
     state.tab = 'preview';
@@ -469,6 +838,11 @@ function openReadmeDialog() {
 
   // Esc: same "discard unsaved changes?" check as Close.
   const onCancel = (e) => {
+    if (state.confirming) {
+      e.preventDefault();
+      if (!state.busy) showEdit(state.confirming.message);
+      return;
+    }
     if (dirty() && !confirm('Discard your unsaved README changes?')) e.preventDefault();
   };
   dialog.addEventListener('cancel', onCancel);
@@ -516,15 +890,23 @@ function openReadmeDialog() {
 
 // --- Milestones --------------------------------------------------------
 
+// True while milestonesHtml renders the project page's read-only Roadmap
+// card: folds work, nothing else is editable.
+let renderingView = false;
+// The one phase of that card being edited in place (null: none).
+let phaseEditId = null;
+
 function titleHtml(node, placeholder) {
-  if (node.id === editingId) {
+  if (!renderingView && node.id === editingId) {
     return `<input type="text" class="ms-title-input" data-title-input="${node.id}" value="${escapeHtml(node.title || '')}" placeholder="${placeholder}">`;
   }
   const title = String(node.title || '').trim();
+  if (renderingView) return `<span class="ms-title is-static">${title ? escapeHtml(title) : `<span class="muted">${placeholder}</span>`}</span>`;
   return `<span class="ms-title" data-action="edit-title" data-id="${node.id}" title="Click to rename">${title ? escapeHtml(title) : `<span class="muted">${placeholder}</span>`}</span>`;
 }
 
 function actionsHtml(node, addLabel, addAction, extra = '') {
+  if (renderingView) return '';
   return `
     <span class="ms-actions">
       ${extra}
@@ -536,36 +918,73 @@ function actionsHtml(node, addLabel, addAction, extra = '') {
   `;
 }
 
-// A linked Notion task under its step: done state, name, date, unlink.
-function linkedTaskHtml(step, task) {
-  const day = taskDay(task);
-  return `
-    <li class="ms-task${task.mark ? ' is-done' : ''}">
-      <span class="ms-task-state" aria-hidden="true">${task.mark ? '✓' : '○'}</span>
-      <span class="ms-task-name">${escapeHtml(task.name || 'Untitled')}</span>
-      ${day ? `<span class="ms-task-date mono muted">${escapeHtml(formatShortDate(day))}</span>` : ''}
-      <button type="button" class="ms-btn ms-task-unlink" data-action="unlink-task" data-id="${step.id}" data-task-id="${task.id}" title="Unlink (the task stays in Notion)">✕</button>
-    </li>
-  `;
+// Folding: phases and checkpoints start open, steps start closed (their
+// description / done-when fields show when open). Per project, remembered
+// on this device only.
+function foldKey() {
+  return `dietz:roadmapOpen:${slug}`;
 }
 
+function loadFolds() {
+  try {
+    return JSON.parse(localStorage.getItem(foldKey()) || '{}') || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function isOpen(node) {
+  const folds = loadFolds();
+  return node.id in folds ? Boolean(folds[node.id]) : node.kind !== 'step';
+}
+
+function toggleFold(id) {
+  const node = store.table('ProjectMilestones').find((m) => m.id === id);
+  if (!node) return;
+  const folds = loadFolds();
+  folds[id] = !isOpen(node);
+  try { localStorage.setItem(foldKey(), JSON.stringify(folds)); } catch (e) { /* convenience only */ }
+  rebuild();
+}
+
+function foldButtonHtml(node, open, label) {
+  return `<button type="button" class="ms-fold" data-action="toggle-fold" data-id="${node.id}" aria-expanded="${open}" title="${open ? 'Collapse' : 'Expand'} ${label}">${open ? '▼' : '▶'}</button>`;
+}
+
+const STEP_FIELDS = [
+  { key: 'description', label: 'Description', placeholder: 'What this step is' },
+  { key: 'doneWhen', label: 'Done when', placeholder: 'The check that says it\'s finished' },
+];
+
 function stepHtml(step) {
-  const linked = step.linkedTasks.length > 0;
-  const busy = busyStepId === step.id;
-  const stepButtons = `
-    <button type="button" class="ms-btn" data-action="make-task" data-id="${step.id}" ${busy ? 'disabled' : ''} title="Create a Notion task for this step">${busy ? 'Creating…' : '+ task'}</button>
-    <button type="button" class="ms-btn" data-action="link-task" data-id="${step.id}" title="Link an existing task">link</button>
-  `;
+  const open = isOpen(step);
+  const hasDetail = STEP_FIELDS.some((f) => String(step[f.key] || '').trim());
   return `
-    <li class="ms-step${step.complete ? ' is-done' : ''}">
+    <li class="ms-step${step.complete ? ' is-done' : ''}" data-step-id="${step.id}">
       <div class="ms-row ms-row-step">
-        <input type="checkbox" class="ms-check" data-step-check="${step.id}" ${step.complete ? 'checked' : ''}
-          aria-label="Done" title="${linked ? 'Done when its linked tasks are done; ticking marks them done in Notion' : 'Done'}">
+        ${foldButtonHtml(step, open, 'step')}
+        <input type="checkbox" class="ms-check" data-step-check="${step.id}" ${step.complete ? 'checked' : ''} ${renderingView ? 'disabled' : ''} aria-label="Done" title="Done">
         <span class="ms-code mono">${step.code}</span>
         ${titleHtml(step, 'Untitled step')}
-        ${actionsHtml(step, '', '', stepButtons)}
+        ${!open && hasDetail ? '<span class="ms-has-detail muted" title="Has a description / done-when">≡</span>' : ''}
+        ${renderingView ? stepLinksHtml(step) : ''}
+        ${actionsHtml(step, '', '')}
       </div>
-      ${linked ? `<ul class="ms-tasks">${step.linkedTasks.map((t) => linkedTaskHtml(step, t)).join('')}</ul>` : ''}
+      ${open ? `
+        <div class="ms-step-detail">
+          ${renderingView ? STEP_FIELDS.filter((f) => String(step[f.key] || '').trim()).map((f) => `
+            <div class="ms-field">
+              <span class="ms-field-label mono muted">${f.label}</span>
+              <p class="ms-field-text">${escapeHtml(String(step[f.key]).trim())}</p>
+            </div>
+          `).join('') || '<p class="muted ms-field-text">No description yet.</p>' : STEP_FIELDS.map((f) => `
+            <label class="ms-field">
+              <span class="ms-field-label mono muted">${f.label}</span>
+              <textarea rows="2" data-step-field="${f.key}" data-id="${step.id}" placeholder="${escapeHtml(f.placeholder)}">${escapeHtml(String(step[f.key] || ''))}</textarea>
+            </label>
+          `).join('')}
+        </div>
+      ` : ''}
     </li>
   `;
 }
@@ -574,37 +993,179 @@ function checkpointHtml(cp) {
   const total = cp.steps.length;
   const done = cp.steps.filter((s) => s.complete).length;
   const complete = total > 0 && done === total;
-  const target = cp.targetDate ? String(cp.targetDate).slice(0, 10) : '';
+  const open = isOpen(cp);
   return `
     <div class="ms-checkpoint${complete ? ' is-done' : ''}">
       <div class="ms-row ms-row-checkpoint">
-        <span class="ms-code ms-code-checkpoint mono">${cp.code}</span>
+        ${foldButtonHtml(cp, open, 'checkpoint')}
+        <span class="ms-code ms-code-checkpoint mono" title="Checkpoint ${cp.code}">${cp.code}</span>
         ${titleHtml(cp, 'Untitled checkpoint')}
-        <span class="ms-meta mono muted">${total ? `${done}/${total}` : ''}</span>
-        <label class="ms-target mono muted" title="Target date">
-          <input type="date" data-target-date="${cp.id}" value="${escapeHtml(target)}">
-        </label>
         ${actionsHtml(cp, 'step', 'add-step')}
+        <span class="ms-meta mono muted">${total ? `${done}/${total}` : ''}</span>
       </div>
-      ${cp.steps.length ? `<ul class="ms-steps">${cp.steps.map(stepHtml).join('')}</ul>` : ''}
+      ${open && cp.steps.length ? `<ul class="ms-steps">${cp.steps.map(stepHtml).join('')}</ul>` : ''}
     </div>
   `;
 }
 
 function phaseHtml(phase, hex) {
+  // The Roadmap card edits one phase in place: that phase renders like the
+  // Roadmap page, the rest stay read-only.
+  if (renderingView && phase.id === phaseEditId) {
+    renderingView = false;
+    try {
+      return phaseRowsHtml(phase, hex, true);
+    } finally {
+      renderingView = true;
+    }
+  }
+  return phaseRowsHtml(phase, hex, false);
+}
+
+function phaseEditButtonHtml(phase, isEditing) {
+  return isEditing
+    ? `<button type="button" class="ms-btn ms-phase-edit is-active" data-action="phase-edit-done" title="Stop editing [Esc]">Done</button>`
+    : `<button type="button" class="ms-btn ms-phase-edit" data-action="phase-edit" data-id="${phase.id}" title="Edit this phase here">Edit</button>`;
+}
+
+function phaseRowsHtml(phase, hex, isEditing) {
+  const inCard = renderingView || isEditing;
   const steps = phase.checkpoints.flatMap((cp) => cp.steps);
   const done = steps.filter((s) => s.complete).length;
+  const open = isOpen(phase);
   return `
-    <div class="ms-phase" style="--phase-color:${hex};">
+    <div class="ms-phase${isEditing ? ' is-editing' : ''}" style="--phase-color:${hex};">
       <div class="ms-row ms-row-phase">
-        <span class="ms-code ms-code-phase mono">${phase.code}</span>
+        ${foldButtonHtml(phase, open, 'phase')}
+        <span class="ms-code ms-code-phase mono" title="Phase ${phase.code}">${phase.code}</span>
         ${titleHtml(phase, 'Untitled phase')}
-        <span class="ms-meta mono muted">${steps.length ? `${done}/${steps.length}` : ''}</span>
         ${actionsHtml(phase, 'checkpoint', 'add-checkpoint')}
+        ${inCard ? phaseEditButtonHtml(phase, isEditing) : ''}
+        <span class="ms-meta mono muted">${steps.length ? `${done}/${steps.length}` : ''}</span>
       </div>
-      ${phase.checkpoints.map(checkpointHtml).join('')}
+      ${steps.length ? `<div class="ms-phase-progress" role="progressbar" aria-label="Phase ${phase.code} steps done" aria-valuemin="0" aria-valuemax="${steps.length}" aria-valuenow="${done}"><span style="width:${Math.round((done / steps.length) * 100)}%;"></span></div>` : ''}
+      ${open && phase.checkpoints.length ? `<div class="ms-phase-body">${phase.checkpoints.map(checkpointHtml).join('')}</div>` : ''}
     </div>
   `;
+}
+
+// The read-only view's step row: the days its linked tasks sit on (from the
+// cached Notion tasks; a deleted one drops out), and the link button.
+function stepLinksHtml(step) {
+  const byId = new Map(getCachedNotionTasks().map((t) => [t.id, t]));
+  const days = linkedTaskIds(step).map((id) => byId.get(id)).filter(Boolean)
+    .map((t) => ({ day: taskDay(t), done: Boolean(t.mark) }))
+    .filter((d) => d.day)
+    .sort((a, b) => a.day.localeCompare(b.day));
+  const isPicking = picking?.stepId === step.id;
+  return `
+    <button type="button" class="ms-btn ms-link-btn${isPicking ? ' is-active' : ''}" data-action="link-step" data-id="${step.id}" title="Put this step on the calendar: then pick a day above">${isPicking ? 'picking…' : '+ day'}</button>
+    ${days.map((d) => `<span class="ms-link-day mono${d.done ? ' is-done' : ''}">${escapeHtml(formatShortDate(d.day))}</span>`).join('')}
+  `;
+}
+
+// The project page's Roadmap card: the same tree, read-only.
+function roadmapViewHtml(tree, hex) {
+  const i = cardPhaseIndex(tree);
+  renderingView = true;
+  try {
+    return `
+      <section class="card project-roadmap-view">
+        <div class="project-card-head">
+          <h2 class="mono">Roadmap</h2>
+          ${tree.length > 1 ? `
+            <div class="project-roadmap-nav">
+              <button type="button" class="mono" data-action="card-phase" data-dir="-1" title="Previous phase [←]" ${i <= 0 ? 'disabled' : ''}>[←]</button>
+              <button type="button" class="mono" data-action="card-phase" data-dir="1" title="Next phase [→]" ${i >= tree.length - 1 ? 'disabled' : ''}>[→]</button>
+            </div>
+          ` : ''}
+          <button type="button" data-action="section-open" data-section="roadmap">Open roadmap</button>
+        </div>
+        ${tree.length ? milestonesHtml([tree[i]], hex) : '<p class="muted">No milestones yet. Add phases in Open roadmap.</p>'}
+      </section>
+    `;
+  } finally {
+    renderingView = false;
+  }
+}
+
+// --- Which phase the card shows (one at a time; ← / → switch) ----------
+
+function cardPhaseKey() {
+  return `dietz:roadmapCardPhase:${slug}`;
+}
+
+// The remembered phase, else the one you're on (its first step not done),
+// else the first.
+function cardPhaseIndex(tree) {
+  if (!tree.length) return 0;
+  let saved = null;
+  try { saved = localStorage.getItem(cardPhaseKey()); } catch (e) { /* convenience only */ }
+  const savedIndex = tree.findIndex((p) => p.id === saved);
+  if (savedIndex !== -1) return savedIndex;
+  const current = tree.findIndex((p) => p.checkpoints.some((cp) => cp.steps.some((st) => !st.complete)));
+  return current === -1 ? 0 : current;
+}
+
+function setCardPhase(phaseId) {
+  try { localStorage.setItem(cardPhaseKey(), phaseId); } catch (e) { /* convenience only */ }
+}
+
+function shiftCardPhase(dir) {
+  const tree = milestoneTree(slug);
+  const next = cardPhaseIndex(tree) + dir;
+  if (next < 0 || next >= tree.length) return;
+  saveStepField();
+  setCardPhase(tree[next].id);
+  phaseEditId = null;
+  editingId = null;
+  rebuild();
+}
+
+// --- Calendar task -> its step on the roadmap ---------------------------
+
+function findLinkedStep(taskId) {
+  for (const phase of milestoneTree(slug)) {
+    for (const cp of phase.checkpoints) {
+      const step = cp.steps.find((st) => linkedTaskIds(st).includes(taskId));
+      if (step) return { phase, cp, step };
+    }
+  }
+  return null;
+}
+
+// Opens the phase and checkpoint around a step so its row is on screen.
+function openAround(phase, cp) {
+  const folds = loadFolds();
+  folds[phase.id] = true;
+  folds[cp.id] = true;
+  try { localStorage.setItem(foldKey(), JSON.stringify(folds)); } catch (e) { /* convenience only */ }
+}
+
+// A calendar task clicked (no mode on): its step flashes in the card when
+// the card is showing that step's phase, otherwise on the Roadmap page.
+function showTaskOnRoadmap(taskId) {
+  const found = findLinkedStep(taskId);
+  if (!found) return;
+  openAround(found.phase, found.cp);
+  const tree = milestoneTree(slug);
+  if (tree[cardPhaseIndex(tree)]?.id === found.phase.id) {
+    rebuild();
+    flashStep(found.step.id);
+  } else {
+    pendingFlashStepId = found.step.id;
+    location.hash = `#/projects/${encodeURIComponent(slug)}/roadmap`;
+  }
+}
+
+function flashStep(stepId) {
+  const row = container?.querySelector(`.ms-step[data-step-id="${CSS.escape(stepId)}"] > .ms-row`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.remove('ms-flash');
+  void row.offsetWidth; // restart the animation if it's already flashing
+  row.classList.add('ms-flash');
+  row.addEventListener('animationend', () => row.classList.remove('ms-flash'), { once: true });
 }
 
 function milestonesHtml(tree, hex) {
@@ -621,7 +1182,7 @@ function logHtml() {
   return `
     <form class="project-inline-form" data-log-form>
       <input type="date" name="date" value="${formatDateISO(new Date())}" data-keep="log-date" aria-label="Date">
-      <textarea name="text" rows="2" placeholder="Progress, a decision, a blocker…" data-keep="log-text" required></textarea>
+      <input type="text" name="text" placeholder="Progress, a decision, a blocker…" data-keep="log-text" required>
       <button type="submit">Add</button>
     </form>
     ${entries.length ? `
@@ -690,111 +1251,38 @@ function commitTitle(input, save) {
   rebuild();
 }
 
-function findStep(stepId) {
-  return milestoneTree(slug, getCachedNotionTasks())
-    .flatMap((p) => p.checkpoints).flatMap((cp) => cp.steps)
-    .find((s) => s.id === stepId);
-}
-
-// "+ task": a Notion task (category Project, this project) named after the
-// step, e.g. "3.1 Mesh solver", linked to it. The code in the name is a
-// snapshot; it doesn't follow later reordering. The link itself is by id.
-async function makeTask(stepId) {
-  const step = findStep(stepId);
-  if (!step || !currentProject || busyStepId) return;
-  busyStepId = stepId;
-  saveError = null;
-  rebuild();
-  const title = String(step.title || '').trim();
-  let result;
-  try {
-    result = await createTask({ name: title ? `${step.code} ${title}` : step.code, category: 'Project', project: currentProject.name });
-  } catch (err) {
-    result = { ok: false, error: err.message };
-  }
-  busyStepId = null;
-  if (result.ok && result.task) {
-    addCachedNotionTask(result.task);
-    linkTask(stepId, result.task.id); // rebuilds via store change
-  } else {
-    saveError = result.error || 'Failed to create the task';
-  }
-  if (container && !editingId) rebuild();
-}
-
-// Ticking a step that has linked tasks marks them all done (or not done) in
-// Notion, since that's what decides the step. Optimistic, reverted on failure.
-async function setLinkedTasksDone(step, done) {
-  const changed = step.linkedTasks.filter((t) => Boolean(t.mark) !== done);
-  if (!changed.length) return;
-  for (const t of changed) patchCachedNotionTask(t.id, { mark: done });
-  saveError = null;
-  rebuild();
-  let result;
-  try {
-    result = await pushCheckboxUpdates('?', changed.map((t) => ({ pageId: t.id, value: done })));
-  } catch (err) {
-    result = { ok: false, error: err.message };
-  }
-  if (!result.ok) {
-    for (const t of changed) patchCachedNotionTask(t.id, { mark: Boolean(t.mark) });
-    saveError = result.error || 'Failed to update the tasks in Notion';
-  }
-  if (container && !editingId) rebuild();
-}
-
-// Picker: this project's tasks not linked to any step yet, open ones first.
-function openLinkPicker(stepId) {
-  const step = findStep(stepId);
-  const dialog = container.querySelector('#modal-dialog');
-  if (!step || !dialog || !currentProject) return;
-  const taken = allLinkedTaskIds(slug);
-  const tasks = getCachedNotionTasks()
-    .filter((t) => t.category === 'Project' && t.project === currentProject.name && !taken.has(t.id))
-    .sort((a, b) => Number(Boolean(a.mark)) - Number(Boolean(b.mark)) || (taskDay(a) || '9').localeCompare(taskDay(b) || '9'));
-  dialog.innerHTML = `
-    <div class="modal-form">
-      <h2 class="mono">Link a task to ${escapeHtml(step.code)}</h2>
-      ${tasks.length ? `
-        <ul class="ms-picker">
-          ${tasks.map((t) => `
-            <li><button type="button" class="ms-picker-item${t.mark ? ' is-done' : ''}" data-pick-task="${t.id}">
-              <span>${t.mark ? '✓' : '○'} ${escapeHtml(t.name || 'Untitled')}</span>
-              <span class="mono muted">${taskDay(t) ? escapeHtml(formatShortDate(taskDay(t))) : ''}</span>
-            </button></li>
-          `).join('')}
-        </ul>
-      ` : `<p class="muted">No unlinked ${escapeHtml(currentProject.name)} tasks. Use "+ task" to make one, or add one in Agenda with category Project and project ${escapeHtml(currentProject.name)}.</p>`}
-      <div class="modal-actions">
-        <button type="button" data-picker-close>Cancel</button>
-      </div>
-    </div>
-  `;
-  dialog.addEventListener('close', () => rebuild(), { once: true });
-  dialog.querySelector('[data-picker-close]').addEventListener('click', () => dialog.close());
-  dialog.querySelectorAll('[data-pick-task]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      dialog.close();
-      linkTask(stepId, btn.dataset.pickTask);
-    });
-  });
-  dialog.showModal();
-}
-
 function onClick(e) {
+  // A mode is on: clicking a card in the calendar toggles it.
+  const chip = calMode && e.target.closest('.project-week .cal-chip[data-task-id]');
+  if (chip) { toggleChip(chip.dataset.taskId); return; }
+  // Picking a day for a step: any click in a day column of the calendar.
+  const dayCol = picking && !pickBusy && e.target.closest('.project-week .cal-day-col[data-date]');
+  if (dayCol) { pickDay(dayCol.dataset.date); return; }
+  // No mode, not picking: a task card shows its step on the roadmap.
+  const taskChip = !calMode && !picking && e.target.closest('.project-week .cal-chip[data-task-id]');
+  if (taskChip) { showTaskOnRoadmap(taskChip.dataset.taskId); return; }
   const btn = e.target.closest('[data-action]');
   if (!btn || !container.contains(btn)) return;
   const id = btn.dataset.id;
   switch (btn.dataset.action) {
-    case 'make-task': makeTask(id); break;
-    case 'link-task': openLinkPicker(id); break;
-    case 'unlink-task': unlinkTask(id, btn.dataset.taskId); break;
+    case 'toggle-fold': toggleFold(id); break;
+    case 'link-step': if (!calMode) startPick(id); break;
+    case 'cal-mode': if (!calMode) startCalMode(btn.dataset.kind); else if (calMode.kind === btn.dataset.kind) finishCalMode(); break;
+    case 'cal-mode-cancel': cancelCalMode(); break;
+    case 'card-phase': shiftCardPhase(Number(btn.dataset.dir)); break;
+    case 'phase-edit': saveStepField(); phaseEditId = id; editingId = null; rebuild(); break;
+    case 'phase-edit-done': saveStepField(); phaseEditId = null; editingId = null; rebuild(); break;
+    case 'pick-cancel': cancelPick(); break;
+    case 'week-prev': shiftWeek(-7); break;
+    case 'week-next': shiftWeek(7); break;
+    case 'week-today': shiftWeek(0); break;
     case 'delete-log': deleteLogEntry(id); break;
     case 'delete-link': removeLink(slug, Number(btn.dataset.index)); break;
     case 'pitch-open': openPitchDialog(); break;
     case 'readme-open': openReadmeDialog(); break;
     case 'copy-github': copyGithub(btn); break;
     case 'edit-github': openGithubDialog(); break;
+    case 'section-open': location.hash = `#/projects/${encodeURIComponent(slug)}/${btn.dataset.section}`; break;
     case 'report-open': location.hash = `#/projects/${encodeURIComponent(slug)}/report`; break;
     case 'add-phase': add('phase', ''); break;
     case 'add-checkpoint': add('checkpoint', id); break;
@@ -805,6 +1293,7 @@ function onClick(e) {
     case 'delete': {
       const under = descendantCount(id);
       if (under && !confirm(`Delete this and the ${under} item${under === 1 ? '' : 's'} under it?`)) return;
+      if (id === phaseEditId) phaseEditId = null;
       deleteMilestone(id);
       break;
     }
@@ -814,14 +1303,7 @@ function onClick(e) {
 
 function onChange(e) {
   const check = e.target.closest('[data-step-check]');
-  if (check) {
-    const step = findStep(check.dataset.stepCheck);
-    if (step?.linkedTasks.length) setLinkedTasksDone(step, check.checked);
-    else updateMilestone(check.dataset.stepCheck, { done: check.checked });
-    return;
-  }
-  const date = e.target.closest('[data-target-date]');
-  if (date) updateMilestone(date.dataset.targetDate, { targetDate: date.value });
+  if (check) updateMilestone(check.dataset.stepCheck, { done: check.checked });
 }
 
 function wireAfterRender() {
@@ -834,10 +1316,6 @@ function wireAfterRender() {
     logForm.querySelector('[name="text"]').value = '';
     logForm.querySelector('[name="date"]').value = formatDateISO(new Date()); // next entry defaults to today again
     addLogEntry(slug, String(data.get('date') || formatDateISO(new Date())), text);
-  });
-  // Ctrl/Cmd+Enter adds from the textarea.
-  logForm?.querySelector('textarea').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); logForm.requestSubmit(); }
   });
 
   const linkForm = container.querySelector('[data-link-form]');
@@ -871,7 +1349,7 @@ function wireAfterRender() {
 
 function rebuild() {
   if (!container) return;
-  // The dialog (task picker, pitch) lives in this markup. Wait for it to
+  // The dialog (pitch, readme, GitHub) lives in this markup. Wait for it to
   // close (its close handler rebuilds).
   if (container.querySelector('#modal-dialog[open]')) return;
 
@@ -893,14 +1371,10 @@ function rebuild() {
   }
 
   currentProject = project;
-  const tree = milestoneTree(slug, getCachedNotionTasks());
+  const tree = milestoneTree(slug);
   const progress = milestoneProgress(tree);
-  const nextTarget = tree.flatMap((p) => p.checkpoints)
-    .filter((cp) => cp.targetDate && !(cp.steps.length && cp.steps.every((s) => s.complete)))
-    .map((cp) => ({ code: cp.code, date: String(cp.targetDate).slice(0, 10) }))
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
 
-  container.innerHTML = `
+  container.innerHTML = section ? sectionPageHtml(project, progress, tree) : `
     <section class="card project-head" style="border-color:${hexToRgba(project.hex, 0.6)};">
       <h1 class="mono" style="color:${project.hex};">${escapeHtml(project.name)}${project.archived ? ' <span class="tag">archived</span>' : ''}</h1>
       ${hoursStatsHtml(project.name)}
@@ -912,31 +1386,57 @@ function rebuild() {
       ${progressHtml(progress, project.hex)}
     </section>
     <div class="project-doc-buttons">
+      <button type="button" class="project-doc-btn" data-action="section-open" data-section="roadmap" title="Phases, checkpoints and steps">Roadmap</button>
       <button type="button" class="project-doc-btn" data-action="report-open" title="Open this project's report editor">Report</button>
       <button type="button" class="project-doc-btn" data-action="readme-open" title="README from the project's GitHub repo">Readme</button>
+      <button type="button" class="project-doc-btn" data-action="section-open" data-section="log" title="Dated progress notes">Log</button>
+      <button type="button" class="project-doc-btn" data-action="section-open" data-section="resources" title="Links: repo, docs, papers">Resources</button>
     </div>
-    <section class="card">
-      <div class="project-card-head">
-        <h2 class="mono">Milestones</h2>
-        ${nextTarget ? `<span class="mono muted project-next-target">Next target: checkpoint ${nextTarget.code}, ${escapeHtml(formatShortDate(nextTarget.date))}</span>` : ''}
-        <button type="button" data-action="add-phase">+ Phase</button>
-      </div>
-      ${saveError ? `<p class="project-error">${escapeHtml(saveError)}</p>` : ''}
-      ${milestonesHtml(tree, project.hex)}
-    </section>
-    <section class="card">
-      <div class="project-card-head"><h2 class="mono">Log</h2></div>
-      ${logHtml()}
-    </section>
-    <section class="card">
-      <div class="project-card-head"><h2 class="mono">Resources</h2></div>
-      ${resourcesHtml()}
-    </section>
+    ${projectWeekHtml(project)}
+    ${roadmapViewHtml(tree, project.hex)}
     <dialog id="modal-dialog"></dialog>
   `;
+  applyPickTint(section ? null : picking ? project.hex : calMode ? MODE_COLORS[calMode.kind] : null);
   container.querySelectorAll('[data-keep]').forEach((el) => {
     if (el.dataset.keep in kept) el.value = kept[el.dataset.keep];
   });
   if (focusedKeep) container.querySelector(`[data-keep="${focusedKeep}"]`)?.focus({ preventScroll: true });
   wireAfterRender();
+  if (pendingFlashStepId && section === 'roadmap') {
+    const id = pendingFlashStepId;
+    pendingFlashStepId = null;
+    flashStep(id);
+  }
+}
+
+const SECTION_LABELS = { roadmap: 'Roadmap', log: 'Log', resources: 'Resources' };
+
+// Roadmap / Log / Resources: each its own page under the project, with a
+// back button to it.
+function sectionPageHtml(project, progress, tree) {
+  let body;
+  if (section === 'roadmap') {
+    body = `
+      <div class="project-card-head">
+        <h2 class="mono">Milestones</h2>
+        <button type="button" data-action="add-phase">+ Phase</button>
+      </div>
+      ${milestonesHtml(tree, project.hex)}
+    `;
+  } else if (section === 'log') {
+    body = logHtml();
+  } else {
+    body = resourcesHtml();
+  }
+  return `
+    <section class="card project-head" style="border-color:${hexToRgba(project.hex, 0.6)};">
+      <h1 class="mono" style="color:${project.hex};">${escapeHtml(project.name)} <span class="muted">· ${SECTION_LABELS[section]}</span></h1>
+      <div class="project-head-actions">
+        <a href="#/projects/${encodeURIComponent(slug)}" class="btn btn-back">&larr; ${escapeHtml(project.name)}</a>
+      </div>
+      ${section === 'roadmap' ? progressHtml(progress, project.hex) : ''}
+    </section>
+    <section class="card">${body}</section>
+    <dialog id="modal-dialog"></dialog>
+  `;
 }
