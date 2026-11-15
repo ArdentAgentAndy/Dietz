@@ -706,6 +706,102 @@ function notionSelectOption_(property, op, name, color) {
   return { ok: true };
 }
 
+// --- GitHub proxy (project READMEs) ---------------------------------------
+// The project page's Readme window reads, previews and edits a repo's README
+// through here, so the GitHub token never reaches the browser. Two Script
+// Properties (set them in Project Settings > Script Properties):
+//   GITHUB_TOKEN  a fine-grained personal access token limited to the repos
+//                 below, with only "Contents: Read and write", and an expiry.
+//   GITHUB_REPOS  comma-separated allow-list, e.g.
+//                 "ItsAerocraft/orbital-propagator,ItsAerocraft/flightstack-learn".
+// Deliberately narrow: README files only, allow-listed repos only, no
+// general "send this to GitHub" action — so even a leaked Dietz TOKEN can't
+// reach anything else the GitHub token could.
+
+var GITHUB_API_ = 'https://api.github.com';
+var README_PATH_ = /^([A-Za-z0-9_.-]+\/)*README(\.[A-Za-z0-9]+)?$/i;
+
+function githubConfig_(repo) {
+  var props = PropertiesService.getScriptProperties();
+  var token = props.getProperty('GITHUB_TOKEN');
+  if (!token) return { error: 'github not configured' };
+  var allowed = String(props.getProperty('GITHUB_REPOS') || '')
+    .split(',').map(function (r) { return r.trim().toLowerCase(); }).filter(String);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repo || ''))) return { error: 'bad repo' };
+  if (allowed.indexOf(String(repo).toLowerCase()) === -1) {
+    return { error: 'repo not allowed: add ' + repo + ' to the GITHUB_REPOS script property' };
+  }
+  return { token: token };
+}
+
+function githubFetch_(token, method, path, payload) {
+  var options = {
+    method: method,
+    headers: {
+      Authorization: 'Bearer ' + token,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    muteHttpExceptions: true,
+  };
+  if (payload) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payload);
+  }
+  var res = UrlFetchApp.fetch(GITHUB_API_ + path, options);
+  var text = res.getContentText();
+  var json = null;
+  try { json = JSON.parse(text); } catch (err) { /* not JSON (e.g. rendered HTML) */ }
+  return { code: res.getResponseCode(), json: json, text: text };
+}
+
+// The README's Markdown, its path and its blob sha (needed to save it back).
+function githubReadmeGet_(repo) {
+  var cfg = githubConfig_(repo);
+  if (cfg.error) return cfg;
+  var res = githubFetch_(cfg.token, 'get', '/repos/' + repo + '/readme');
+  if (res.code === 404) return { error: 'No README in ' + repo + ' yet.' };
+  if (res.code !== 200) return { error: 'github error ' + res.code + ': ' + res.text };
+  var bytes = Utilities.base64Decode(String(res.json.content || '').replace(/\s/g, ''));
+  return {
+    ok: true,
+    path: res.json.path,
+    sha: res.json.sha,
+    url: res.json.html_url,
+    content: Utilities.newBlob(bytes).getDataAsString('UTF-8'),
+  };
+}
+
+// GitHub-flavoured Markdown -> HTML, in the repo's context (GitHub
+// sanitizes it, same as on github.com).
+function githubMarkdown_(repo, text) {
+  var cfg = githubConfig_(repo);
+  if (cfg.error) return cfg;
+  var res = githubFetch_(cfg.token, 'post', '/markdown', { text: String(text || ''), mode: 'gfm', context: repo });
+  if (res.code !== 200) return { error: 'github error ' + res.code + ': ' + res.text };
+  return { ok: true, html: res.text };
+}
+
+// Commits a new README. sha is the one it was opened at: if GitHub has a
+// newer version (edited elsewhere), GitHub refuses with 409 and nothing is
+// overwritten.
+function githubReadmePut_(repo, path, content, sha, message) {
+  var cfg = githubConfig_(repo);
+  if (cfg.error) return cfg;
+  if (!README_PATH_.test(String(path || ''))) return { error: 'only README files can be edited here' };
+  var payload = {
+    message: String(message || '').trim() || 'Update README',
+    content: Utilities.base64Encode(String(content || ''), Utilities.Charset.UTF_8),
+  };
+  if (sha) payload.sha = sha;
+  var res = githubFetch_(cfg.token, 'put', '/repos/' + repo + '/contents/' + path, payload);
+  if (res.code === 409 || (res.code === 422 && /sha/i.test(res.text))) {
+    return { error: 'The README changed on GitHub since you opened it. Reopen it to get the latest, then redo your edit.' };
+  }
+  if (res.code !== 200 && res.code !== 201) return { error: 'github error ' + res.code + ': ' + res.text };
+  return { ok: true, sha: res.json.content.sha, commitUrl: res.json.commit.html_url };
+}
+
 function doPost(e) {
   var body;
   try {
@@ -766,6 +862,21 @@ function doPost(e) {
 
   if (body.action === 'notion-select-option') {
     return jsonOut_(notionSelectOption_(body.property, body.op, body.name, body.color));
+  }
+
+  // Caught so a network failure comes back as JSON, not an Apps Script error
+  // page the browser can't read (same reasoning as canvasEvents_).
+  var github = {
+    'github-readme-get': function () { return githubReadmeGet_(body.repo); },
+    'github-markdown': function () { return githubMarkdown_(body.repo, body.text); },
+    'github-readme-put': function () { return githubReadmePut_(body.repo, body.path, body.content, body.sha, body.message); },
+  };
+  if (github[body.action]) {
+    try {
+      return jsonOut_(github[body.action]());
+    } catch (err) {
+      return jsonOut_({ error: 'github request failed: ' + err.message });
+    }
   }
 
   var lock = LockService.getScriptLock();

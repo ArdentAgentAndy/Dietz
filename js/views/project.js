@@ -15,6 +15,7 @@ import {
   addCachedNotionTask, patchCachedNotionTask,
 } from '../notion.js?v=68';
 import { taskDay } from '../taskDisplay.js?v=68';
+import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable } from '../github.js?v=68';
 
 // One project's own page (#/projects/<slug>): header (name, logged hours,
 // milestone position, back + Pitch buttons), the milestones (phases A, B,
@@ -303,9 +304,9 @@ async function fetchReadmeHtml({ owner, repo }) {
 // external links open in a new tab. In-page "#x" links are left as
 // data-readme-anchor (a real "#x" would hijack this app's #/ routing) and
 // scrolled to by openReadmeDialog.
-function absolutizeReadme(html, owner, repo) {
+function absolutizeReadme(html, owner, repo, readmePath = '') {
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  const path = doc.querySelector('[data-path]')?.getAttribute('data-path') || 'README.md';
+  const path = readmePath || doc.querySelector('[data-path]')?.getAttribute('data-path') || 'README.md';
   const rawBase = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${path}`;
   const blobBase = `https://github.com/${owner}/${repo}/blob/HEAD/${path}`;
   const isRelative = (v) => v && !/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(v);
@@ -328,57 +329,189 @@ function absolutizeReadme(html, owner, repo) {
   return doc.body.innerHTML;
 }
 
+// Preview / Edit window for the repo's README. Reads and saves through the
+// backend's GitHub proxy (js/github.js) — the GitHub token never reaches
+// this page. Without the proxy set up (no GITHUB_TOKEN, or an older Code.gs)
+// it falls back to the public, read-only view.
 function openReadmeDialog() {
   const dialog = container.querySelector('#modal-dialog');
   if (!dialog || !currentProject) return;
   const repo = githubRepo();
-  const repoUrl = repo ? githubUrl(repo) : '';
+  const repoName = repo ? `${repo.owner}/${repo.repo}` : '';
 
-  const frame = (body) => `
-    <div class="modal-form project-pitch-dialog">
-      <div class="project-readme-head">
-        <h2 class="mono">Readme</h2>
-        ${repo ? `<a href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener noreferrer" class="mono muted">${escapeHtml(`${repo.owner}/${repo.repo}`)} ↗</a>` : ''}
-      </div>
-      ${body}
-      <div class="modal-actions">
-        <button type="button" data-readme-close>Close</button>
-      </div>
-    </div>
-  `;
-  const show = (body) => {
-    dialog.innerHTML = frame(body);
-    dialog.querySelector('[data-readme-close]').addEventListener('click', () => dialog.close());
+  const state = {
+    tab: 'preview', // 'preview' | 'edit'
+    readOnly: false, // proxy unavailable: public view only
+    readme: null, // { path, sha, url, content } as last loaded/saved
+    draft: '',
+    previewFor: null, // the text previewHtml was rendered from
+    previewHtml: '',
+    status: '', // HTML line under the content (errors, "saved")
+    busy: false,
+  };
+  const dirty = () => Boolean(state.readme) && state.draft !== state.readme.content;
+
+  const wireAnchors = () => {
+    // GitHub prefixes heading ids with "user-content-".
+    dialog.querySelectorAll('[data-readme-anchor]').forEach((a) => {
+      a.addEventListener('click', () => {
+        const id = a.dataset.readmeAnchor;
+        const target = dialog.querySelector(`[id="user-content-${CSS.escape(id)}"], [id="${CSS.escape(id)}"]`);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
   };
 
+  const render = (body) => {
+    const editable = Boolean(state.readme) && !state.readOnly;
+    dialog.innerHTML = `
+      <div class="modal-form project-pitch-dialog readme-dialog">
+        <div class="project-readme-head">
+          <h2 class="mono">Readme</h2>
+          ${repo ? `<a href="${escapeHtml(githubUrl(repo))}" target="_blank" rel="noopener noreferrer" class="mono muted">${escapeHtml(repoName)} ↗</a>` : ''}
+          ${state.readme ? `<span class="mono muted readme-path">${escapeHtml(state.readme.path)}${dirty() ? ' • unsaved' : ''}</span>` : ''}
+          ${editable ? `
+            <span class="readme-tabs">
+              <button type="button" class="${state.tab === 'preview' ? 'active' : ''}" data-readme-tab="preview">Preview</button>
+              <button type="button" class="${state.tab === 'edit' ? 'active' : ''}" data-readme-tab="edit">Edit</button>
+            </span>
+          ` : ''}
+        </div>
+        ${body}
+        ${state.status ? `<p class="readme-status">${state.status}</p>` : ''}
+        <div class="modal-actions">
+          ${editable && state.tab === 'edit' ? `
+            <input type="text" class="readme-message" data-readme-message placeholder="Commit message (default: Update README)" autocomplete="off">
+            <button type="button" class="btn-primary" data-readme-save ${dirty() && !state.busy ? '' : 'disabled'}>${state.busy ? 'Saving…' : 'Save to GitHub'}</button>
+          ` : ''}
+          <button type="button" data-readme-close>Close</button>
+        </div>
+      </div>
+    `;
+    dialog.querySelector('[data-readme-close]').addEventListener('click', () => {
+      if (dirty() && !confirm('Discard your unsaved README changes?')) return;
+      dialog.close();
+    });
+    dialog.querySelectorAll('[data-readme-tab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.readmeTab)));
+    dialog.querySelector('[data-readme-save]')?.addEventListener('click', save);
+    const ta = dialog.querySelector('[data-readme-text]');
+    ta?.addEventListener('input', () => {
+      const wasDirty = dirty();
+      state.draft = ta.value;
+      if (wasDirty !== dirty()) {
+        // Only the save button and "unsaved" marker change; keep the textarea.
+        dialog.querySelector('[data-readme-save]').disabled = !dirty() || state.busy;
+        const path = dialog.querySelector('.readme-path');
+        if (path) path.textContent = `${state.readme.path}${dirty() ? ' • unsaved' : ''}`;
+      }
+    });
+    wireAnchors();
+  };
+
+  const showPreview = async () => {
+    if (state.previewFor === state.draft) {
+      render(`<div class="readme-body">${state.previewHtml}</div>`);
+      return;
+    }
+    render('<p class="muted mono">Rendering…</p>');
+    const result = await renderMarkdown(repoName, state.draft).catch((err) => ({ error: err.message }));
+    if (!dialog.open || state.tab !== 'preview') return;
+    if (result.error) {
+      state.status = `<span class="project-error">${escapeHtml(result.error)}</span>`;
+      render('');
+      return;
+    }
+    state.previewFor = state.draft;
+    state.previewHtml = absolutizeReadme(result.html, repo.owner, repo.repo, state.readme.path);
+    render(`<div class="readme-body">${state.previewHtml}</div>`);
+  };
+
+  const showEdit = () => {
+    render(`<textarea class="readme-editor" data-readme-text spellcheck="true"></textarea>`);
+    const ta = dialog.querySelector('[data-readme-text]');
+    ta.value = state.draft;
+    ta.focus();
+  };
+
+  const setTab = (tab) => {
+    const message = dialog.querySelector('[data-readme-message]')?.value;
+    state.tab = tab;
+    state.status = '';
+    if (tab === 'edit') showEdit();
+    else showPreview();
+    const input = dialog.querySelector('[data-readme-message]');
+    if (input && message) input.value = message;
+  };
+
+  async function save() {
+    if (!dirty() || state.busy) return;
+    const message = dialog.querySelector('[data-readme-message]')?.value || '';
+    state.busy = true;
+    state.status = '';
+    dialog.querySelector('[data-readme-save]').disabled = true;
+    dialog.querySelector('[data-readme-save]').textContent = 'Saving…';
+    const result = await saveReadme(repoName, state.readme.path, state.draft, state.readme.sha, message).catch((err) => ({ error: err.message }));
+    state.busy = false;
+    if (!dialog.open) return;
+    if (result.error) {
+      state.status = `<span class="project-error">${escapeHtml(result.error)}</span>`;
+      const draft = state.draft;
+      showEdit();
+      dialog.querySelector('[data-readme-text]').value = draft;
+      dialog.querySelector('[data-readme-message]').value = message;
+      return;
+    }
+    state.readme = { ...state.readme, sha: result.sha, content: state.draft };
+    state.status = `Saved to GitHub. <a href="${escapeHtml(result.commitUrl)}" target="_blank" rel="noopener noreferrer">View the commit ↗</a>`;
+    state.tab = 'preview';
+    showPreview();
+  }
+
+  // Esc: same "discard unsaved changes?" check as Close.
+  const onCancel = (e) => {
+    if (dirty() && !confirm('Discard your unsaved README changes?')) e.preventDefault();
+  };
+  dialog.addEventListener('cancel', onCancel);
   dialog.addEventListener('close', () => {
-    dialog.classList.remove('is-wide');
+    dialog.removeEventListener('cancel', onCancel);
+    dialog.classList.remove('is-wide', 'is-readme');
     rebuild();
   }, { once: true });
-  dialog.classList.add('is-wide');
+  dialog.classList.add('is-wide', 'is-readme');
 
   if (!repo) {
-    show('<p class="muted">No GitHub repo linked yet. Add it with the "+ GitHub" button at the top of the page, then open this again.</p>');
+    render('<p class="muted">No GitHub repo linked yet. Add it with the "+ GitHub" button at the top of the page, then open this again.</p>');
     dialog.showModal();
     return;
   }
 
-  show('<p class="muted mono">Loading README from GitHub…</p>');
+  render('<p class="muted mono">Loading README from GitHub…</p>');
   dialog.showModal();
-  fetchReadmeHtml(repo)
-    .then((html) => {
+  getReadme(repoName)
+    .catch((err) => ({ error: err.message }))
+    .then(async (result) => {
       if (!dialog.open) return;
-      show(`<div class="readme-body">${html}</div>`);
-      // GitHub prefixes heading ids with "user-content-".
-      dialog.querySelectorAll('[data-readme-anchor]').forEach((a) => {
-        a.addEventListener('click', () => {
-          const id = a.dataset.readmeAnchor;
-          const target = dialog.querySelector(`[id="user-content-${CSS.escape(id)}"], [id="${CSS.escape(id)}"]`);
-          target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      });
-    })
-    .catch((err) => { if (dialog.open) show(`<p class="project-error">${escapeHtml(err.message)}</p>`); });
+      if (result.ok) {
+        state.readme = { path: result.path, sha: result.sha, url: result.url, content: result.content };
+        state.draft = result.content;
+        showPreview();
+        return;
+      }
+      if (!isProxyUnavailable(result)) {
+        state.status = `<span class="project-error">${escapeHtml(result.error || 'Could not load the README.')}</span>`;
+        render('');
+        return;
+      }
+      // No proxy: the public read-only view, with a note on how to enable editing.
+      state.readOnly = true;
+      state.status = '<span class="muted">Read-only. To edit here, set GITHUB_TOKEN and GITHUB_REPOS in the Apps Script\'s Script Properties (see Code.gs).</span>';
+      try {
+        render(`<div class="readme-body">${await fetchReadmeHtml(repo)}</div>`);
+      } catch (err) {
+        state.status = `<span class="project-error">${escapeHtml(err.message)}</span>`;
+        render('');
+      }
+    });
 }
 
 // --- Milestones --------------------------------------------------------

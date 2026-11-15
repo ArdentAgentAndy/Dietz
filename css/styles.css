@@ -3970,6 +3970,73 @@ dialog#modal-dialog.is-wide {
   text-decoration: none;
 }
 
+/* Readme Preview / Edit (project.js's openReadmeDialog). */
+.project-readme-head {
+  flex-wrap: wrap;
+}
+
+.readme-path {
+  font-size: 11px;
+}
+
+.readme-tabs {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.readme-editor {
+  width: 100%;
+  min-height: 60vh;
+  resize: vertical;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color-scheme: dark;
+  tab-size: 2;
+}
+
+.readme-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.readme-status {
+  margin: 0;
+  font-size: 13px;
+}
+
+.readme-status a {
+  color: var(--accent);
+}
+
+.readme-dialog .modal-actions {
+  align-items: center;
+}
+
+.readme-message {
+  flex: 1;
+  min-width: 0;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  color-scheme: dark;
+}
+
+.readme-message:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* GitHub-rendered README HTML, styled for the dark theme. */
 .readme-body {
   font-size: 15px;
