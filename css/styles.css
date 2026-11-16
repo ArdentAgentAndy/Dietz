@@ -3835,6 +3835,7 @@ button.projects-pebble:focus-visible {
 
 .project-head h1 {
   margin: 0;
+  font-size: 1.75rem;
 }
 
 /* Whiteboard's own back link, pushed to the far right of its header row. */
@@ -3845,6 +3846,7 @@ button.projects-pebble:focus-visible {
 /* Pitch + back buttons, pushed to the far right of the header row. */
 .project-head-actions {
   margin-left: auto;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4192,10 +4194,13 @@ dialog#modal-dialog.is-wide {
   display: none;
 }
 
-/* Today / This week / All time, beside the title in the header. */
+/* Today / Week / All time, beside the title in the header. Takes the
+   leftover row width (basis 0) and wraps its own items when that's tight,
+   so the buttons stay on the title row instead of dropping below it. */
 .project-hours-stats {
+  flex: 1 1 0;
   display: flex;
-  gap: 18px;
+  gap: 4px 18px;
   flex-wrap: wrap;
   font-size: 13px;
 }
@@ -4211,7 +4216,7 @@ dialog#modal-dialog.is-wide {
 
 .project-progress-bar {
   flex: 1;
-  max-width: 320px;
+  min-width: 0;
   height: 6px;
   border-radius: 3px;
   background: var(--border);
@@ -4222,6 +4227,17 @@ dialog#modal-dialog.is-wide {
   display: block;
   height: 100%;
   background: var(--bar-color);
+}
+
+/* % complete, right after the bar; fixed width so the bar doesn't jump. */
+.project-progress-pct {
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-progress .muted {
+  white-space: nowrap;
 }
 
 /* Card title with its buttons on the right. */

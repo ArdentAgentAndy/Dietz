@@ -388,13 +388,13 @@ function hoursText(minutes) {
   return h ? `${h}h ${m}m` : `${m}m`;
 }
 
-// Today / This week / All time, shown next to the title.
+// Today / Week / All time, shown next to the title.
 function hoursStatsHtml(name) {
   const todayISO = formatDateISO(new Date());
   const byWeek = projectMinutesByWeek(name);
   const stats = [
     ['Today', projectMinutesOnDay(name, todayISO)],
-    ['This week', byWeek[weekStart(todayISO)] || 0],
+    ['Week', byWeek[weekStart(todayISO)] || 0],
     ['All time', Object.values(byWeek).reduce((sum, m) => sum + m, 0)],
   ];
   return `
@@ -404,13 +404,14 @@ function hoursStatsHtml(name) {
   `;
 }
 
-// The steps-done bar and count, under the title row.
+// The steps-done bar (full card width), % complete, and count, under the title row.
 function progressHtml(progress, hex) {
   if (!progress.total) return '';
   const pct = Math.round((progress.done / progress.total) * 100);
   return `
     <div class="project-progress mono">
       <span class="project-progress-bar" style="--bar-color:${hex};"><span style="width:${pct}%;"></span></span>
+      <strong class="project-progress-pct" style="color:${hex};">${pct}%</strong>
       <span class="muted">${progress.done}/${progress.total} steps</span>
     </div>
   `;
