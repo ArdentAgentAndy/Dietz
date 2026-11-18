@@ -553,8 +553,16 @@ function agedOutClass(dateKey) {
 
 function visibleTasks() {
   const q = searchQuery.trim().toLowerCase();
+  const cutoff = getNotionTasksCutoff();
   return allTasks.filter((t) => {
     if (hideCompleted && t.mark) return false;
+    // Completed tasks on aged-out days are hidden. Most aren't loaded at all;
+    // Project/Lead-tagged ones still are (project plans and Logging need
+    // them), but the Agenda shows only unfinished work before the cutoff.
+    if (cutoff && t.mark) {
+      const day = taskDay(t);
+      if (day && day < cutoff) return false;
+    }
     if (categoryFilter && t.category !== categoryFilter) return false;
     if (categoryFilter && subFilter) {
       const config = SUB_FILTER_BY_CATEGORY[categoryFilter];
