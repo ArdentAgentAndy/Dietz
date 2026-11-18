@@ -471,7 +471,7 @@ function weekViewHtml(events) {
         const isToday = key === isoDay(new Date());
         return `
           <div class="cal-day-col${isToday ? ' is-today' : ''}">
-            <div class="cal-day-head mono">${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></div>
+            <div class="cal-day-head mono">${WEEKDAY_NAMES[i]} <span class="muted">${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}</span></div>
             <div class="cal-day-items">${items.map(eventChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
           </div>
         `;

@@ -144,6 +144,13 @@ export function allLinkedTaskIds(projectId) {
   return new Set(rows(projectId).filter((m) => m.kind === 'step').flatMap(linkedTaskIds));
 }
 
+// Every task id linked to a step of ANY project: linked from an existing
+// task or created by a step's "+ day". The calendar marks these with a blue
+// corner (js/views/calendar.js's taskChipHtml).
+export function allPlanLinkedTaskIds() {
+  return new Set(store.table('ProjectMilestones').filter((m) => m.kind === 'step').flatMap(linkedTaskIds));
+}
+
 export function linkTask(stepId, taskId) {
   const step = store.table('ProjectMilestones').find((m) => m.id === stepId);
   if (!step) return;

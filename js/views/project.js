@@ -13,7 +13,7 @@ import { store } from '../store.js?v=70';
 import {
   fetchNotionTasks, getCachedNotionTasks, createTask, addCachedNotionTask,
   pushCheckboxUpdates, patchCachedNotionTask, deleteTask, removeCachedNotionTask,
-  promptTaskDuration,
+  askTaskDuration,
 } from '../notion.js?v=70';
 import { taskDay } from '../taskDisplay.js?v=70';
 import { startOfDay } from '../taskDisplay.js?v=70';
@@ -53,6 +53,9 @@ let calError = null;
 // A step to flash once the Roadmap page renders (set by clicking its task in
 // the project page's calendar). Module-level, so it survives the route change.
 let pendingFlashStepId = null;
+// The reverse: a task to flash in the project page's calendar once it
+// renders (set by clicking a step's date on the Roadmap page).
+let pendingFlashTaskId = null;
 
 export function render(rootEl, params) {
   container = rootEl;
@@ -66,7 +69,7 @@ export function render(rootEl, params) {
   container.addEventListener('change', onChange);
   container.addEventListener('input', onInput);
   container.addEventListener('focusout', onFocusOut);
-  weekAnchor = startOfDay(new Date());
+  weekAnchor = (pendingFlashTaskId && !section && weekOfTask(pendingFlashTaskId)) || startOfDay(new Date());
   picking = null;
   pickBusy = false;
   pickError = null;
@@ -159,6 +162,16 @@ function cancelPick() {
   rebuild();
 }
 
+// A step's Undo: drops its most recent task link. Unlink only; the Notion
+// task stays (delete it from the calendar's [X] mode if it should go too).
+function undoStepLink(stepId) {
+  const step = store.table('ProjectMilestones').find((m) => m.id === stepId);
+  const ids = step ? linkedTaskIds(step) : [];
+  if (!ids.length) return;
+  unlinkTask(stepId, ids[ids.length - 1]); // rebuilds via the store change
+  rebuild();
+}
+
 // A task card clicked while picking: links that existing Notion task to the
 // step instead of creating a new one. A task belongs to one step (see
 // findLinkedStep), so one already linked elsewhere moves to this step.
@@ -179,8 +192,8 @@ async function pickDay(day) {
   if (!picking || pickBusy || !currentProject) return;
   const { stepId, name } = picking;
   // Every new task needs a duration. Cancelling stays in picking mode.
-  const duration = promptTaskDuration(name);
-  if (duration === null) return;
+  const duration = await askTaskDuration(container?.querySelector('#modal-dialog'), name);
+  if (duration === null || !picking || pickBusy || picking.stepId !== stepId) return;
   pickBusy = true;
   rebuild();
   let result;
@@ -1073,13 +1086,18 @@ function phaseRowsHtml(phase, hex, isEditing) {
 function stepLinksHtml(step) {
   const byId = new Map(getCachedNotionTasks().map((t) => [t.id, t]));
   const days = linkedTaskIds(step).map((id) => byId.get(id)).filter(Boolean)
-    .map((t) => ({ day: taskDay(t), done: Boolean(t.mark) }))
+    .map((t) => ({ id: t.id, day: taskDay(t), done: Boolean(t.mark) }))
     .filter((d) => d.day)
     .sort((a, b) => a.day.localeCompare(b.day));
   const isPicking = picking?.stepId === step.id;
+  // Once linked, Undo replaces "+ day": it unlinks the most recent link
+  // (the Notion task itself is left alone).
+  const button = linkedTaskIds(step).length
+    ? `<button type="button" class="ms-btn ms-link-btn" data-action="unlink-step" data-id="${step.id}" title="Unlink this step's day (the task stays in Notion)">undo</button>`
+    : `<button type="button" class="ms-btn ms-link-btn${isPicking ? ' is-active' : ''}" data-action="link-step" data-id="${step.id}" title="Put this step on the calendar: then pick a day above">${isPicking ? 'picking…' : '+ day'}</button>`;
   return `
-    <button type="button" class="ms-btn ms-link-btn${isPicking ? ' is-active' : ''}" data-action="link-step" data-id="${step.id}" title="Put this step on the calendar: then pick a day above">${isPicking ? 'picking…' : '+ day'}</button>
-    ${days.map((d) => `<span class="ms-link-day mono${d.done ? ' is-done' : ''}">${escapeHtml(formatShortDate(d.day))}</span>`).join('')}
+    ${button}
+    ${days.map((d) => `<button type="button" class="ms-link-day mono${d.done ? ' is-done' : ''}" data-action="show-task" data-id="${escapeHtml(d.id)}" title="Show this task on the calendar">${escapeHtml(formatShortDate(d.day))}</button>`).join('')}
   `;
 }
 
@@ -1289,6 +1307,8 @@ function onClick(e) {
   switch (btn.dataset.action) {
     case 'toggle-fold': toggleFold(id); break;
     case 'link-step': if (!calMode) startPick(id); break;
+    case 'unlink-step': if (!calMode && !pickBusy) undoStepLink(id); break;
+    case 'show-task': if (!calMode && !picking) showTaskOnCalendar(id); break;
     case 'cal-mode': if (!calMode) startCalMode(btn.dataset.kind); else if (calMode.kind === btn.dataset.kind) finishCalMode(); break;
     case 'cal-mode-cancel': cancelCalMode(); break;
     case 'card-phase': shiftCardPhase(Number(btn.dataset.dir)); break;
@@ -1429,6 +1449,45 @@ function rebuild() {
     pendingFlashStepId = null;
     flashStep(id);
   }
+  if (pendingFlashTaskId && !section) {
+    const id = pendingFlashTaskId;
+    pendingFlashTaskId = null;
+    flashTaskChip(id);
+  }
+}
+
+// A task's day as a week anchor for the project calendar, or null if the
+// task isn't loaded or has no date.
+function weekOfTask(taskId) {
+  const task = getCachedNotionTasks().find((t) => t.id === taskId);
+  const day = task && taskDay(task);
+  return day ? startOfDay(new Date(`${day}T00:00:00`)) : null;
+}
+
+// A step's date clicked: the project calendar jumps to that task's week and
+// flashes its card. From the Roadmap page, goes to the project page first.
+function showTaskOnCalendar(taskId) {
+  const week = weekOfTask(taskId);
+  if (!week) return;
+  if (section) {
+    pendingFlashTaskId = taskId;
+    location.hash = `#/projects/${encodeURIComponent(slug)}`;
+    return;
+  }
+  weekAnchor = week;
+  rebuild();
+  flashTaskChip(taskId);
+}
+
+// Same flash as the Agenda's (cal-chip.is-highlight-flash, 3 pulses).
+function flashTaskChip(taskId) {
+  const chip = container?.querySelector(`.project-week .cal-chip[data-task-id="${CSS.escape(taskId)}"]`);
+  if (!chip) return;
+  chip.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  chip.classList.remove('is-highlight-flash');
+  void chip.offsetWidth; // restart the animation if it's already flashing
+  chip.classList.add('is-highlight-flash');
+  chip.addEventListener('animationend', () => chip.classList.remove('is-highlight-flash'), { once: true });
 }
 
 const SECTION_LABELS = { roadmap: 'Roadmap', log: 'Log', resources: 'Resources' };

@@ -1,7 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema, isNotionTasksTruncated, getNotionTasksCutoff, promptTaskDuration } from '../notion.js?v=70';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema, isNotionTasksTruncated, getNotionTasksCutoff, askTaskDuration } from '../notion.js?v=70';
 import { hexForNotionColor } from '../notionColors.js?v=70';
 import { escapeHtml, hexToRgba } from '../format.js?v=70';
 import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=70';
+import { allPlanLinkedTaskIds } from '../projectPlan.js?v=70';
 import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=70';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -363,8 +364,8 @@ async function scheduleCanvasTask(day) {
 
   // Every new task needs a duration. Cancelling stays in scheduling mode so
   // another day can still be picked.
-  const duration = promptTaskDuration(schedulingItem.name);
-  if (duration === null) return;
+  const duration = await askTaskDuration(container?.querySelector('#modal-dialog'), schedulingItem.name);
+  if (duration === null || !schedulingItem || schedulingBusy) return;
 
   // Show "Saving…" and stop responding to further clicks immediately —
   // before the backend confirms — so a slow request never reads as "did
@@ -668,6 +669,7 @@ function taskChipHtml(task) {
   return `
     <div class="${classes}" style="${chipStyle(task)}" title="${escapeHtml(task.name)}" data-task-id="${escapeHtml(task.id)}" draggable="${(renderingReadOnly || activeHighlight || deleteMode || schedulingItem) ? 'false' : 'true'}">
       ${isMarked ? '<div class="cal-chip-delete-mark">&#10006;</div>' : ''}
+      ${allPlanLinkedTaskIds().has(task.id) ? '<span class="cal-chip-plan-mark" title="Linked to a roadmap step"></span>' : ''}
       <span class="cal-chip-ants"></span>
       ${isPublicMarked ? '<span class="cal-chip-public-mark cal-chip-public-mark-left"></span><span class="cal-chip-public-mark cal-chip-public-mark-right"></span>' : ''}
       <span class="cal-chip-name">${escapeHtml(task.name || 'Untitled')}</span>
@@ -720,7 +722,7 @@ function weekViewHtml(tasks, weekAnchor = anchor) {
         return `
           <div class="cal-day-col${isToday ? ' is-today' : ''}${agedOutClass(key)}" data-date="${key}">
             <div class="cal-day-head mono">
-              <span>${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></span>
+              <span>${WEEKDAY_NAMES[i]} <span class="muted">${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}</span></span>
               ${renderingReadOnly ? '' : dayPlusButtonHtml(key)}
             </div>
             <div class="cal-day-items">${items.map((t) => taskChipHtml(t)).join('') || '<p class="muted cal-empty">—</p>'}</div>

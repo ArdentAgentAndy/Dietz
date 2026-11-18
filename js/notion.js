@@ -1,4 +1,5 @@
 import { store } from './store.js?v=70';
+import { escapeHtml } from './format.js?v=70';
 
 const CACHE_KEY = 'dietz:notionCache';
 const SCHEMA_CACHE_KEY = 'dietz:notionSchemaCache';
@@ -95,16 +96,45 @@ export function isValidTaskDuration(value) {
 }
 
 // For the create paths with no form of their own (scheduling a Canvas item,
-// a project step's "+ day"): asks for the duration. Returns the minutes, or
-// null if cancelled. Re-asks on an invalid entry.
-export function promptTaskDuration(name) {
-  let message = `Duration in minutes for "${name}":`;
-  for (;;) {
-    const raw = window.prompt(message, '');
-    if (raw === null) return null;
-    if (isValidTaskDuration(raw.trim())) return Number(raw.trim());
-    message = `Enter a whole number of minutes above 0 for "${name}":`;
-  }
+// a project step's "+ day"): asks for the duration in the view's own
+// #modal-dialog. Resolves to the minutes, or null if cancelled. An in-page
+// dialog rather than window.prompt, which Chrome can suppress silently
+// (resolving as a cancel, so nothing would ever be created).
+export function askTaskDuration(dialog, name) {
+  return new Promise((resolve) => {
+    if (!dialog) { resolve(null); return; }
+    dialog.innerHTML = `
+      <form method="dialog" class="modal-form">
+        <h2 class="mono">Duration</h2>
+        <p class="muted">${escapeHtml(name)}</p>
+        <label>Minutes
+          <input type="number" name="duration" min="1" step="1" required>
+        </label>
+        <div class="modal-actions">
+          <button type="button" data-action="cancel">Cancel</button>
+          <button type="submit" class="btn-primary">Add</button>
+        </div>
+      </form>
+    `;
+    let result = null;
+    const form = dialog.querySelector('form');
+    const input = form.querySelector('[name="duration"]');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!isValidTaskDuration(input.value)) {
+        input.setCustomValidity('A whole number of minutes above 0');
+        form.reportValidity();
+        return;
+      }
+      result = Number(input.value);
+      dialog.close();
+    });
+    input.addEventListener('input', () => input.setCustomValidity(''));
+    form.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => resolve(result), { once: true });
+    dialog.showModal();
+    input.focus();
+  });
 }
 
 // Whether the last successful fetch hit the backend's row ceiling (see
