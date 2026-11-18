@@ -1804,6 +1804,24 @@ h1, h2, h3 {
   opacity: 0.35;
 }
 
+/* Days before the backend's lookback cutoff (js/notion.js's
+   getNotionTasksCutoff): completed tasks from then aren't loaded, so the
+   day is grayed and diagonally striped to say "partial history". */
+.cal-day-col.is-aged-out,
+.cal-month-cell.is-aged-out {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.035) 0 6px,
+    transparent 6px 12px
+  );
+  filter: grayscale(0.85);
+  opacity: 0.6;
+}
+
+.cal-month-cell.is-outside.is-aged-out {
+  opacity: 0.3;
+}
+
 .cal-month-daynum {
   font-size: 11px;
   color: var(--muted);

@@ -1,11 +1,11 @@
-import './store.js?v=69';
-import { initRouter } from './router.js?v=69';
-import { initSync } from './sync.js?v=69';
-import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=69';
-import { migrateCourseConfigs } from './migrations.js?v=69';
-import { initPush } from './push.js?v=69';
-import { initNav } from './nav.js?v=69';
-import { reconcileTimerDayBoundary } from './timer.js?v=69';
+import './store.js?v=70';
+import { initRouter } from './router.js?v=70';
+import { initSync } from './sync.js?v=70';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=70';
+import { migrateCourseConfigs } from './migrations.js?v=70';
+import { initPush } from './push.js?v=70';
+import { initNav } from './nav.js?v=70';
+import { reconcileTimerDayBoundary } from './timer.js?v=70';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project

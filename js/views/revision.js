@@ -15,9 +15,9 @@
 // CourseState and gone — summing both, rather than just CourseState alone,
 // is what keeps the chart accurate without waiting a day for new time
 // logged just now to show up.
-import { store } from '../store.js?v=69';
-import { getCourseState } from '../courseState.js?v=69';
-import { hexForCourse } from '../notionColors.js?v=69';
+import { store } from '../store.js?v=70';
+import { getCourseState } from '../courseState.js?v=70';
+import { hexForCourse } from '../notionColors.js?v=70';
 
 let container = null;
 let chart = null;

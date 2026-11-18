@@ -1,8 +1,8 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema } from '../notion.js?v=69';
-import { hexForNotionColor } from '../notionColors.js?v=69';
-import { escapeHtml, hexToRgba } from '../format.js?v=69';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=69';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=69';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema, isNotionTasksTruncated, getNotionTasksCutoff, promptTaskDuration } from '../notion.js?v=70';
+import { hexForNotionColor } from '../notionColors.js?v=70';
+import { escapeHtml, hexToRgba } from '../format.js?v=70';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=70';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=70';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -361,6 +361,11 @@ async function load() {
 async function scheduleCanvasTask(day) {
   if (!schedulingItem || !day || schedulingBusy) return;
 
+  // Every new task needs a duration. Cancelling stays in scheduling mode so
+  // another day can still be picked.
+  const duration = promptTaskDuration(schedulingItem.name);
+  if (duration === null) return;
+
   // Show "Saving…" and stop responding to further clicks immediately —
   // before the backend confirms — so a slow request never reads as "did
   // that even register?" and invites a second, duplicate click.
@@ -375,6 +380,7 @@ async function scheduleCanvasTask(day) {
     date: day,
     deadline: item.deadline || '',
     canvasId: item.id,
+    duration,
   });
 
   if (result.ok) {
@@ -536,6 +542,15 @@ function guessedColors(category, subValue) {
   return colors;
 }
 
+// Days before the backend's lookback cutoff get striped: completed tasks
+// from then aren't loaded (only unfinished/Lesson/Project/Lead/Urgent ones
+// are — see notionTasksFilter_ in Code.gs), so the day may look emptier
+// than it really was.
+function agedOutClass(dateKey) {
+  const cutoff = getNotionTasksCutoff();
+  return cutoff && dateKey < cutoff ? ' is-aged-out' : '';
+}
+
 function visibleTasks() {
   const q = searchQuery.trim().toLowerCase();
   return allTasks.filter((t) => {
@@ -695,7 +710,7 @@ function weekViewHtml(tasks, weekAnchor = anchor) {
         const items = byDay[key] || [];
         const isToday = key === isoDay(new Date());
         return `
-          <div class="cal-day-col${isToday ? ' is-today' : ''}" data-date="${key}">
+          <div class="cal-day-col${isToday ? ' is-today' : ''}${agedOutClass(key)}" data-date="${key}">
             <div class="cal-day-head mono">
               <span>${WEEKDAY_NAMES[i]} <span class="muted">${d.getMonth() + 1}/${d.getDate()}</span></span>
               ${renderingReadOnly ? '' : dayPlusButtonHtml(key)}
@@ -763,7 +778,7 @@ function monthViewHtml(tasks) {
         const shown = items.slice(0, MAX_PER_CELL);
         const extra = items.length - shown.length;
         return `
-          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}" data-date="${key}">
+          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}${agedOutClass(key)}" data-date="${key}">
             <div class="cal-month-daynum mono">
               <span>${d.getDate()}</span>
               ${dayPlusButtonHtml(key)}
@@ -969,8 +984,8 @@ function openTaskDialog(existing, defaultDate) {
           <input type="time" name="time" value="${time}">
         </label>
       </div>
-      <label>Duration (minutes, optional)
-        <input type="number" name="duration" min="0" step="1" value="${existing?.duration ?? ''}">
+      <label>Duration (minutes${existing ? ', optional' : ''})
+        <input type="number" name="duration" min="${existing ? 0 : 1}" step="1" value="${existing?.duration ?? ''}" ${existing ? '' : 'required'}>
       </label>
       <div class="field-row">
         <label style="flex-direction:row; align-items:center; gap:6px;"><input type="checkbox" name="mark" ${existing?.mark ? 'checked' : ''}> Completed</label>
@@ -1222,6 +1237,7 @@ function rebuild() {
         </div>
       </div>
       ${saveError ? `<p class="muted" style="color:var(--red); margin-top:8px;">Couldn't save: ${escapeHtml(saveError)}</p>` : ''}
+      ${isNotionTasksTruncated() ? `<p class="muted" style="color:var(--red); margin-top:8px;">Notion returned more tasks than the backend's row limit, so some are missing here. Raise maxPages or shorten NOTION_TASKS_LOOKBACK_DAYS_ in Code.gs.</p>` : ''}
       ${schedulingItem ? `
         <div class="row-between" style="margin-top:8px; padding:8px 10px; background:var(--accent-dim); border-radius:var(--radius-sm);">
           <span class="mono">${schedulingBusy ? 'Saving…' : `Pick a day for "${escapeHtml(schedulingItem.name)}", or click an existing task (purple) to link to it instead`}</span>

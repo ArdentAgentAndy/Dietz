@@ -1,6 +1,6 @@
-import { escapeHtml, hexToRgba, formatDateISO, formatShortDate } from '../format.js?v=69';
-import { projectBySlug } from '../projects.js?v=69';
-import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../projectHours.js?v=69';
+import { escapeHtml, hexToRgba, formatDateISO, formatShortDate } from '../format.js?v=70';
+import { projectBySlug } from '../projects.js?v=70';
+import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../projectHours.js?v=70';
 import {
   PITCH_FIELDS, getPitch, savePitch,
   parseGithubRepo, getGithubRepo, saveGithubRepo,
@@ -8,16 +8,17 @@ import {
   addMilestone, updateMilestone, moveMilestone, deleteMilestone, descendantCount,
   getLinks, normalizeUrl, addLink, removeLink,
   logEntries, addLogEntry, deleteLogEntry,
-} from '../projectPlan.js?v=69';
-import { store } from '../store.js?v=69';
+} from '../projectPlan.js?v=70';
+import { store } from '../store.js?v=70';
 import {
   fetchNotionTasks, getCachedNotionTasks, createTask, addCachedNotionTask,
   pushCheckboxUpdates, patchCachedNotionTask, deleteTask, removeCachedNotionTask,
-} from '../notion.js?v=69';
-import { taskDay } from '../taskDisplay.js?v=69';
-import { startOfDay } from '../taskDisplay.js?v=69';
-import { readOnlyWeekHtml, weekRangeLabel, MODE_COLORS } from './calendar.js?v=69';
-import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable, tokenExpiryNote } from '../github.js?v=69';
+  promptTaskDuration,
+} from '../notion.js?v=70';
+import { taskDay } from '../taskDisplay.js?v=70';
+import { startOfDay } from '../taskDisplay.js?v=70';
+import { readOnlyWeekHtml, weekRangeLabel, MODE_COLORS } from './calendar.js?v=70';
+import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable, tokenExpiryNote } from '../github.js?v=70';
 
 // One project's own page (#/projects/<slug>): header (name, logged hours,
 // milestone position, back + Pitch buttons), big Roadmap / Report / Readme /
@@ -163,11 +164,14 @@ function cancelPick() {
 async function pickDay(day) {
   if (!picking || pickBusy || !currentProject) return;
   const { stepId, name } = picking;
+  // Every new task needs a duration. Cancelling stays in picking mode.
+  const duration = promptTaskDuration(name);
+  if (duration === null) return;
   pickBusy = true;
   rebuild();
   let result;
   try {
-    result = await createTask({ name, category: 'Project', project: currentProject.name, date: day });
+    result = await createTask({ name, category: 'Project', project: currentProject.name, date: day, duration });
   } catch (err) {
     result = { ok: false, error: err.message };
   }

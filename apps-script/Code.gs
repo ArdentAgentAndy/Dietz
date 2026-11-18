@@ -512,11 +512,19 @@ function notionFieldsToProperties_(fields) {
   return properties;
 }
 
+function isValidTaskDuration_(value) {
+  var n = Number(value);
+  return value !== '' && value != null && isFinite(n) && n > 0 && Math.floor(n) === n;
+}
+
 function notionCreateTask_(fields) {
   var props = PropertiesService.getScriptProperties();
   var notionToken = props.getProperty('NOTION_TOKEN');
   var databaseId = props.getProperty('NOTION_DATABASE_ID');
   if (!notionToken || !databaseId) return { error: 'notion not configured' };
+  // Every new task needs a duration (whole minutes, > 0). Checked here as
+  // well as in js/notion.js's createTask, so nothing reaches Notion without one.
+  if (!isValidTaskDuration_(fields && fields.duration)) return { error: 'duration (minutes) is required for a new task' };
 
   var response = UrlFetchApp.fetch('https://api.notion.com/v1/pages', {
     method: 'post',
@@ -575,10 +583,19 @@ function notionQueryTasks_() {
 
   var tasks = [];
   var cursor = null;
-  var maxPages = 10; // 10 * 100 rows = 1000 rows ceiling, plenty for this database
+  // 30 * 100 rows = 3000 rows ceiling. NOTION_TASKS_FILTER_ keeps the result
+  // well under that by dropping old dated tasks; if it's ever hit anyway,
+  // `truncated` tells the frontend so it can warn instead of silently
+  // showing a partial list.
+  var maxPages = 30;
+  var truncated = false;
+  var cutoff = notionTasksCutoff_();
+  var filter = notionTasksFilter_(cutoff);
 
   for (var i = 0; i < maxPages; i++) {
-    var payload = { page_size: 100 };
+    // Newest first, so if the ceiling is ever hit it's the oldest rows that
+    // fall off, not an arbitrary slice.
+    var payload = { page_size: 100, filter: filter, sorts: [{ timestamp: 'created_time', direction: 'descending' }] };
     if (cursor) payload.start_cursor = cursor;
 
     var response = UrlFetchApp.fetch('https://api.notion.com/v1/databases/' + databaseId + '/query', {
@@ -602,9 +619,54 @@ function notionQueryTasks_() {
 
     if (!body.has_more) break;
     cursor = body.next_cursor;
+    if (i === maxPages - 1) truncated = true;
   }
 
-  return { tasks: tasks };
+  // cutoff: the frontend stripes days before it on the Agenda, since only
+  // some tasks from before then (see notionTasksFilter_) are still loaded.
+  return { tasks: tasks, truncated: truncated, cutoff: cutoff };
+}
+
+// How far back a dated task stays in the list. Older ones are left out
+// unless something else below still needs them.
+var NOTION_TASKS_LOOKBACK_DAYS_ = 90;
+
+// Server-side Notion filter for notionQueryTasks_. Keeps a task if ANY of:
+//   - Category is Lesson: weekly-recurring from their first Date, which can
+//     be months back (lessons view, publicPayload_'s class schedule).
+//   - Project or Lead is set: project plans link tasks by id
+//     (js/projectPlan.js) and Logging counts tag users before deleting an
+//     option (js/views/logging.js), so these need their full history.
+//   - Urgent: the morning digest lists every open urgent task.
+//   - Not completed ('?' unchecked): an unfinished task never ages out,
+//     however old its date.
+//   - No Date and no Deadline: undated, nothing to age out by.
+//   - Date or Deadline is within the lookback window (or in the future).
+// So what actually drops out: completed tasks dated before the cutoff.
+function notionTasksCutoff_() {
+  return Utilities.formatDate(
+    new Date(Date.now() - NOTION_TASKS_LOOKBACK_DAYS_ * 24 * 60 * 60 * 1000),
+    Session.getScriptTimeZone(),
+    'yyyy-MM-dd'
+  );
+}
+
+function notionTasksFilter_(cutoff) {
+  return {
+    or: [
+      { property: 'Category', status: { equals: 'Lesson' } },
+      { property: 'Project', select: { is_not_empty: true } },
+      { property: 'Lead', select: { is_not_empty: true } },
+      { property: 'Urgent', checkbox: { equals: true } },
+      { property: '?', checkbox: { equals: false } },
+      { and: [
+        { property: 'Date', date: { is_empty: true } },
+        { property: 'Deadline', date: { is_empty: true } },
+      ] },
+      { property: 'Date', date: { on_or_after: cutoff } },
+      { property: 'Deadline', date: { on_or_after: cutoff } },
+    ],
+  };
 }
 
 // Course/Project/Lead's real, authoritative select-option lists straight

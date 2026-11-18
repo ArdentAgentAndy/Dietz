@@ -1,4 +1,4 @@
-import { store } from './store.js?v=69';
+import { store } from './store.js?v=70';
 
 const CACHE_KEY = 'dietz:notionCache';
 const SCHEMA_CACHE_KEY = 'dietz:notionSchemaCache';
@@ -59,7 +59,74 @@ export async function fetchNotionTasks() {
   const data = await res.json();
   if (data.error) return { tasks: [], error: data.error };
   setCachedNotionTasks(data.tasks || []);
-  return { tasks: data.tasks || [], error: null };
+  setNotionTasksTruncated(Boolean(data.truncated));
+  setNotionTasksCutoff(data.cutoff || '');
+  return { tasks: data.tasks || [], error: null, truncated: Boolean(data.truncated) };
+}
+
+// yyyy-MM-dd: the backend's lookback cutoff (notionTasksCutoff_ in Code.gs).
+// Completed tasks dated before it aren't loaded, so the Agenda stripes those
+// days. '' when unknown (no fetch yet, or an older backend).
+const CUTOFF_KEY = 'dietz:notionCutoff';
+
+export function getNotionTasksCutoff() {
+  try {
+    return localStorage.getItem(CUTOFF_KEY) || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function setNotionTasksCutoff(cutoff) {
+  try {
+    if (cutoff) localStorage.setItem(CUTOFF_KEY, cutoff);
+    else localStorage.removeItem(CUTOFF_KEY);
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Every new task needs a duration: whole minutes, > 0. Mirrors
+// isValidTaskDuration_ in Code.gs, which enforces it server-side too.
+export function isValidTaskDuration(value) {
+  if (value === '' || value == null) return false;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0;
+}
+
+// For the create paths with no form of their own (scheduling a Canvas item,
+// a project step's "+ day"): asks for the duration. Returns the minutes, or
+// null if cancelled. Re-asks on an invalid entry.
+export function promptTaskDuration(name) {
+  let message = `Duration in minutes for "${name}":`;
+  for (;;) {
+    const raw = window.prompt(message, '');
+    if (raw === null) return null;
+    if (isValidTaskDuration(raw.trim())) return Number(raw.trim());
+    message = `Enter a whole number of minutes above 0 for "${name}":`;
+  }
+}
+
+// Whether the last successful fetch hit the backend's row ceiling (see
+// notionQueryTasks_ in Code.gs), meaning some tasks were left out. Cached
+// alongside the tasks so a cache-first render can warn too.
+const TRUNCATED_KEY = 'dietz:notionTruncated';
+
+export function isNotionTasksTruncated() {
+  try {
+    return localStorage.getItem(TRUNCATED_KEY) === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function setNotionTasksTruncated(truncated) {
+  try {
+    if (truncated) localStorage.setItem(TRUNCATED_KEY, '1');
+    else localStorage.removeItem(TRUNCATED_KEY);
+  } catch (e) {
+    // ignore — same as the task cache itself
+  }
 }
 
 // The real Course/Project/Lead select-option lists, straight from Notion's
@@ -118,6 +185,7 @@ export async function pushCheckboxUpdates(property, updates) {
 export async function createTask(fields) {
   const config = getConfig();
   if (!config) return { ok: false, error: 'Apps Script not configured (see Settings)' };
+  if (!isValidTaskDuration(fields?.duration)) return { ok: false, error: 'A duration (minutes) is required for a new task' };
 
   const res = await fetch(config.url, {
     method: 'POST',
