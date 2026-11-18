@@ -4,7 +4,7 @@ import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../project
 import {
   PITCH_FIELDS, getPitch, savePitch,
   parseGithubRepo, getGithubRepo, saveGithubRepo,
-  milestoneTree, milestoneProgress, linkTask, linkedTaskIds,
+  milestoneTree, milestoneProgress, linkTask, unlinkTask, linkedTaskIds,
   addMilestone, updateMilestone, moveMilestone, deleteMilestone, descendantCount,
   getLinks, normalizeUrl, addLink, removeLink,
   logEntries, addLogEntry, deleteLogEntry,
@@ -120,7 +120,7 @@ function projectWeekHtml(project) {
       </div>
       ${picking ? `
         <div class="project-pick-banner">
-          <span class="mono">${pickBusy ? 'Saving…' : `Pick a day for <strong>${escapeHtml(picking.name)}</strong>`}</span>
+          <span class="mono">${pickBusy ? 'Saving…' : `Pick a day for <strong>${escapeHtml(picking.name)}</strong>, or click an existing task (purple) to link it`}</span>
           <button type="button" data-action="pick-cancel" ${pickBusy ? 'disabled' : ''}>Cancel</button>
         </div>
       ` : ''}
@@ -156,6 +156,20 @@ function startPick(stepId) {
 function cancelPick() {
   picking = null;
   pickError = null;
+  rebuild();
+}
+
+// A task card clicked while picking: links that existing Notion task to the
+// step instead of creating a new one. A task belongs to one step (see
+// findLinkedStep), so one already linked elsewhere moves to this step.
+function linkExistingTask(taskId) {
+  if (!picking || pickBusy) return;
+  const { stepId } = picking;
+  const prev = findLinkedStep(taskId);
+  picking = null;
+  pickError = null;
+  if (prev && prev.step.id !== stepId) unlinkTask(prev.step.id, taskId);
+  linkTask(stepId, taskId); // rebuilds via the store change
   rebuild();
 }
 
@@ -1260,7 +1274,10 @@ function onClick(e) {
   // A mode is on: clicking a card in the calendar toggles it.
   const chip = calMode && e.target.closest('.project-week .cal-chip[data-task-id]');
   if (chip) { toggleChip(chip.dataset.taskId); return; }
-  // Picking a day for a step: any click in a day column of the calendar.
+  // Picking for a step: a task card links that existing task; anywhere else
+  // in a day column creates a new one on that day.
+  const pickChip = picking && !pickBusy && e.target.closest('.project-week .cal-chip[data-task-id]');
+  if (pickChip) { linkExistingTask(pickChip.dataset.taskId); return; }
   const dayCol = picking && !pickBusy && e.target.closest('.project-week .cal-day-col[data-date]');
   if (dayCol) { pickDay(dayCol.dataset.date); return; }
   // No mode, not picking: a task card shows its step on the roadmap.

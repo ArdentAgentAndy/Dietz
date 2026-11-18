@@ -4590,13 +4590,21 @@ dialog#modal-dialog.is-wide {
   cursor: pointer;
 }
 
-.project-week.is-picking .cal-day-col:hover {
+.project-week.is-picking .cal-day-col:hover:not(:has(.cal-chip:hover)) {
   outline: 2px dashed var(--mode-color, var(--accent));
   outline-offset: -2px;
 }
 
+/* ...and every existing task card links that task to the step instead:
+   purple marching ants on hover, same as the Agenda's Canvas link targets. */
 .project-week.is-picking .cal-chip {
-  pointer-events: none;
+  cursor: pointer;
+}
+
+.project-week.is-picking .cal-chip:hover .cal-chip-ants {
+  opacity: 1;
+  --march-color: #9b59b6;
+  animation: marching-ants 0.5s linear infinite;
 }
 
 /* Roadmap card: the days a step is on, and its "+ day" link button. */
