@@ -1822,6 +1822,13 @@ h1, h2, h3 {
   opacity: 0.3;
 }
 
+/* Cards have no fill of their own, so the day's stripes showed through and
+   crossed with the page's own pattern into a crosshatch. A solid fill keeps
+   the stripes to the gaps between cards. */
+.is-aged-out .cal-chip {
+  background-color: var(--surface);
+}
+
 .cal-month-daynum {
   font-size: 11px;
   color: var(--muted);
