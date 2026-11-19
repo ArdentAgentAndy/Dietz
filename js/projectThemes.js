@@ -11,10 +11,10 @@
 // One tier per college year, about 3 projects each, done in order. Labels 2–4
 // are placeholders, not decided yet.
 export const TIERS = [
-  { n: 1, label: 'Learning' },
-  { n: 2, label: 'Building' },
-  { n: 3, label: 'Researching' },
-  { n: 4, label: 'Leading' },
+  { n: 1, label: 'Proficiency' },
+  { n: 2, label: 'Applicative' },
+  { n: 3, label: 'Perceptive' },
+  { n: 4, label: 'Novelty' },
 ];
 
 // How many project slots each tier column has.
