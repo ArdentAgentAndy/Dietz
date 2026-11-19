@@ -165,6 +165,25 @@ export function addMinutesToTodaySession(taskId, categoryId, taskName, deltaMinu
   return store.upsert('Sessions', { id: row.id, minutes: row.minutes + deltaMinutes, note: taskName || row.note });
 }
 
+// The time-logging half of marking a task complete (false -> true), shared
+// by the Today subchannel's ✓ button (js/views/today.js) and the Agenda's
+// complete mode / edit dialog (js/views/calendar.js). If the stopwatch
+// already tracked real time for the task, that's the accurate record and
+// nothing is added on top (no double counting); otherwise the task's preset
+// duration is logged into its per-item Sessions row for workDayISO.
+// Returns what happened, so each caller can decide how to surface a block:
+//   'logged' | 'already-tracked' | 'not-resolvable' (nothing to log against
+//   — complete freely) | 'unresolved' / 'no-duration' (blocked, don't mark).
+export function logCompletionTime(task, workDayISO = formatDateISO(new Date())) {
+  if (!resolvableCategory(task)) return 'not-resolvable';
+  const cat = resolveCategoryForTask(task);
+  if (!cat) return 'unresolved';
+  if (existingTodayMinutesForTask(task.id) > 0) return 'already-tracked';
+  if (!task.duration) return 'no-duration';
+  addMinutesToTodaySession(task.id, cat.id, task.name, task.duration, workDayISO);
+  return 'logged';
+}
+
 // Closes out a stopwatch run that's still showing as "running" when the
 // Today page is (re)mounted — tab closed without pausing, or just never
 // revisited. Logs the full real elapsed time (start to now, however long

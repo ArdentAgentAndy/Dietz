@@ -1,4 +1,4 @@
-import { MENU, CHANNELS } from './channels.js?v=70';
+import { MENU, CHANNELS, INNER_LAYER_CHANNELS } from './channels.js?v=70';
 import { isConfigured } from './sync.js?v=70';
 
 // Menu is rendered separately from the channel row (see #top-nav-menu in
@@ -70,10 +70,30 @@ function goToPage(page) {
   location.hash = '#' + page.route;
 }
 
+// Which menu layer [M] should land on: a page under one of the Inner layer's
+// channels (its own route or anything nested below it, e.g. a project's
+// page under /projects) returns to the Inner layer, everything else to the
+// hub. Handed to js/views/menu.js through takePendingMenuLayer below.
+let pendingMenuLayer = null;
+
+function belongsToInnerLayer(path) {
+  return INNER_LAYER_CHANNELS.some((c) => c?.route && (path === c.route || path.startsWith(c.route + '/')));
+}
+
+// Read once by the Menu page on mount — cleared on read so a later visit by
+// any other route (a click, the back button) starts on the hub as before.
+export function takePendingMenuLayer() {
+  const layer = pendingMenuLayer;
+  pendingMenuLayer = null;
+  return layer;
+}
+
 function onKeyDown(e) {
   if (e.key === 'm' || e.key === 'M') {
     if (isBlocked(e)) return;
     e.preventDefault();
+    if (onMenuPage()) return; // the Menu page handles its own M (back to the hub)
+    pendingMenuLayer = belongsToInnerLayer(activePath) ? 'inner' : null;
     goToPage(MENU);
     return;
   }

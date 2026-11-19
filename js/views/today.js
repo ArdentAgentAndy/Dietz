@@ -12,6 +12,7 @@ import {
   existingTodayMinutesForTask,
   addMinutesToTodaySession,
   closeStaleTodayTimer,
+  logCompletionTime,
 } from '../todaySessions.js?v=70';
 
 let container = null;
@@ -274,25 +275,16 @@ function onToggleMarkClick(task) {
     toggleField(task.id, 'mark', false);
     return;
   }
-  if (!resolvableCategory(task)) {
-    toggleField(task.id, 'mark', true);
-    return;
-  }
-  const cat = resolveCategoryForTask(task);
-  if (!cat) {
+  const outcome = logCompletionTime(task);
+  if (outcome === 'unresolved') {
     saveError = `Can't mark complete — "${unresolvedLabelForTask(task)}" doesn't match any existing course/project/lead.`;
     rebuild();
     return;
   }
-  if (existingTodayMinutesForTask(task.id) > 0) {
-    toggleField(task.id, 'mark', true);
-    return;
-  }
-  if (!task.duration) {
+  if (outcome === 'no-duration') {
     flashDurationInputError(task.id);
     return;
   }
-  addMinutesToTodaySession(task.id, cat.id, task.name, task.duration);
   toggleField(task.id, 'mark', true);
 }
 

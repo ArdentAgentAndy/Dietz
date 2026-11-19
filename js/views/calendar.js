@@ -3,6 +3,7 @@ import { hexForNotionColor } from '../notionColors.js?v=70';
 import { escapeHtml, hexToRgba } from '../format.js?v=70';
 import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=70';
 import { allPlanLinkedTaskIds } from '../projectPlan.js?v=70';
+import { logCompletionTime, unresolvedLabelForTask } from '../todaySessions.js?v=70';
 import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=70';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -450,9 +451,33 @@ async function moveTaskToDate(taskId, newDay) {
   }
 }
 
+// Completing only logs time for a task scheduled today, same scope as the
+// Today subchannel. Any other day's task (past or future, or undated) is a
+// plain checkbox: no time added, never blocked.
+function logsTimeOnComplete(task) {
+  return taskDay(task) === isoDay(new Date());
+}
+
 async function saveHighlight(kind) {
   const cfg = HIGHLIGHT_KINDS[kind];
-  const changed = allTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
+  let changed = allTasks.filter((t) => Boolean(t[cfg.field]) !== pending.has(t.id));
+
+  // Newly completed tasks scheduled today log their time, same as the Today
+  // subchannel's ✓ (see todaySessions.js's logCompletionTime). Today's tasks
+  // it can't log for stay unmarked, with a note saying why.
+  let blockedNote = '';
+  if (kind === 'completed') {
+    const blocked = [];
+    changed = changed.filter((t) => {
+      if (!pending.has(t.id)) return true; // un-completing: no logging, as on Today
+      if (!logsTimeOnComplete(t)) return true; // not today's task: no effect on time
+      const outcome = logCompletionTime(t);
+      if (outcome === 'unresolved') { blocked.push(`"${t.name || 'Untitled'}" (no course/project/lead matches "${unresolvedLabelForTask(t)}")`); return false; }
+      if (outcome === 'no-duration') { blocked.push(`"${t.name || 'Untitled'}" (no duration set)`); return false; }
+      return true;
+    });
+    if (blocked.length) blockedNote = `Not marked complete, no time to log: ${blocked.join(', ')}.`;
+  }
   const newValues = new Map(changed.map((t) => [t.id, pending.has(t.id)]));
 
   activeHighlight = null;
@@ -460,6 +485,7 @@ async function saveHighlight(kind) {
   touchedThisSession = new Set();
 
   if (!changed.length) {
+    saveError = blockedNote || null;
     rebuild();
     return;
   }
@@ -472,7 +498,7 @@ async function saveHighlight(kind) {
     t[cfg.field] = newValues.get(t.id);
     patchCachedNotionTask(t.id, { [cfg.field]: newValues.get(t.id) });
   }
-  saveError = null;
+  saveError = blockedNote || null;
   rebuild();
 
   const updates = changed.map((t) => ({ pageId: t.id, value: newValues.get(t.id) }));
@@ -1084,6 +1110,25 @@ function openTaskDialog(existing, defaultDate) {
     // the placeholder card (add) and surfaces saveError on the page behind
     // this (now-closed) dialog, same as the other write flows in this file.
     saveError = null;
+
+    const candidate = existing && { ...existing, ...fields, date: dateObj };
+    if (existing && !existing.mark && fields.mark && logsTimeOnComplete(candidate)) {
+      // Ticking Completed on today's task logs time like the Today ✓ does,
+      // using the values being saved (so a duration typed here counts).
+      const outcome = logCompletionTime(candidate);
+      const blockMsg = outcome === 'unresolved'
+        ? `Can't mark complete — "${unresolvedLabelForTask(candidate)}" doesn't match any existing course/project/lead.`
+        : outcome === 'no-duration' ? 'Set a duration to mark this complete, so its time gets logged.' : '';
+      if (blockMsg) {
+        const markInput = form.querySelector('[name="mark"]');
+        markInput.setCustomValidity(blockMsg);
+        // Cleared on any edit (e.g. filling in the duration), or the stale
+        // message would keep blocking the next submit natively.
+        form.addEventListener('input', () => markInput.setCustomValidity(''), { once: true });
+        form.reportValidity();
+        return;
+      }
+    }
 
     if (existing) {
       const prevTask = { ...existing };

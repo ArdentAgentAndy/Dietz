@@ -2,6 +2,7 @@ import { HOME, CHANNELS, INNER_LAYER_CHANNELS } from '../channels.js?v=70';
 import { escapeHtml } from '../format.js?v=70';
 import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=70';
 import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=70';
+import { takePendingMenuLayer } from '../nav.js?v=70';
 
 // Solo channels (Contacts, Public) have no outer-ring slot of their own in
 // this rebuild yet — only the 8 non-solo channels (channels.js's `solo`
@@ -75,6 +76,9 @@ export function render(rootEl) {
   document.body.classList.add('menu-no-scroll');
 
   window.addEventListener('keydown', onKeyDown);
+  // [M] from an Inner-layer channel's page (see nav.js) comes back to the
+  // Inner layer rather than the hub.
+  if (takePendingMenuLayer() === 'inner') currentLayer = INNER_LAYER;
   build();
 }
 
