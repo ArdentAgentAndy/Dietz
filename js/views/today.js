@@ -1,6 +1,6 @@
-import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=70';
-import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=70';
-import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=70';
+import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=71';
+import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=71';
+import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=71';
 import {
   resolvableCategory,
   resolveCategoryForTask,
@@ -13,7 +13,250 @@ import {
   addMinutesToTodaySession,
   closeStaleTodayTimer,
   logCompletionTime,
-} from '../todaySessions.js?v=70';
+  resetTodayTaskTime,
+} from '../todaySessions.js?v=71';
+import { store } from '../store.js?v=71';
+import { hexForNotionColor } from '../notionColors.js?v=71';
+
+// ---- break days (holidays): synced BreakDays table, one row per day.
+// On a break day, lessons are left out of the hour plan. ----
+function breakDayId(day) {
+  return `break-${day}`;
+}
+
+function isBreakDay(day = isoDay(new Date())) {
+  return store.table('BreakDays').some((r) => r.id === breakDayId(day));
+}
+
+function toggleBreakDay() {
+  const day = isoDay(new Date());
+  if (placingTaskId) placingTaskId = null; // the plan's contents change under the ghost
+  if (isBreakDay(day)) store.remove('BreakDays', breakDayId(day));
+  else store.upsert('BreakDays', { id: breakDayId(day), date: day });
+  rebuild();
+}
+
+// ---- lessons in the plan (this replaced the old Lessons subchannel).
+// Lessons are a weekly timetable in Notion (grouped by weekday, whatever
+// their actual date), so "today's lessons" = Lesson tasks on today's
+// weekday, at their own time of day, minus archived courses (matched by
+// course code, since Notion's Course select has no link to Courses). Shown as
+// read-only blocks: they can't be removed from the plan, but they do block
+// placing like any other block. None on a break day. ----
+function archivedCourseCodes() {
+  return new Set(store.table('Courses').filter((c) => c.status === 'archived').map((c) => (c.code || '').trim().toLowerCase()));
+}
+
+// ---- the week's lessons, in a popup (header button). Same grouping the old
+// Lessons page used: by weekday, Monday first, by time of day within a day.
+// The dialog is attached to <body>, not the page container, because
+// rebuild() replaces the container's HTML whenever tasks reload and would
+// otherwise destroy an open popup. ----
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function weekLessonsHtml() {
+  const archived = archivedCourseCodes();
+  const lessons = allTasks.filter((t) => t.category === 'Lesson'
+    && t.date?.start?.length > 10
+    && !archived.has((t.course || '').trim().toLowerCase()));
+  if (!lessons.length) return '<p class="muted">No lessons found.</p>';
+
+  const byDay = {};
+  for (const t of lessons) {
+    const day = new Date(t.date.start).toLocaleDateString('en-US', { weekday: 'long' });
+    (byDay[day] = byDay[day] || []).push(t);
+  }
+  const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  return WEEKDAYS.filter((d) => byDay[d]).map((day) => {
+    const rows = byDay[day]
+      .sort((a, b) => minutesIntoDay(new Date(a.date.start)) - minutesIntoDay(new Date(b.date.start)))
+      .map((t) => {
+        // Color-coded by course (Notion's Course select color), like the old
+        // Lessons page — unlike the plan's blocks, which use the Lesson
+        // category color. Falls back to that if a lesson has no course color.
+        const color = t.courseColor ? hexForNotionColor(t.courseColor) : categoryColorForTask(t);
+        const where = [t.location, t.room].filter(Boolean).join(' · ');
+        return `
+          <div class="wl-row" style="background:${hexToRgba(color, 0.12)}; border-left-color:${color};">
+            <span class="wl-course mono" style="color:${color};">${escapeHtml(t.course || '—')}</span>
+            <span class="wl-time mono">${escapeHtml(timeLabel(t))}</span>
+            <span class="wl-name">${escapeHtml(t.name || 'Untitled')}</span>
+            <span class="wl-dur muted">${t.duration ? `${t.duration}min` : ''}</span>
+            <span class="wl-where muted">${escapeHtml(where)}</span>
+          </div>`;
+      }).join('');
+    return `
+      <h3 class="wl-day mono ${day === todayName ? 'is-today' : ''}">${day}${day === todayName ? ' · today' : ''}</h3>
+      <div class="wl-list">${rows}</div>`;
+  }).join('');
+}
+
+function openWeekLessons() {
+  closeWeekLessons();
+  const dialog = document.createElement('dialog');
+  dialog.className = 'today-lessons-dialog';
+  dialog.innerHTML = `
+    <div class="row-between" style="margin-bottom:12px;">
+      <h2 class="mono" style="margin:0;">Lessons this week</h2>
+      <button type="button" data-action="close-lessons" title="Close (Esc)">&#10006;</button>
+    </div>
+    ${isBreakDay() ? '<p class="muted" style="margin:0 0 10px;">Today is a break day: today\'s lessons are off the plan.</p>' : ''}
+    ${weekLessonsHtml()}
+  `;
+  dialog.addEventListener('close', () => dialog.remove());
+  dialog.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="close-lessons"]')) { dialog.close(); return; }
+    // The backdrop counts as the dialog itself, but so does its own padding —
+    // only close when the click is actually outside the box.
+    if (e.target !== dialog) return;
+    const r = dialog.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close();
+  });
+  document.body.appendChild(dialog);
+  dialog.showModal();
+}
+
+function closeWeekLessons() {
+  document.querySelector('dialog.today-lessons-dialog')?.close();
+}
+
+function allTodayLessons() {
+  if (isBreakDay()) return [];
+  const weekday = new Date().getDay();
+  const archived = archivedCourseCodes();
+  return allTasks.filter((t) => t.category === 'Lesson'
+    && t.date?.start?.length > 10
+    && new Date(t.date.start).getDay() === weekday
+    && !archived.has((t.course || '').trim().toLowerCase()));
+}
+
+// ---- a single lesson called off for today (block's "hide" button):
+// synced SkippedLessons table. A skipped lesson drops out of the plan's
+// real blocks (no lane, no conflicts) and is drawn as a faint outline with
+// a restore button instead. ----
+function skipId(lessonId, day = isoDay(new Date())) {
+  return `skip-${day}-${lessonId}`;
+}
+
+function isLessonSkipped(lessonId) {
+  return store.table('SkippedLessons').some((r) => r.id === skipId(lessonId));
+}
+
+function setLessonSkipped(lessonId, skipped) {
+  const id = skipId(lessonId);
+  if (skipped) store.upsert('SkippedLessons', { id, date: isoDay(new Date()), lessonId });
+  else if (store.table('SkippedLessons').some((r) => r.id === id)) store.remove('SkippedLessons', id);
+  rebuild();
+}
+
+function todayLessons() {
+  return allTodayLessons().filter((t) => !isLessonSkipped(t.id));
+}
+
+function skippedLessonsHtml() {
+  return allTodayLessons().filter((t) => isLessonSkipped(t.id)).map((t) => {
+    const start = minutesIntoDay(new Date(t.date.start));
+    const end = Math.min(24 * 60, start + Math.max(PLAN_MIN_BLOCK_MIN, t.duration || 0));
+    return `
+      <div class="plan-block plan-block-skipped"
+        style="top:${(start / 60) * PLAN_HOUR_PX}px; height:${Math.max(14, ((end - start) / 60) * PLAN_HOUR_PX - 2)}px; left:2px; width:calc(100% - 4px);"
+        title="${escapeHtml(`Cancelled today: ${t.name || 'Lesson'}`)}">
+        <span class="plan-block-name">${escapeHtml(t.name || 'Untitled')}<span class="plan-block-inline">cancelled today</span></span>
+        <button type="button" class="plan-block-remove plan-block-restore" data-action="unskip-lesson" data-task-id="${escapeHtml(t.id)}" title="Restore this lesson" aria-label="Restore lesson">&#8634;</button>
+      </div>`;
+  }).join('');
+}
+
+// ---- Notes box (standalone /today only): one free-text notepad, kept as
+// the single 'main' row of its own synced TodayNotes table (Code.gs; until
+// that's redeployed, js/sync.js holds the writes in the outbox and they go
+// up after the next bootstrap that lists the table). Typing goes into notesDraft
+// right away and is written to the store after a short pause (or on blur),
+// so each keystroke isn't its own outbox op. rebuild() can fire mid-typing
+// (task fetch resolving, a row action), so it renders from notesDraft and
+// puts focus/caret back where it was. ----
+const NOTES_ID = 'main';
+const NOTES_SAVE_DELAY_MS = 800;
+let notesDraft = null; // null = not loaded yet this mount
+let notesSaveTimer = null;
+
+function loadNotes() {
+  return store.table('TodayNotes').find((r) => r.id === NOTES_ID)?.text ?? '';
+}
+
+function flushNotes() {
+  clearTimeout(notesSaveTimer);
+  notesSaveTimer = null;
+  if (notesDraft === null || notesDraft === loadNotes()) return;
+  store.upsert('TodayNotes', { id: NOTES_ID, text: notesDraft });
+}
+
+function scheduleNotesSave() {
+  clearTimeout(notesSaveTimer);
+  notesSaveTimer = setTimeout(flushNotes, NOTES_SAVE_DELAY_MS);
+}
+
+// ---- bullet-list editing for the notes textarea. Bullets are plain text
+// ("• ", indented 2 spaces per level), so they save/sync as-is. ----
+const BULLET = '• ';
+const INDENT = '  ';
+const BULLET_LINE_RE = /^(\s*)• /;
+
+function notesReplace(el, start, end, text, caret = start + text.length) {
+  el.setRangeText(text, start, end);
+  el.setSelectionRange(caret, caret);
+  notesDraft = el.value;
+  scheduleNotesSave();
+}
+
+function lineBounds(value, pos) {
+  const start = value.lastIndexOf('\n', pos - 1) + 1;
+  const nl = value.indexOf('\n', pos);
+  return { start, end: nl === -1 ? value.length : nl };
+}
+
+function onNotesFocus(e) {
+  const el = e.target;
+  if (el.value === '') notesReplace(el, 0, 0, BULLET);
+}
+
+function onNotesKeydown(e) {
+  const el = e.target;
+  const { selectionStart: s, selectionEnd: t, value } = el;
+  const line = lineBounds(value, s);
+  const lineText = value.slice(line.start, line.end);
+  const m = lineText.match(BULLET_LINE_RE);
+
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    if (!m) return; // a plain line: normal newline
+    e.preventDefault();
+    if (lineText.trim() === '•' && s === t) {
+      // Empty bullet: outdent it, or if it's already top level, drop the bullet.
+      if (m[1].length >= INDENT.length) notesReplace(el, line.start, line.start + INDENT.length, '', s - INDENT.length);
+      else notesReplace(el, line.start, line.end, '');
+      return;
+    }
+    notesReplace(el, s, t, `\n${m[1]}${BULLET}`);
+    return;
+  }
+
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      if (!lineText.startsWith(INDENT)) return;
+      notesReplace(el, line.start, line.start + INDENT.length, '', Math.max(line.start, s - INDENT.length));
+    } else {
+      notesReplace(el, line.start, line.start, INDENT, s + INDENT.length);
+    }
+    return;
+  }
+
+  // Backspace right after a bullet marker removes the marker, not just the space.
+  if (e.key === 'Backspace' && m && s === t && s === line.start + m[0].length) {
+    e.preventDefault();
+    notesReplace(el, line.start + m[1].length, s, '');
+  }
+}
 
 let container = null;
 let allTasks = [];
@@ -65,6 +308,7 @@ export function render(rootEl, opts = {}) {
   }
 
   stopwatchError = null;
+  if (!embedded) notesDraft = loadNotes();
 
   const cached = getCachedNotionTasks();
   if (cached.length) {
@@ -88,6 +332,9 @@ export function render(rootEl, opts = {}) {
     // intervening unmount (same guard reasoning as the ticker above).
     window.removeEventListener('keydown', onSpacePause);
     window.addEventListener('keydown', onSpacePause);
+    // Capture phase, so Esc cancels placing before any page-level Esc handler sees it.
+    window.removeEventListener('keydown', onPlacingKeydown, true);
+    window.addEventListener('keydown', onPlacingKeydown, true);
   }
 }
 
@@ -97,7 +344,13 @@ export function unmount() {
     tickIntervalId = null;
   }
   if (!embedded) container?.closest('#app')?.classList.remove('app-wide');
+  if (!embedded) flushNotes(); // don't lose a pending save when navigating away
+  notesDraft = null;
+  planScrollTop = null;
+  placingTaskId = null;
+  closeWeekLessons(); // it lives on <body>, so it'd outlive the page otherwise
   window.removeEventListener('keydown', onSpacePause);
+  window.removeEventListener('keydown', onPlacingKeydown, true);
   activeStopwatchTaskId = null;
   stopwatchError = null;
   container = null;
@@ -147,9 +400,365 @@ function todayTasks() {
       || (a.date.start || '').localeCompare(b.date.start || ''));
 }
 
+// Blank (not a dash) for an all-day task with no start time.
 function timeLabel(task) {
-  if (!(task.date?.start?.length > 10)) return '—';
+  if (!(task.date?.start?.length > 10)) return '';
   return new Date(task.date.start).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// ---- hour-by-hour plan (standalone /today, right-hand box) ----
+const PLAN_HOUR_PX = 48;
+const PLAN_MIN_BLOCK_MIN = 15; // shortest block drawn, so a 0/blank-duration task is still visible
+let planScrollTop = null; // null = first draw this mount: scroll to the current hour
+
+function minutesIntoDay(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+// Timed tasks as positioned blocks. Overlapping tasks are split into side-by-side
+// lanes: tasks are swept in start order, each cluster of mutually-overlapping
+// tasks shares one lane count, and each task takes the first free lane.
+function planBlocks(tasks) {
+  const items = tasks
+    .filter((t) => t.date?.start?.length > 10)
+    .map((t) => {
+      const start = minutesIntoDay(new Date(t.date.start));
+      const end = Math.min(24 * 60, start + Math.max(PLAN_MIN_BLOCK_MIN, t.duration || 0));
+      return { task: t, start, end, lane: 0, lanes: 1 };
+    })
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  let cluster = [];
+  let clusterEnd = -1;
+  const closeCluster = () => {
+    const lanes = Math.max(1, ...cluster.map((i) => i.lane + 1));
+    cluster.forEach((i) => { i.lanes = lanes; });
+    cluster = [];
+  };
+  for (const item of items) {
+    if (item.start >= clusterEnd && cluster.length) closeCluster();
+    const laneEnds = [];
+    cluster.forEach((i) => { laneEnds[i.lane] = Math.max(laneEnds[i.lane] ?? -1, i.end); });
+    let lane = laneEnds.findIndex((end) => end <= item.start);
+    if (lane === -1) lane = laneEnds.length;
+    item.lane = lane;
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.end);
+  }
+  if (cluster.length) closeCluster();
+  return items;
+}
+
+function hasStartTime(task) {
+  return task.date?.start?.length > 10;
+}
+
+// Where the + button drops an untimed task: the first gap, from now (rounded
+// up to the next 15 min) onward, long enough for the task's duration among
+// today's already-timed tasks. Falls back to the rounded-up "now" if the day
+// has no such gap left.
+function nextFreePlanStart(task, tasks) {
+  const need = Math.max(PLAN_MIN_BLOCK_MIN, task.duration || 0);
+  const now = minutesIntoDay(new Date());
+  const from = Math.ceil(now / 15) * 15;
+  const busy = tasks
+    .filter((t) => t.id !== task.id && hasStartTime(t))
+    .map((t) => {
+      const s = minutesIntoDay(new Date(t.date.start));
+      return [s, s + Math.max(PLAN_MIN_BLOCK_MIN, t.duration || 0)];
+    })
+    .sort((a, b) => a[0] - b[0]);
+  let start = from;
+  for (const [s, e] of busy) {
+    if (e <= start) continue;
+    if (s >= start + need) break;
+    start = Math.ceil(e / 15) * 15;
+  }
+  return start + need <= 24 * 60 ? start : Math.min(from, 24 * 60 - 15);
+}
+
+// ---- placing mode: + puts a ghost block of the task in the plan, which
+// follows the cursor (snapped to 15 min) until a click in the plan commits
+// it. Esc, or the same + again, cancels. The ghost is moved by direct DOM
+// updates on pointermove (no rebuild); a rebuild mid-placing just redraws it
+// from placingMins. ----
+const PLAN_SNAP_MIN = 15;
+let placingTaskId = null;
+let placingMins = 0;
+
+function hhmm(mins) {
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+function startPlacing(taskId) {
+  if (placingTaskId === taskId) { cancelPlacing(); return; }
+  const task = allTasks.find((t) => t.id === taskId);
+  if (!task || hasStartTime(task)) return;
+  placingTaskId = taskId;
+  placingMins = nextFreePlanStart(task, [...todayTasks(), ...todayLessons()]);
+  rebuild();
+  // Jump to the box, with the ghost an hour below the top of the timeline.
+  const card = container.querySelector('.today-plan-card');
+  const scroll = container.querySelector('[data-plan-scroll]');
+  if (scroll) scroll.scrollTop = Math.max(0, ((placingMins - 60) / 60) * PLAN_HOUR_PX);
+  card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelPlacing() {
+  if (!placingTaskId) return;
+  placingTaskId = null;
+  rebuild();
+}
+
+// Minutes into the day under the pointer. snap=false gives the raw value
+// (dragging snaps after subtracting where on the block it was grabbed).
+function planMinsFromEvent(e, snap = true) {
+  const grid = container?.querySelector('.plan-grid');
+  if (!grid) return placingMins;
+  const y = e.clientY - grid.getBoundingClientRect().top;
+  if (!snap) return (y / PLAN_HOUR_PX) * 60;
+  const mins = Math.round(((y / PLAN_HOUR_PX) * 60) / PLAN_SNAP_MIN) * PLAN_SNAP_MIN;
+  return Math.max(0, Math.min(24 * 60 - PLAN_SNAP_MIN, mins));
+}
+
+function placingSpan(mins) {
+  const task = allTasks.find((t) => t.id === placingTaskId);
+  return [mins, mins + Math.max(PLAN_MIN_BLOCK_MIN, task?.duration || 0)];
+}
+
+// Marks every plan block the ghost would overlap (red border via
+// .is-conflict) and the ghost itself; returns whether there's any overlap.
+// Uses the same [start, end) spans the blocks were drawn with (data-plan-*),
+// so "overlaps" means exactly "would visibly overlap".
+function updatePlacingConflicts() {
+  if (!container) return false;
+  const [s, e] = placingTaskId ? placingSpan(placingMins) : [0, 0];
+  let any = false;
+  container.querySelectorAll('.plan-block[data-plan-start]').forEach((block) => {
+    const hit = Boolean(placingTaskId)
+      && Number(block.dataset.planStart) < e && s < Number(block.dataset.planEnd);
+    block.classList.toggle('is-conflict', hit);
+    any = any || hit;
+  });
+  container.querySelector('[data-plan-ghost]')?.classList.toggle('is-conflict', any);
+  return any;
+}
+
+function onPlanPointerMove(e) {
+  if (!placingTaskId) return;
+  const mins = planMinsFromEvent(e);
+  if (mins === placingMins) return;
+  placingMins = mins;
+  const ghost = container.querySelector('[data-plan-ghost]');
+  if (ghost) {
+    ghost.style.top = `${(mins / 60) * PLAN_HOUR_PX}px`;
+    const label = ghost.querySelector('[data-plan-ghost-time]');
+    if (label) label.textContent = hhmm(mins);
+  }
+  updatePlacingConflicts();
+}
+
+// A click on an overlapping spot doesn't place — placing just carries on
+// (ghost still following the cursor) until a free spot is clicked or Esc.
+function onPlanClick(e) {
+  if (!placingTaskId) return;
+  onPlanPointerMove(e); // moves the ghost to the click (touch has no pointermove before a tap)
+  if (updatePlacingConflicts()) {
+    const ghost = container.querySelector('[data-plan-ghost]');
+    ghost?.classList.remove('is-rejected');
+    void ghost?.offsetWidth; // restart the shake
+    ghost?.classList.add('is-rejected');
+    return;
+  }
+  const taskId = placingTaskId;
+  placingTaskId = null;
+  addToPlan(taskId, placingMins);
+}
+
+function onPlacingKeydown(e) {
+  if (e.key === 'Escape' && placingTaskId) {
+    e.preventDefault();
+    e.stopPropagation(); // Esc here cancels placing, not the page's own Esc → back
+    cancelPlacing();
+  }
+}
+
+function placingGhostHtml() {
+  const task = placingTaskId && allTasks.find((t) => t.id === placingTaskId);
+  if (!task) return '';
+  const color = categoryColorForTask(task);
+  const height = Math.max(14, (Math.max(PLAN_MIN_BLOCK_MIN, task.duration || 0) / 60) * PLAN_HOUR_PX - 2);
+  return `
+    <div class="plan-block plan-ghost" data-plan-ghost
+      style="top:${(placingMins / 60) * PLAN_HOUR_PX}px; height:${height}px; left:2px; width:calc(100% - 4px); background:${hexToRgba(color, 0.28)}; border-left-color:${color};">
+      <span class="plan-block-name">${escapeHtml(task.name || 'Untitled')}</span>
+      <span class="plan-block-meta mono"><span data-plan-ghost-time>${hhmm(placingMins)}</span> · click to place, Esc to cancel</span>
+    </div>`;
+}
+
+// Sets a task's start time to `mins` into today — placing an untimed task
+// (+) and moving a planned block (drag) both end up here.
+async function addToPlan(taskId, mins) {
+  const task = allTasks.find((t) => t.id === taskId);
+  if (!task) return;
+  const day = isoDay(new Date());
+  const hh = String(Math.floor(mins / 60)).padStart(2, '0');
+  const mm = String(mins % 60).padStart(2, '0');
+  const newStart = new Date(`${day}T${hh}:${mm}:00`).toISOString(); // same format Agenda writes (calendar.js's combineDateTime)
+  const prevDate = task.date;
+  task.date = { start: newStart, end: task.date?.end || null };
+  patchCachedNotionTask(taskId, { date: task.date });
+  saveError = null;
+  rebuild();
+
+  const result = await updateTask(taskId, { date: newStart });
+  if (!result.ok) {
+    task.date = prevDate;
+    patchCachedNotionTask(taskId, { date: prevDate });
+    saveError = result.error || 'Failed to save the plan time';
+    rebuild();
+  }
+}
+
+// ---- moving a planned block: drag it up/down (task blocks only; lessons
+// are fixed). Snaps to 15 min, keeping the grab point under the cursor.
+// Anything it would overlap is marked red (same .is-conflict as placing);
+// dropping there snaps it back with a shake. A drop on a free spot saves
+// the new start time. Moves the block's own element directly while
+// dragging, no rebuild until the drop. ----
+let planDrag = null; // { el, taskId, origMins, mins, span, grabOffset, startY, moved }
+
+function overlappingBlocks(s, e, exceptEl) {
+  return [...container.querySelectorAll('.plan-block[data-plan-start]')].filter((b) => b !== exceptEl
+    && Number(b.dataset.planStart) < e && s < Number(b.dataset.planEnd));
+}
+
+function markConflicts(blocks, selfEl) {
+  container.querySelectorAll('.plan-block.is-conflict').forEach((b) => b.classList.remove('is-conflict'));
+  blocks.forEach((b) => b.classList.add('is-conflict'));
+  selfEl?.classList.toggle('is-drag-conflict', blocks.length > 0);
+}
+
+function onBlockPointerDown(e) {
+  if (placingTaskId || e.button !== 0 || e.target.closest('button')) return;
+  const el = e.currentTarget;
+  const start = Number(el.dataset.planStart);
+  planDrag = {
+    el,
+    taskId: el.dataset.taskId,
+    origMins: start,
+    mins: start,
+    span: Number(el.dataset.planEnd) - start,
+    grabOffset: planMinsFromEvent(e, false) - start,
+    startY: e.clientY,
+    moved: false,
+  };
+  el.setPointerCapture(e.pointerId);
+}
+
+function onBlockPointerMove(e) {
+  if (!planDrag || planDrag.el !== e.currentTarget) return;
+  if (!planDrag.moved && Math.abs(e.clientY - planDrag.startY) < 4) return; // a click, not a drag
+  planDrag.moved = true;
+  planDrag.el.classList.add('is-dragging');
+  const raw = planMinsFromEvent(e, false) - planDrag.grabOffset;
+  const mins = Math.max(0, Math.min(24 * 60 - PLAN_SNAP_MIN, Math.round(raw / PLAN_SNAP_MIN) * PLAN_SNAP_MIN));
+  if (mins === planDrag.mins) return;
+  planDrag.mins = mins;
+  planDrag.el.style.top = `${(mins / 60) * PLAN_HOUR_PX}px`;
+  const time = planDrag.el.querySelector('[data-block-time]');
+  if (time) time.textContent = hhmm(mins);
+  markConflicts(overlappingBlocks(mins, mins + planDrag.span, planDrag.el), planDrag.el);
+}
+
+function onBlockPointerUp(e) {
+  if (!planDrag || planDrag.el !== e.currentTarget) return;
+  const d = planDrag;
+  planDrag = null;
+  if (!d.moved) return;
+  const conflicts = overlappingBlocks(d.mins, d.mins + d.span, d.el);
+  if (conflicts.length || d.mins === d.origMins) {
+    d.el.style.top = `${(d.origMins / 60) * PLAN_HOUR_PX}px`;
+    const time = d.el.querySelector('[data-block-time]');
+    if (time) time.textContent = hhmm(d.origMins);
+    d.el.classList.remove('is-dragging');
+    if (conflicts.length) {
+      d.el.classList.remove('is-rejected');
+      void d.el.offsetWidth;
+      d.el.classList.add('is-rejected');
+      setTimeout(() => markConflicts([], d.el), 600); // leave the red up briefly so it's clear why
+    }
+    return;
+  }
+  addToPlan(d.taskId, d.mins); // rebuilds with the block at its new time
+}
+
+// The block's ✕: takes the task back out of the plan by clearing its start
+// time — it keeps its day (date-only, same as Agenda's all-day tasks), so it
+// stays on Today, untimed, with its + button back.
+async function removeFromPlan(taskId) {
+  const task = allTasks.find((t) => t.id === taskId);
+  if (!task || !hasStartTime(task)) return;
+  const day = taskDay(task);
+  const prevDate = task.date;
+  task.date = { start: day, end: null };
+  patchCachedNotionTask(taskId, { date: task.date });
+  saveError = null;
+  rebuild();
+
+  const result = await updateTask(taskId, { date: day });
+  if (!result.ok) {
+    task.date = prevDate;
+    patchCachedNotionTask(taskId, { date: prevDate });
+    saveError = result.error || 'Failed to remove from plan';
+    rebuild();
+  }
+}
+
+function planBoxHtml(tasks) {
+  const hours = Array.from({ length: 25 }, (_, h) => `
+    <div class="plan-hour" style="top:${h * PLAN_HOUR_PX}px;">
+      <span class="plan-hour-label mono">${String(h % 24).padStart(2, '0')}:00</span>
+    </div>`).join('');
+  const blocks = planBlocks([...tasks, ...todayLessons()]).map(({ task, start, end, lane, lanes }) => {
+    const isLesson = task.category === 'Lesson';
+    const color = categoryColorForTask(task); // lessons too: Notion's Lesson category color
+    const top = (start / 60) * PLAN_HOUR_PX;
+    const height = Math.max(14, ((end - start) / 60) * PLAN_HOUR_PX - 2);
+    const sub = isLesson ? (task.course ? { value: task.course } : null) : subValueForTask(task);
+    // Everything the old Lessons page showed: course, time, name, duration, location · room.
+    const where = isLesson ? [task.location, task.room].filter(Boolean).join(' · ') : '';
+    return `
+      <div class="plan-block ${isLesson ? 'is-lesson' : ''} ${task.mark && !isLesson ? 'is-done' : ''} ${activeStopwatchTaskId === task.id ? 'is-current-timer' : ''}"
+        data-plan-start="${start}" data-plan-end="${end}" ${isLesson ? '' : `data-movable data-task-id="${escapeHtml(task.id)}"`}
+        style="top:${top}px; height:${height}px; left:calc(${(lane / lanes) * 100}% + 2px); width:calc(${100 / lanes}% - 4px); background:${hexToRgba(color, 0.18)}; border-left-color:${color};"
+        title="${escapeHtml(`${timeLabel(task)} ${isLesson ? `Lesson${task.course ? ` ${task.course}` : ''}: ` : ''}${task.name || 'Untitled'}${task.duration ? ` (${task.duration} min)` : ''}${where ? `\n${where}` : ''}`)}">
+        ${isLesson ? `
+        <span class="plan-block-name">${escapeHtml(task.name || 'Untitled')}${where ? `<span class="plan-block-inline">${escapeHtml(where)}</span>` : ''}</span>
+        <span class="plan-block-meta mono">${escapeHtml(timeLabel(task))}${task.course ? ` · ${escapeHtml(task.course)}` : ''}${task.duration ? ` · ${task.duration}min` : ''}</span>` : `
+        <span class="plan-block-name">${escapeHtml(task.name || 'Untitled')}</span>
+        <span class="plan-block-meta mono"><span data-block-time>${escapeHtml(timeLabel(task))}</span>${sub ? ` · ${escapeHtml(sub.value)}` : ''}</span>`}
+        ${isLesson ? `<button type="button" class="plan-block-remove" data-action="skip-lesson" data-task-id="${escapeHtml(task.id)}" title="Hide this lesson today (class cancelled)" aria-label="Hide lesson today">&#10006;</button>` : `<button type="button" class="plan-block-remove" data-action="unplan" data-task-id="${escapeHtml(task.id)}" title="Remove from plan (clears the start time)" aria-label="Remove from plan">&#10006;</button>`}
+      </div>`;
+  }).join('');
+  return `
+    <section class="card today-side-card today-plan-card ${placingTaskId ? 'is-placing' : ''}">
+      <div class="plan-inner">
+        <div class="plan-scroll" data-plan-scroll>
+          <div class="plan-grid" style="height:${24 * PLAN_HOUR_PX}px;">
+            ${hours}
+            <div class="plan-blocks">${skippedLessonsHtml()}${blocks}${placingGhostHtml()}</div>
+            <div class="plan-now" data-plan-now style="top:${(minutesIntoDay(new Date()) / 60) * PLAN_HOUR_PX}px;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function updatePlanNowLine() {
+  const line = container?.querySelector('[data-plan-now]');
+  if (line) line.style.top = `${(minutesIntoDay(new Date()) / 60) * PLAN_HOUR_PX}px`;
 }
 
 function totalDurationMinutes(tasks) {
@@ -171,22 +780,26 @@ function catCellsHtml(task) {
   `;
 }
 
+// Inline so it takes currentColor (accent when the button is .active), same
+// as the ✓/!/✖ glyphs, rather than an emoji that renders in its own colors.
+const CLOCK_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.4 1.6"/></svg>';
+
 // Six flat grid cells (shape/sub/name from catCellsHtml, plus time,
-// duration, actions) — .today-row is display:contents (see styles.css) so
+// duration, actions; the standalone page adds timer + arrow) — .today-row is display:contents (see styles.css) so
 // these become direct children of the .today-list grid, which is what
-// makes each column line up across every row, same approach as the Classes
-// page's .class-list.
+// makes each column line up across every row (same approach as Courses'
+// .course-table).
 function taskRowHtml(task) {
   // A completed task is done — re-selecting it to start the stopwatch back
   // up doesn't make sense once it's already been marked off, so it drops
   // out of the clickable set the same way a non-resolvable-category row
   // always has been.
-  const clickable = !embedded && !task.mark && resolvableCategory(task);
+  const timerable = !embedded && !task.mark && resolvableCategory(task);
   const isCurrentTimer = !embedded && activeStopwatchTaskId === task.id;
   const bg = hexToRgba(categoryColorForTask(task), 0.12);
-  const rowClasses = ['today-row', task.mark ? 'is-done' : '', isCurrentTimer ? 'is-current-timer' : '', clickable ? 'today-row-clickable' : ''].filter(Boolean).join(' ');
+  const rowClasses = ['today-row', task.mark ? 'is-done' : '', isCurrentTimer ? 'is-current-timer' : ''].filter(Boolean).join(' ');
   return `
-    <li class="${rowClasses}" data-task-id="${escapeHtml(task.id)}" ${clickable ? 'data-action="select-stopwatch"' : ''}>
+    <li class="${rowClasses}" data-task-id="${escapeHtml(task.id)}">
       ${catCellsHtml(task)}
       <span class="today-cell today-cell-time mono" style="background:${bg};">${escapeHtml(timeLabel(task))}</span>
       <span class="today-cell today-cell-duration" style="background:${bg};">
@@ -197,6 +810,7 @@ function taskRowHtml(task) {
         <button data-action="toggle-urgent" data-task-id="${escapeHtml(task.id)}" class="${task.urgent ? 'active is-urgent-active' : ''}" title="Mark urgent">!</button>
         <button data-action="delete" data-task-id="${escapeHtml(task.id)}" class="btn-danger" title="Delete">&#10006;</button>
       </span>
+      ${!embedded ? `<span class="today-cell today-cell-timer" style="background:${bg};">${timerable ? `<button type="button" data-action="select-stopwatch" data-task-id="${escapeHtml(task.id)}" class="${isCurrentTimer ? 'active' : ''}" title="${isCurrentTimer ? 'Pause / resume timer (Space)' : 'Start timer'}" aria-label="Timer">${CLOCK_ICON}</button>` : ''}${!task.mark && !hasStartTime(task) ? `<button type="button" data-action="add-to-plan" data-task-id="${escapeHtml(task.id)}" class="${placingTaskId === task.id ? 'active' : ''}" title="${placingTaskId === task.id ? 'Cancel placing (Esc)' : "Place in today's plan"}">+</button>` : ''}</span>` : ''}
       ${!embedded ? '<span class="today-cell today-cell-arrow"></span>' : ''}
     </li>
   `;
@@ -385,6 +999,19 @@ function onStopwatchPauseResumeClick() {
   rebuild();
 }
 
+// Reset is only offered while the selected task's total (saved + running)
+// is under a minute — it's for undoing a mis-started timer, not for
+// discarding real logged time.
+function canResetStopwatch(taskId) {
+  return Boolean(taskId) && stopwatchDisplayMinutes(taskId) < 1;
+}
+
+function onStopwatchResetClick() {
+  if (!canResetStopwatch(activeStopwatchTaskId)) return;
+  resetTodayTaskTime(activeStopwatchTaskId); // stays selected, paused at 0
+  rebuild();
+}
+
 function onStopwatchCompleteClick() {
   if (!activeStopwatchTaskId) return;
   const taskId = activeStopwatchTaskId;
@@ -396,6 +1023,7 @@ function onStopwatchCompleteClick() {
 
 function updateStopwatchElapsed() {
   if (!container || embedded) return;
+  updatePlanNowLine();
   // Deliberately no stale-run reconcile here — see reconcileStaleStopwatch's
   // comment for why that's mount-only. This tick just keeps the live
   // elapsed display moving, including straight through midnight; the run
@@ -405,6 +1033,8 @@ function updateStopwatchElapsed() {
   if (!timer) return;
   const el = container.querySelector('[data-stopwatch-elapsed]');
   if (el) el.textContent = formatHMS(stopwatchDisplayMinutes(timer.taskId) * 60);
+  const resetBtn = container.querySelector('[data-action="stopwatch-reset"]');
+  if (resetBtn) resetBtn.disabled = !canResetStopwatch(activeStopwatchTaskId);
 }
 
 function stopwatchBoxHtml() {
@@ -422,6 +1052,7 @@ function stopwatchBoxHtml() {
       <div class="stopwatch-head">
         <h2 class="mono" style="margin:0;">Stopwatch</h2>
         <div class="stopwatch-actions">
+          <button type="button" data-action="stopwatch-reset" ${task && canResetStopwatch(task.id) ? '' : 'disabled'} title="Reset to 0 (only under 1 minute)">Reset</button>
           <button type="button" data-action="stopwatch-pause" ${task ? '' : 'disabled'}>${task && !isRunning ? 'Resume' : 'Pause'}</button>
           <button type="button" class="btn-primary" data-action="stopwatch-complete" ${task ? '' : 'disabled'}>Mark complete</button>
         </div>
@@ -449,6 +1080,15 @@ function rebuild() {
   const tasks = todayTasks();
   const totalMinutes = totalDurationMinutes(tasks);
 
+  // Remember the notes box's focus/caret so a rebuild mid-typing doesn't kick you out.
+  const planScrollEl = container.querySelector('[data-plan-scroll]');
+  if (planScrollEl) planScrollTop = planScrollEl.scrollTop;
+
+  const notesEl = container.querySelector('[data-today-notes]');
+  const notesFocus = notesEl && document.activeElement === notesEl
+    ? { start: notesEl.selectionStart, end: notesEl.selectionEnd, scroll: notesEl.scrollTop }
+    : null;
+
   container.innerHTML = `
     <section class="card${!embedded && flashOnMount ? ' today-jump-flash' : ''}">
       <div class="row-between" style="margin-bottom:0;">
@@ -457,7 +1097,11 @@ function rebuild() {
           <span class="muted">${formatDisplayDate()}</span>
           ${embedded ? `<a href="#/today" class="today-jump-link mono" title="Open the Today page (T)">Open →</a>` : ''}
         </div>
-        <p class="muted" style="margin:0;">Total duration: <span class="mono">${formatDuration(totalMinutes)}</span></p>
+        <div class="today-head-right">
+          <p class="muted" style="margin:0;">Total duration: <span class="mono">${formatDuration(totalMinutes)}</span></p>
+          ${!embedded ? `<button type="button" data-action="toggle-break-day" class="${isBreakDay() ? 'active' : ''}" title="${isBreakDay() ? 'Break day: lessons are hidden from the plan. Click to undo.' : 'Mark today as a break day (holiday): hides lessons from the plan'}">${isBreakDay() ? 'Break day ✓' : 'Break day'}</button>` : ''}
+          ${!embedded ? '<button type="button" data-action="open-week-lessons" title="All lessons this week">Lessons</button>' : ''}
+        </div>
       </div>
     </section>
 
@@ -466,11 +1110,36 @@ function rebuild() {
       <ul class="today-list ${!embedded ? 'has-timer-arrow' : ''}">${tasks.map(taskRowHtml).join('') || '<p class="muted" style="grid-column: 1 / -1;">No tasks today.</p>'}</ul>
     </section>
 
-    ${!embedded ? stopwatchBoxHtml() : ''}
+    ${!embedded ? `
+      <div class="today-bottom-row">
+        ${stopwatchBoxHtml()}
+        <section class="card today-notes-card">
+          <h2 class="mono" style="margin:0;">Notes</h2>
+          <textarea class="today-notes" data-today-notes placeholder="• Notes…" spellcheck="true">${escapeHtml(notesDraft ?? '')}</textarea>
+        </section>
+        ${planBoxHtml(tasks)}
+      </div>
+    ` : ''}
   `;
+
+  const planScroll = container.querySelector('[data-plan-scroll]');
+  if (planScroll) {
+    // First draw: put the current hour near the top (one hour of context above it).
+    planScroll.scrollTop = planScrollTop ?? Math.max(0, (new Date().getHours() - 1) * PLAN_HOUR_PX);
+  }
+
+  if (notesFocus) {
+    const el = container.querySelector('[data-today-notes]');
+    if (el) {
+      el.focus();
+      el.setSelectionRange(notesFocus.start, notesFocus.end);
+      el.scrollTop = notesFocus.scroll;
+    }
+  }
 
   attachEvents();
   syncStopwatchColumnWidths();
+  if (placingTaskId) updatePlacingConflicts(); // a rebuild mid-placing redraws the blocks without their red marks
 }
 
 // .stopwatch-task-cells' CSS grid-template-columns (styles.css) uses the
@@ -509,12 +1178,55 @@ function attachEvents() {
   });
 
   if (!embedded) {
-    container.querySelectorAll('[data-action="select-stopwatch"]').forEach((row) => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('button, input')) return; // don't hijack the row's own ✓/!/✖/duration controls
-        selectStopwatchTask(row.dataset.taskId);
+    // Clock button: starts this task's timer (auto-switching from any other),
+    // or pauses/resumes it if it's already the selected one.
+    container.querySelectorAll('[data-action="select-stopwatch"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.taskId === activeStopwatchTaskId) onStopwatchPauseResumeClick();
+        else selectStopwatchTask(btn.dataset.taskId);
       });
     });
+    container.querySelector('[data-action="toggle-break-day"]')?.addEventListener('click', toggleBreakDay);
+    container.querySelector('[data-action="open-week-lessons"]')?.addEventListener('click', openWeekLessons);
+    container.querySelectorAll('[data-action="add-to-plan"]').forEach((btn) => {
+      btn.addEventListener('click', () => startPlacing(btn.dataset.taskId));
+    });
+    const planGrid = container.querySelector('.plan-grid');
+    planGrid?.addEventListener('pointermove', onPlanPointerMove);
+    planGrid?.addEventListener('click', onPlanClick);
+    container.querySelectorAll('.plan-block[data-movable]').forEach((block) => {
+      block.addEventListener('pointerdown', onBlockPointerDown);
+      block.addEventListener('pointermove', onBlockPointerMove);
+      block.addEventListener('pointerup', onBlockPointerUp);
+      block.addEventListener('pointercancel', (e) => {
+        if (planDrag) planDrag.mins = planDrag.origMins; // interrupted: put it back, save nothing
+        onBlockPointerUp(e);
+      });
+    });
+    container.querySelectorAll('[data-action="skip-lesson"], [data-action="unskip-lesson"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // not a placing click on the grid underneath
+        setLessonSkipped(btn.dataset.taskId, btn.dataset.action === 'skip-lesson');
+      });
+    });
+    container.querySelectorAll('[data-action="unplan"]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // not a placing click on the grid underneath
+        removeFromPlan(btn.dataset.taskId);
+      });
+    });
+    const notes = container.querySelector('[data-today-notes]');
+    notes?.addEventListener('input', () => {
+      notesDraft = notes.value;
+      scheduleNotesSave();
+    });
+    notes?.addEventListener('keydown', onNotesKeydown);
+    notes?.addEventListener('focus', onNotesFocus);
+    notes?.addEventListener('blur', () => {
+      if (notes.value.trim() === '•') notesDraft = notes.value = ''; // focus added a bullet, nothing typed
+      flushNotes();
+    });
+    container.querySelector('[data-action="stopwatch-reset"]')?.addEventListener('click', onStopwatchResetClick);
     container.querySelector('[data-action="stopwatch-pause"]')?.addEventListener('click', onStopwatchPauseResumeClick);
     container.querySelector('[data-action="stopwatch-complete"]')?.addEventListener('click', onStopwatchCompleteClick);
   }

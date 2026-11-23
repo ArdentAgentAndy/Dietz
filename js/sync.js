@@ -1,7 +1,7 @@
-import { store } from './store.js?v=70';
-import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=70';
+import { store } from './store.js?v=71';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=71';
 
-const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems', 'ReportNomenclature', 'ReportBlocks'];
+const TABLE_NAMES = ['Courses', 'Items', 'CourseState', 'Categories', 'Sessions', 'PastTerms', 'Settings', 'CanvasFlags', 'RoadmapStatus', 'RoadmapCustom', 'Contacts', 'Projects', 'ProjectMilestones', 'ProjectLog', 'BoardItems', 'ReportNomenclature', 'ReportBlocks', 'TodayNotes', 'BreakDays', 'SkippedLessons'];
 const INITIAL_PUSH_KEY = 'dietz:syncInitialized';
 // Which tables the deployed backend actually has, from the last bootstrap.
 // A table added on the frontend before Code.gs is redeployed makes the old

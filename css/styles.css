@@ -1216,72 +1216,6 @@ h1, h2, h3 {
   }
 }
 
-/* Grid on the list itself, with each row set to display:contents so its
-   cells become direct grid items — that's what makes the same property
-   (course, time, name, ...) line up in a column across every row. */
-.class-list {
-  display: grid;
-  grid-template-columns: minmax(90px, max-content) minmax(64px, max-content) 1fr minmax(56px, max-content) minmax(140px, max-content);
-  gap: 6px 12px;
-  align-items: center;
-}
-
-.class-day-heading {
-  grid-column: 1 / -1;
-  margin-top: 14px;
-}
-
-.class-day-heading:first-child {
-  margin-top: 0;
-}
-
-.class-day-heading h2 {
-  margin-bottom: 4px;
-}
-
-.class-row {
-  display: contents;
-}
-
-.class-cell {
-  padding: 8px 10px;
-  box-sizing: border-box;
-  overflow-wrap: break-word;
-}
-
-.class-cell-course {
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  border-left: 3px solid var(--cell-color, transparent);
-}
-
-.class-cell-details {
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-size: 13px;
-}
-
-.class-cell-duration {
-  font-size: 13px;
-  text-align: right;
-}
-
-@media (max-width: 700px) {
-  .class-list {
-    grid-template-columns: 1fr;
-  }
-
-  .class-row {
-    display: flex;
-    flex-direction: column;
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-
-  .class-cell-course,
-  .class-cell-details {
-    border-radius: 0;
-  }
-}
-
 .cal-nav {
   display: flex;
   align-items: center;
@@ -1987,8 +1921,368 @@ button.active, .btn.active {
   box-shadow: 0 0 0 1px var(--accent-dim);
 }
 
+/* Standalone /today, under the task list: left column is the stopwatch with
+   the Notes box below it; right column is one card (empty for now) spanning
+   both. Rows are 1fr / 3fr: in an auto-height grid, fr rows keep their
+   ratio while growing to fit content, so Notes is always exactly three
+   times the stopwatch's height. Stacks on narrow screens. */
+.today-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 3fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.today-bottom-row > .stopwatch-card { grid-column: 1; grid-row: 1; }
+.today-bottom-row > .today-notes-card { grid-column: 1; grid-row: 2; }
+.today-bottom-row > .today-side-card { grid-column: 2; grid-row: 1 / span 2; }
+
+.today-bottom-row > .card + .card {
+  margin-top: 0;
+}
+
+/* Hour-by-hour plan (right-hand box). .plan-inner is absolutely positioned
+   so the 24h timeline never adds to the card's height — the card is sized
+   by the stopwatch + notes rows beside it, and the timeline scrolls inside. */
+.today-plan-card {
+  position: relative;
+  min-height: 320px;
+}
+
+.plan-inner {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-block.is-done {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.plan-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.plan-grid {
+  position: relative;
+  margin: 8px 0;
+}
+
+.plan-hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border);
+}
+
+.plan-hour-label {
+  position: absolute;
+  top: -7px;
+  left: 0;
+  width: 44px;
+  padding-right: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.plan-blocks {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50px;
+  right: 48px; /* blocks stop short of the card's right edge */
+}
+
+.plan-block {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 8px;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.today-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Today's "Lessons" popup: the week's timetable, grouped by weekday
+   (what the old Lessons subchannel showed). */
+dialog.today-lessons-dialog {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 20px;
+  width: min(820px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+dialog.today-lessons-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.wl-day {
+  margin: 16px 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.wl-day.is-today {
+  color: var(--accent);
+}
+
+.wl-list {
+  display: grid;
+  gap: 6px;
+}
+
+.wl-row {
+  display: grid;
+  grid-template-columns: 90px 52px 1fr 56px minmax(120px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.wl-dur {
+  text-align: right;
+}
+
+@media (max-width: 700px) {
+  .wl-row {
+    grid-template-columns: 80px 48px 1fr;
+  }
+
+  .wl-dur,
+  .wl-where {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+}
+
+/* Lessons in the plan: read-only (no ✕), dashed edge to set them apart
+   from tasks. */
+.plan-block.is-lesson {
+  border-left-style: dashed;
+}
+
+/* Placing mode (the row's + button): the ghost block tracks the cursor. */
+.today-plan-card.is-placing {
+  border-color: var(--accent);
+}
+
+.today-plan-card.is-placing .plan-grid {
+  cursor: ns-resize;
+}
+
+.plan-ghost {
+  z-index: 2;
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  pointer-events: none;
+  transition: top 60ms ease-out;
+}
+
+/* Placing over an existing block: that block gets a red border, the ghost
+   turns red, and a click there is refused with a short shake. */
+.plan-blocks .plan-block.is-conflict { /* extra specificity: beats .is-current-timer's accent ring */
+  box-shadow: 0 0 0 2px var(--red);
+}
+
+.plan-ghost.is-conflict {
+  outline-color: var(--red);
+  background: rgba(255, 107, 107, 0.18) !important;
+  border-left-color: var(--red) !important;
+}
+
+.plan-ghost.is-rejected,
+.plan-block.is-rejected {
+  animation: plan-ghost-shake 0.3s ease-in-out;
+}
+
+/* A lesson hidden for today (class cancelled): faint outline under the real
+   blocks, not counted for overlaps; its ↺ restores it. */
+.plan-block.plan-block-skipped {
+  z-index: 0;
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.plan-block-skipped .plan-block-restore {
+  opacity: 1;
+  text-decoration: none;
+}
+
+/* Dragging a planned task block to a new time (lessons aren't movable). */
+.plan-block[data-movable] {
+  cursor: grab;
+  touch-action: none; /* a drag on touch moves the block instead of scrolling the plan */
+  user-select: none;
+}
+
+.plan-block.is-dragging {
+  cursor: grabbing;
+  z-index: 3;
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  transition: top 60ms ease-out;
+}
+
+.plan-block.is-dragging.is-drag-conflict {
+  outline-color: var(--red);
+}
+
+@keyframes plan-ghost-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* ✕ on a plan block: shown on hover (always on touch, where there's no hover). */
+.plan-block-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 16px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.plan-block:hover .plan-block-remove,
+.plan-block-remove:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .plan-block-remove {
+    opacity: 1;
+  }
+}
+
+.plan-block.is-current-timer {
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.plan-block-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Lesson blocks: course and building · room on the name's line, after it. */
+.plan-block-inline {
+  margin-left: 8px;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.plan-block-meta {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-now {
+  position: absolute;
+  left: 44px;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+.plan-now::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.today-notes-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.today-notes {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.today-notes:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .today-bottom-row {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+
+  .today-bottom-row > .stopwatch-card,
+  .today-bottom-row > .today-notes-card,
+  .today-bottom-row > .today-side-card {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .today-notes {
+    min-height: 220px;
+  }
+
+  .today-plan-card {
+    min-height: 420px;
+  }
+}
+
 .stopwatch-head {
   display: flex;
+  flex-wrap: wrap; /* half-width now (.today-bottom-row), so the buttons may need to drop under the title */
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -2055,10 +2349,6 @@ button.active, .btn.active {
 .stopwatch-actions {
   display: flex;
   gap: 8px;
-}
-
-.today-row-clickable .today-cell {
-  cursor: pointer;
 }
 
 /* Same toggle-a-class/auto-remove flash convention as .canvas-chip.is-highlighted's
@@ -2222,7 +2512,7 @@ button.active, .btn.active {
    class when !embedded — Home's embedded list never gets it, so it never
    gets the extra column either). Holds the current-timer arrow cell. */
 .today-list.has-timer-arrow {
-  grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(56px, max-content) minmax(64px, max-content) minmax(118px, max-content) 28px;
+  grid-template-columns: minmax(28px, max-content) minmax(90px, max-content) 1fr minmax(56px, max-content) minmax(64px, max-content) minmax(118px, max-content) minmax(44px, max-content) 28px;
 }
 
 .today-row {
@@ -2263,12 +2553,20 @@ button.active, .btn.active {
    clips names like "MATH 241" down to "MAT…" for no reason. */
 .today-cell-sub .cal-chip-sub-badge {
   max-width: none;
+  font-size: 12px;
+  padding: 3px 10px;
 }
 
 .today-cell-name {
   display: flex;
   align-items: center;
   font-weight: 500;
+}
+
+/* List rows only — the stopwatch card reuses .today-cell-name for its
+   selected task and keeps the larger size there. */
+.today-list .today-cell-name {
+  font-size: 12px;
 }
 
 .today-cell-time {
@@ -2309,6 +2607,34 @@ button.active, .btn.active {
 .today-cell-actions button {
   padding: 4px 8px;
   font-size: 11px;
+}
+
+/* Standalone /today only: the clock button that starts/pauses a task's
+   timer, in its own column right of the ✓/!/✖ cell. It's the row's last
+   colored cell there, so it takes over the rounded right edge. */
+.today-list.has-timer-arrow .today-cell-actions {
+  border-radius: 0;
+}
+
+.today-cell-timer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.today-cell-timer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 31px;
+  padding: 4px 8px;
+}
+
+.today-row.is-current-timer .today-cell-timer button {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Matches Calendar's urgent-highlight color (white) instead of the generic
@@ -2379,7 +2705,8 @@ button.active, .btn.active {
   }
 
   .today-cell-shape,
-  .today-cell-actions {
+  .today-cell-actions,
+  .today-cell-timer {
     border-radius: 0;
   }
 

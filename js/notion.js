@@ -1,5 +1,5 @@
-import { store } from './store.js?v=70';
-import { escapeHtml } from './format.js?v=70';
+import { store } from './store.js?v=71';
+import { escapeHtml } from './format.js?v=71';
 
 const CACHE_KEY = 'dietz:notionCache';
 const SCHEMA_CACHE_KEY = 'dietz:notionSchemaCache';

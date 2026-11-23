@@ -1,4 +1,4 @@
-import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=70';
+import { CATEGORY_COLOR_OVERRIDES } from './taskDisplay.js?v=71';
 
 // Top-nav structure: Menu (rendered to the right of the Settings gear, see
 // index.html's #top-nav-menu — always reachable, never part of the
@@ -142,7 +142,6 @@ export const CHANNELS = [
     pos: { x: 740, y: 260 },
     subchannels: [
       { id: 'courses', label: 'Courses', route: '/courses', pos: { x: 910, y: 150 } },
-      { id: 'lessons', label: 'Lessons', route: '/lessons', pos: { x: 940, y: 260 } },
       { id: 'revision', label: 'Revision', route: '/revision', pos: { x: 900, y: 370 } },
     ],
   },

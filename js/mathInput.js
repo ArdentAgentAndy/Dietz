@@ -36,7 +36,7 @@
 // linearToLatex() is deterministic, so any output format (Updates, AIAA,
 // IEEE, plain LaTeX) can convert it the same way later.
 
-import { escapeHtml } from './format.js?v=70';
+import { escapeHtml } from './format.js?v=71';
 
 // --- KaTeX (loaded from the CDN on first use) ------------------------------
 

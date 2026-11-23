@@ -84,6 +84,20 @@ var TABLES = {
   // (see isReportTextColumn_).
   ReportNomenclature: { columns: ['id', 'projectId', 'kind', 'groupId', 'name', 'symbol', 'description', 'units', 'sortOrder'], key: ['id'] },
   ReportBlocks: { columns: ['id', 'projectId', 'kind', 'sectionId', 'sortOrder', 'text', 'caption', 'data'], key: ['id'] },
+  // Today page's Notes box (#/today, js/views/today.js): one free-text
+  // notepad, a single row with id 'main'. text is kept literal (see
+  // isReportTextColumn_) so a note starting with = or + isn't a formula.
+  TodayNotes: { columns: ['id', 'text'], key: ['id'] },
+  // Break days (holidays) set from the Today page's header button: one row
+  // per day, id 'break-YYYY-MM-DD' (prefixed so Sheets can't turn the id
+  // itself into a date), date = YYYY-MM-DD (guarded by isDateLikeColumn_).
+  // On a break day, lessons are left out of that day's hour plan.
+  BreakDays: { columns: ['id', 'date'], key: ['id'] },
+  // A single lesson called off for one day (professor sick, class off), set
+  // from the lesson's block in the Today page's hour plan. id
+  // 'skip-YYYY-MM-DD-<lessonId>', date = that day, lessonId = the Notion
+  // Lesson task's page id. Only that day is affected.
+  SkippedLessons: { columns: ['id', 'date', 'lessonId'], key: ['id'] },
 };
 
 function checkToken_(token) {
@@ -167,6 +181,7 @@ function isDateLikeColumn_(tableName, col) {
 // literal-text guard (sortOrder stays a number).
 function isReportTextColumn_(tableName, col) {
   if (tableName === 'ProjectMilestones') return col === 'description' || col === 'doneWhen';
+  if (tableName === 'TodayNotes') return col === 'text';
   return (tableName === 'ReportNomenclature' || tableName === 'ReportBlocks') && col !== 'sortOrder';
 }
 

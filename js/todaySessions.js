@@ -2,8 +2,8 @@
 // so the Today subchannel's per-item stopwatch (js/views/today.js) can log
 // real Sessions rows. Kept separate from js/sessions.js's generic
 // group/category query helpers, which know nothing about Notion tasks.
-import { store } from './store.js?v=70';
-import { formatDateISO } from './format.js?v=70';
+import { store } from './store.js?v=71';
+import { formatDateISO } from './format.js?v=71';
 
 const TIMER_KEY = 'dietz:todayTimer';
 const SESSION_MAP_KEY = 'dietz:todayTimerSessions';
@@ -163,6 +163,21 @@ export function addMinutesToTodaySession(taskId, categoryId, taskName, deltaMinu
   if (!(deltaMinutes > 0)) return findOrCreateTodaySessionForTask(taskId, categoryId, taskName, workDayISO);
   const row = findOrCreateTodaySessionForTask(taskId, categoryId, taskName, workDayISO);
   return store.upsert('Sessions', { id: row.id, minutes: row.minutes + deltaMinutes, note: taskName || row.note });
+}
+
+// Zeroes a task's stopwatch: drops the running timer (if it's this task's)
+// without saving it, and removes the task's per-item Sessions row for the
+// work day. Only meant for a mis-started timer — js/views/today.js only
+// offers it while the task's total is under a minute, so real logged time
+// can't be thrown away by accident.
+export function resetTodayTaskTime(taskId) {
+  if (loadTimer()?.taskId === taskId) saveTimer(null);
+  const map = loadSessionMap();
+  const entry = map[taskId];
+  if (!entry) return;
+  if (store.table('Sessions').some((s) => s.id === entry.sessionId)) store.remove('Sessions', entry.sessionId);
+  delete map[taskId];
+  saveSessionMap(map);
 }
 
 // The time-logging half of marking a task complete (false -> true), shared

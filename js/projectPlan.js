@@ -14,7 +14,7 @@
 // Codes are never stored, they come from order every time: phases are
 // lettered A, B, C; checkpoints are numbered 1, 2, 3 continuously across
 // phases; steps are <checkpoint>.<n>, e.g. 3.1. So reordering renumbers.
-import { store } from './store.js?v=70';
+import { store } from './store.js?v=71';
 
 // The pitch: what you'd say to a professor. Order = display order.
 export const PITCH_FIELDS = [
