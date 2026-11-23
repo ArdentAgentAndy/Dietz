@@ -10,11 +10,12 @@ actually being built, and remove it from here.
 
 ## Version roadmap
 
-- **v71 — Today and Agenda subchannel updates.** Scope not yet written.
-- **v72 — Mobile mode fixes.** Mobile is badly broken right now. Whole
-  version is dedicated to getting the app usable on a phone again.
-  Today's pass (2026-11-23) covers only **Today, Agenda and Canvas**;
-  every other page's mobile layout waits for v75.
+- **v71 — Today and Agenda subchannel updates.** ✅ Done (Today page
+  overhaul: hour plan, notes, stopwatch, lessons folded in).
+- **v72 — Mobile mode fixes.** ✅ Done: per-device phone mode button
+  (js/phoneMode.js, `.phone-mode` CSS), phone layouts for the top bar,
+  Menu, Today, Agenda and Canvas; one day order (category → course →
+  time → name) everywhere. Every other page's mobile layout waits for v75.
 - **v73 — Academics overhaul (in progress, stashed as "academics
   overhaul").** Its full section lives in the stashed copy of this file.
 - **v74 — Menu overhaul 2.** Scope not yet written.

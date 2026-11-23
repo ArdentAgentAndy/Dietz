@@ -1,10 +1,11 @@
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema, isNotionTasksTruncated, getNotionTasksCutoff, askTaskDuration } from '../notion.js?v=71';
-import { hexForNotionColor } from '../notionColors.js?v=71';
-import { escapeHtml, hexToRgba } from '../format.js?v=71';
-import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=71';
-import { allPlanLinkedTaskIds } from '../projectPlan.js?v=71';
-import { logCompletionTime, unresolvedLabelForTask } from '../todaySessions.js?v=71';
-import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY } from '../taskDisplay.js?v=71';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, createTask, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask, fetchNotionSchema, getCachedNotionSchema, isNotionTasksTruncated, getNotionTasksCutoff, askTaskDuration } from '../notion.js?v=72';
+import { hexForNotionColor } from '../notionColors.js?v=72';
+import { escapeHtml, hexToRgba } from '../format.js?v=72';
+import { takePendingSchedule, setPendingHighlight, takePendingCalendarHighlight } from '../canvas.js?v=72';
+import { allPlanLinkedTaskIds } from '../projectPlan.js?v=72';
+import { logCompletionTime, unresolvedLabelForTask } from '../todaySessions.js?v=72';
+import { isPhoneMode, kbd } from '../phoneMode.js?v=72';
+import { CATEGORY_GROUPS, CATEGORY_ORDER, categoryRank, SHAPE_BY_CATEGORY, CATEGORY_COLOR_OVERRIDES, categoryColorForTask, shapeEmblemHtml, startOfDay, isoDay, taskDay, SUB_FILTER_BY_CATEGORY, compareTasksForDay } from '../taskDisplay.js?v=72';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -278,6 +279,10 @@ function onKeyDown(e) {
 export function render(rootEl) {
   container = rootEl;
   container.closest('#app')?.classList.add('app-wide');
+  // Phone mode stacks the week's days vertically, so open scrolled to today.
+  pendingScrollDate = isPhoneMode() ? isoDay(new Date()) : null;
+  window.removeEventListener('phonemodechange', rebuild);
+  window.addEventListener('phonemodechange', rebuild);
   schedulingItem = takePendingSchedule();
   schedulingError = null;
   // schedulingBusy is module-level state that outlives this mount (a
@@ -312,6 +317,8 @@ export function render(rootEl) {
 }
 
 export function unmount() {
+  window.removeEventListener('phonemodechange', rebuild);
+  pendingScrollDate = null;
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('mousemove', trackMouse);
   const app = container?.closest('#app');
@@ -736,7 +743,7 @@ function weekViewHtml(tasks, weekAnchor = anchor) {
     (byDay[day] = byDay[day] || []).push(t);
   }
   for (const key of Object.keys(byDay)) {
-    byDay[key].sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || (a.date.start || '').localeCompare(b.date.start || ''));
+    byDay[key].sort(compareTasksForDay);
   }
 
   return `
@@ -787,6 +794,18 @@ export function weekRangeLabel(weekAnchor) {
   return `${startLabel} – ${endLabel}, ${end.getFullYear()}`;
 }
 
+// Phone mode's month cell content (hidden on the laptop, styles.css): one
+// category-colored dot per task instead of the 128px cards, which can't fit
+// in a ~50px-wide cell. Tapping the cell opens that week (attachEvents).
+const MONTH_DOTS_MAX = 6;
+
+function monthDotsHtml(items) {
+  if (!items.length) return '';
+  const dots = items.slice(0, MONTH_DOTS_MAX).map((t) => `<span class="cal-month-dot${t.mark ? ' is-done' : ''}" style="background:${categoryColorForTask(t)};"></span>`).join('');
+  const more = items.length > MONTH_DOTS_MAX ? `<span class="cal-month-dots-more mono">+${items.length - MONTH_DOTS_MAX}</span>` : '';
+  return `<div class="cal-month-dots">${dots}${more}</div>`;
+}
+
 function monthViewHtml(tasks) {
   const byDay = {};
   for (const t of tasks) {
@@ -795,7 +814,7 @@ function monthViewHtml(tasks) {
     (byDay[day] = byDay[day] || []).push(t);
   }
   for (const key of Object.keys(byDay)) {
-    byDay[key].sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || (a.date.start || '').localeCompare(b.date.start || ''));
+    byDay[key].sort(compareTasksForDay);
   }
 
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -821,6 +840,7 @@ function monthViewHtml(tasks) {
             </div>
             ${shown.map(taskChipHtml).join('')}
             ${extra > 0 ? `<p class="muted cal-more">+${extra} more</p>` : ''}
+            ${monthDotsHtml(items)}
           </div>
         `;
       }).join('')}
@@ -835,6 +855,17 @@ const HIGHLIGHT_KEYS = { completed: 'C', urgent: 'U', public: 'P' };
 // the generic blue the active-button style defaults to otherwise.
 const HIGHLIGHT_COLORS = { completed: '#9b9a97', urgent: '#ffffff', public: '#5b9bd5' };
 
+// Phone mode: a day to scroll into view after the next week-view rebuild
+// (today on opening the page; the tapped day after tapping a month cell).
+let pendingScrollDate = null;
+
+function scrollToPendingDate() {
+  if (!pendingScrollDate || viewMode !== 'week') return;
+  const el = container?.querySelector(`.cal-page-grid .cal-day-col[data-date="${pendingScrollDate}"]`);
+  pendingScrollDate = null;
+  el?.scrollIntoView({ block: 'start' });
+}
+
 function highlightButtonHtml(kind, idleLabel) {
   const isActive = activeHighlight === kind;
   const isOtherActive = (activeHighlight && activeHighlight !== kind) || deleteMode;
@@ -842,7 +873,7 @@ function highlightButtonHtml(kind, idleLabel) {
   const keyHint = isActive ? 'Enter' : HIGHLIGHT_KEYS[kind];
   const color = HIGHLIGHT_COLORS[kind];
   const style = isActive ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
-  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${isOtherActive ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
+  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${isOtherActive ? 'disabled' : ''}>${kbd(keyHint)}${label}</button>`;
 }
 
 // Shared by the button click and the 'c'/'u' keybinds (see attachKeybinds).
@@ -880,7 +911,7 @@ function deleteButtonHtml() {
   const label = deleteMode ? 'Confirm delete' : 'Mass delete';
   const keyHint = deleteMode ? 'Enter' : 'X';
   const style = deleteMode ? ' style="border-color:#ff6b6b; color:#ff6b6b; background:rgba(255, 107, 107, 0.14);"' : '';
-  return `<button data-action="delete-mode" class="${deleteMode ? 'active' : ''}"${style} ${disabled ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
+  return `<button data-action="delete-mode" class="${deleteMode ? 'active' : ''}"${style} ${disabled ? 'disabled' : ''}>${kbd(keyHint)}${label}</button>`;
 }
 
 // Shared by the button click and the 'd' keybind. First press enters
@@ -1282,8 +1313,8 @@ function rebuild() {
     <section class="card">
       <div class="row-between">
         <h1 class="mono">Agenda</h1>
-        <div style="display:flex; gap:8px;">
-          <button data-action="hide-completed" class="${hideCompleted ? 'active' : ''}">[H] ${hideCompleted ? 'Showing active only' : 'Hide completed'}</button>
+        <div class="cal-head-actions" style="display:flex; gap:8px;">
+          <button data-action="hide-completed" class="${hideCompleted ? 'active' : ''}">${kbd('H')}${hideCompleted ? 'Showing active only' : 'Hide completed'}</button>
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
           ${highlightButtonHtml('public', 'Mark public')}
@@ -1301,24 +1332,24 @@ function rebuild() {
       ` : ''}
       ${schedulingError ? `<p class="muted" style="color:var(--red); margin-top:8px;">${escapeHtml(schedulingError)}</p>` : ''}
 
-      <div class="row-between" style="margin-top:12px;">
+      <div class="row-between cal-view-row" style="margin-top:12px;">
         <div class="range-toggle">
-          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">[I] Week</button>
-          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">[O] Month</button>
+          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">${kbd('I')}Week</button>
+          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">${kbd('O')}Month</button>
         </div>
         <div class="cal-nav">
-          <button data-action="prev">[Q]</button>
+          <button data-action="prev" aria-label="Previous"><span class="kbd-hint">[Q]</span><span class="phone-only">&#8249;</span></button>
           <span class="mono cal-range-label">${rangeLabel()}</span>
-          <button data-action="today">[T] Today</button>
-          <button data-action="next">[E]</button>
+          <button data-action="today">${kbd('T')}Today</button>
+          <button data-action="next" aria-label="Next"><span class="kbd-hint">[E]</span><span class="phone-only">&#8250;</span></button>
         </div>
       </div>
 
-      <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
-        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[/] Search tasks…" value="${escapeHtml(searchQuery)}">
+      <div class="row-between cal-search-row" style="margin-top:12px; justify-content:flex-end;">
+        <input type="text" class="cal-search-input mono" data-action="search" placeholder="${isPhoneMode() ? 'Search tasks…' : '[/] Search tasks…'}" value="${escapeHtml(searchQuery)}">
       </div>
 
-      <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">
+      <div class="range-toggle cal-filters" style="margin-top:12px; flex-wrap: wrap;">
         <button data-category="" class="${categoryFilter === '' ? 'active' : ''}">All</button>
         <span class="filter-gap"></span>
         ${categoryGroups.map((group) => group.map((c) => {
@@ -1328,7 +1359,7 @@ function rebuild() {
       </div>
 
       ${subLabel ? `
-        <div class="range-toggle" style="margin-top:8px; flex-wrap: wrap;">
+        <div class="range-toggle cal-filters" style="margin-top:8px; flex-wrap: wrap;">
           <button data-sub="" class="${subFilter === '' ? 'active' : ''}">All ${escapeHtml(subLabel)}s</button>
           ${subValues.map((v) => {
             const isActive = subFilter === v;
@@ -1338,7 +1369,7 @@ function rebuild() {
       ` : ''}
     </section>
 
-    <section class="card cal-grid-card">
+    <section class="card cal-grid-card cal-page-grid">
       ${viewMode === 'week' ? weekViewHtml(tasks) : monthViewHtml(tasks)}
     </section>
 
@@ -1349,6 +1380,7 @@ function rebuild() {
   applyPendingCalendarHighlight();
   applyModeVisuals();
   applyKeyNavFocus();
+  if (isPhoneMode()) scrollToPendingDate();
 
   if (searchWasFocused) {
     const newSearchEl = container.querySelector('[data-action="search"]');
@@ -1500,6 +1532,22 @@ function attachEvents() {
       el.addEventListener('click', () => scheduleCanvasTask(el.dataset.date));
     }
   });
+
+  // Phone mode, month view: tapping a day opens its week, scrolled to that
+  // day (cells only show dots there). Not while picking a day for a Canvas
+  // item: that tap schedules it instead (handled above).
+  if (isPhoneMode() && viewMode === 'month' && !schedulingItem) {
+    container.querySelectorAll('.cal-page-grid .cal-month-cell').forEach((cell) => {
+      cell.addEventListener('click', (e) => {
+        if (e.target.closest('button, .cal-chip')) return;
+        const [y, m, d] = cell.dataset.date.split('-').map(Number);
+        anchor = new Date(y, m - 1, d);
+        viewMode = 'week';
+        pendingScrollDate = cell.dataset.date;
+        rebuild();
+      });
+    });
+  }
 
   container.querySelectorAll('.cal-chip.is-link-target').forEach((el) => {
     el.addEventListener('click', () => linkCanvasTaskToExisting(el.dataset.taskId));

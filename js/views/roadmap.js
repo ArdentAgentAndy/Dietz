@@ -1,6 +1,6 @@
-import { store } from '../store.js?v=71';
-import { escapeHtml, hexToRgba } from '../format.js?v=71';
-import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=71';
+import { store } from '../store.js?v=72';
+import { escapeHtml, hexToRgba } from '../format.js?v=72';
+import { COURSES, CATEGORIES, FREE_NOTES, PROGRAM_LABELS, PROGRAM_TOTAL_HOURS } from '../roadmapCourses.js?v=72';
 
 const SEMESTERS = [
   { id: 'Y1F', label: 'Y1 Fall' }, { id: 'Y1S', label: 'Y1 Spring' },

@@ -13,13 +13,13 @@
 // again in place. Whole-page rebuilds only happen while no field is open, so
 // a sync arriving mid-edit can never throw away what's being typed.
 
-import { escapeHtml, hexToRgba } from '../format.js?v=71';
-import { projectBySlug } from '../projects.js?v=71';
-import { getGithubRepo } from '../projectPlan.js?v=71';
+import { escapeHtml, hexToRgba } from '../format.js?v=72';
+import { projectBySlug } from '../projects.js?v=72';
+import { getGithubRepo } from '../projectPlan.js?v=72';
 import {
   loadKatex, renderMath, renderRich, attachMathInput, insertMath, prepareSymbols, GREEK_LETTERS, GREEK_KEY_FOR,
-} from '../mathInput.js?v=71';
-import * as R from '../report.js?v=71';
+} from '../mathInput.js?v=72';
+import * as R from '../report.js?v=72';
 
 let container = null;
 let slug = null;

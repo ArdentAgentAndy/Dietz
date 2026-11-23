@@ -1,6 +1,6 @@
-import { escapeHtml, hexToRgba, formatDateISO, formatShortDate } from '../format.js?v=71';
-import { projectBySlug } from '../projects.js?v=71';
-import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../projectHours.js?v=71';
+import { escapeHtml, hexToRgba, formatDateISO, formatShortDate } from '../format.js?v=72';
+import { projectBySlug } from '../projects.js?v=72';
+import { projectMinutesByWeek, projectMinutesOnDay, weekStart } from '../projectHours.js?v=72';
 import {
   PITCH_FIELDS, getPitch, savePitch,
   parseGithubRepo, getGithubRepo, saveGithubRepo,
@@ -8,17 +8,17 @@ import {
   addMilestone, updateMilestone, moveMilestone, deleteMilestone, descendantCount,
   getLinks, normalizeUrl, addLink, removeLink,
   logEntries, addLogEntry, deleteLogEntry,
-} from '../projectPlan.js?v=71';
-import { store } from '../store.js?v=71';
+} from '../projectPlan.js?v=72';
+import { store } from '../store.js?v=72';
 import {
   fetchNotionTasks, getCachedNotionTasks, createTask, addCachedNotionTask,
   pushCheckboxUpdates, patchCachedNotionTask, deleteTask, removeCachedNotionTask,
   askTaskDuration,
-} from '../notion.js?v=71';
-import { taskDay } from '../taskDisplay.js?v=71';
-import { startOfDay } from '../taskDisplay.js?v=71';
-import { readOnlyWeekHtml, weekRangeLabel, MODE_COLORS } from './calendar.js?v=71';
-import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable, tokenExpiryNote } from '../github.js?v=71';
+} from '../notion.js?v=72';
+import { taskDay } from '../taskDisplay.js?v=72';
+import { startOfDay } from '../taskDisplay.js?v=72';
+import { readOnlyWeekHtml, weekRangeLabel, MODE_COLORS } from './calendar.js?v=72';
+import { getReadme, renderMarkdown, saveReadme, isProxyUnavailable, tokenExpiryNote } from '../github.js?v=72';
 
 // One project's own page (#/projects/<slug>): header (name, logged hours,
 // milestone position, back + Pitch buttons), big Roadmap / Report / Readme /

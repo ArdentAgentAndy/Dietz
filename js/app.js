@@ -1,11 +1,12 @@
-import './store.js?v=71';
-import { initRouter } from './router.js?v=71';
-import { initSync } from './sync.js?v=71';
-import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=71';
-import { migrateCourseConfigs } from './migrations.js?v=71';
-import { initPush } from './push.js?v=71';
-import { initNav } from './nav.js?v=71';
-import { reconcileTimerDayBoundary } from './timer.js?v=71';
+import './store.js?v=72';
+import { initRouter } from './router.js?v=72';
+import { initSync } from './sync.js?v=72';
+import { compactOldSessions, dedupeCompactedSessions } from './compaction.js?v=72';
+import { migrateCourseConfigs } from './migrations.js?v=72';
+import { initPush } from './push.js?v=72';
+import { initNav } from './nav.js?v=72';
+import { reconcileTimerDayBoundary } from './timer.js?v=72';
+import { initPhoneMode } from './phoneMode.js?v=72';
 
 // Registers relative to this page's own path, so the SW's scope is correct
 // whether this is served from a domain root or a GitHub Pages project
@@ -14,6 +15,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js');
 }
 
+initPhoneMode();
 migrateCourseConfigs();
 reconcileTimerDayBoundary();
 dedupeCompactedSessions();

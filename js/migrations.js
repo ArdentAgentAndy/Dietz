@@ -2,8 +2,8 @@
 // after the app was already seeded with real grade data. seed.js only
 // applies to a brand-new install — an existing Courses row's configJson has
 // to be patched in place to pick up a rubric change made after the fact.
-import { store } from './store.js?v=71';
-import { courseConfigs } from './seed.js?v=71';
+import { store } from './store.js?v=72';
+import { courseConfigs } from './seed.js?v=72';
 
 export function migrateCourseConfigs() {
   for (const course of store.table('Courses')) {

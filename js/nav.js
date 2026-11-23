@@ -1,5 +1,5 @@
-import { MENU, CHANNELS, INNER_LAYER_CHANNELS } from './channels.js?v=71';
-import { isConfigured } from './sync.js?v=71';
+import { MENU, CHANNELS, INNER_LAYER_CHANNELS } from './channels.js?v=72';
+import { isConfigured } from './sync.js?v=72';
 
 // Menu is rendered separately from the channel row (see #top-nav-menu in
 // index.html, to the right of the Settings gear) and isn't part of the

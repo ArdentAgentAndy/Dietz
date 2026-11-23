@@ -1,8 +1,8 @@
-import { HOME, CHANNELS, INNER_LAYER_CHANNELS } from '../channels.js?v=71';
-import { escapeHtml } from '../format.js?v=71';
-import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=71';
-import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=71';
-import { takePendingMenuLayer } from '../nav.js?v=71';
+import { HOME, CHANNELS, INNER_LAYER_CHANNELS } from '../channels.js?v=72';
+import { escapeHtml } from '../format.js?v=72';
+import { hexForLabel, hexForNotionColor } from '../notionColors.js?v=72';
+import { BLOB_PRESET_COUNT, letterHtml, pebbleColorVars } from '../pebbles.js?v=72';
+import { takePendingMenuLayer } from '../nav.js?v=72';
 
 // Solo channels (Contacts, Public) have no outer-ring slot of their own in
 // this rebuild yet — only the 8 non-solo channels (channels.js's `solo`
@@ -1035,8 +1035,10 @@ function fadeInRestOfPage(keepEl) {
 // zoomArcCenter() without the back arrow/sonar arcs/square frame/guide
 // (which stay fixed) moving with them.
 function buildZoomed(channel) {
+  // menu-stage-zoomed: lets phone mode (styles.css) treat this page apart
+  // from the hub/layers.
   container.innerHTML = `
-    <div class="menu-stage">
+    <div class="menu-stage menu-stage-zoomed">
       <div class="menu-tree-stage">
         ${frameHtml()}
         <div class="menu-tree-viewport">

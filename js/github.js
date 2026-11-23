@@ -2,7 +2,7 @@
 // Code.gs: githubReadmeGet_ / githubMarkdown_ / githubReadmePut_). The
 // GitHub token lives only in the backend's Script Properties; this side just
 // sends the Dietz token, in the POST body (never in a URL).
-import { store } from './store.js?v=71';
+import { store } from './store.js?v=72';
 
 function getConfig() {
   const settings = store.table('Settings');

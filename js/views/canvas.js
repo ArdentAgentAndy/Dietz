@@ -1,9 +1,10 @@
-import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=71';
-import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=71';
-import { hexForCourse, hexForNotionColor } from '../notionColors.js?v=71';
-import { escapeHtml, hexToRgba } from '../format.js?v=71';
-import { store } from '../store.js?v=71';
-import { chicagoDay } from '../taskDisplay.js?v=71';
+import { fetchCanvasEvents, getCachedCanvasEvents, setPendingSchedule, takePendingHighlight, setPendingCalendarHighlight, getCanvasFlag, setCanvasFlag } from '../canvas.js?v=72';
+import { fetchNotionTasks, getCachedNotionTasks, pushCheckboxUpdates, updateTask, patchCachedNotionTask } from '../notion.js?v=72';
+import { hexForCourse, hexForNotionColor } from '../notionColors.js?v=72';
+import { escapeHtml, hexToRgba } from '../format.js?v=72';
+import { store } from '../store.js?v=72';
+import { chicagoDay } from '../taskDisplay.js?v=72';
+import { isPhoneMode, kbd } from '../phoneMode.js?v=72';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -238,6 +239,10 @@ function onKeyDown(e) {
 export function render(rootEl) {
   container = rootEl;
   container.closest('#app')?.classList.add('app-wide');
+  // Phone mode stacks the week's days vertically, so open scrolled to today.
+  pendingScrollDate = isPhoneMode() ? isoDay(new Date()) : null;
+  window.removeEventListener('phonemodechange', rebuild);
+  window.addEventListener('phonemodechange', rebuild);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('mousemove', trackMouse);
 
@@ -259,6 +264,8 @@ export function render(rootEl) {
 }
 
 export function unmount() {
+  window.removeEventListener('phonemodechange', rebuild);
+  pendingScrollDate = null;
   window.removeEventListener('keydown', onKeyDown);
   window.removeEventListener('mousemove', trackMouse);
   const app = container?.closest('#app');
@@ -452,6 +459,37 @@ function eventChipHtml(event) {
   `;
 }
 
+// The one order for a day's assignments (laptop and phone, week and month):
+// course, then deadline, then name with numbers compared as numbers.
+function compareEventsForDay(a, b) {
+  return (a.course || '').localeCompare(b.course || '', undefined, { numeric: true })
+    || (a.deadline || '').localeCompare(b.deadline || '')
+    || (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+}
+
+// Phone mode: a day to scroll into view after the next week-view rebuild
+// (today on opening the page; the tapped day after tapping a month cell).
+let pendingScrollDate = null;
+
+function scrollToPendingDate() {
+  if (!pendingScrollDate || viewMode !== 'week') return;
+  const el = container?.querySelector(`.cal-page-grid .cal-day-col[data-date="${pendingScrollDate}"]`);
+  pendingScrollDate = null;
+  el?.scrollIntoView({ block: 'start' });
+}
+
+// Phone mode's month cell content (hidden on the laptop): one course-colored
+// dot per assignment, since the cards can't fit a ~50px-wide cell. Tapping
+// the cell opens that week (attachEvents).
+const MONTH_DOTS_MAX = 6;
+
+function monthDotsHtml(items) {
+  if (!items.length) return '';
+  const dots = items.slice(0, MONTH_DOTS_MAX).map((e) => `<span class="cal-month-dot" style="background:${colorForCourseCode(e.course)};"></span>`).join('');
+  const more = items.length > MONTH_DOTS_MAX ? `<span class="cal-month-dots-more mono">+${items.length - MONTH_DOTS_MAX}</span>` : '';
+  return `<div class="cal-month-dots">${dots}${more}</div>`;
+}
+
 function weekViewHtml(events) {
   const start = startOfWeek(anchor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
@@ -461,7 +499,7 @@ function weekViewHtml(events) {
     if (!day) continue;
     (byDay[day] = byDay[day] || []).push(e);
   }
-  for (const key of Object.keys(byDay)) byDay[key].sort((a, b) => (a.deadline || '').localeCompare(b.deadline || ''));
+  for (const key of Object.keys(byDay)) byDay[key].sort(compareEventsForDay);
 
   return `
     <div class="cal-week-grid">
@@ -470,7 +508,7 @@ function weekViewHtml(events) {
         const items = byDay[key] || [];
         const isToday = key === isoDay(new Date());
         return `
-          <div class="cal-day-col${isToday ? ' is-today' : ''}">
+          <div class="cal-day-col${isToday ? ' is-today' : ''}" data-date="${key}">
             <div class="cal-day-head mono">${WEEKDAY_NAMES[i]} <span class="muted">${d.toLocaleDateString('en-US', { month: 'short' })} ${d.getDate()}</span></div>
             <div class="cal-day-items">${items.map(eventChipHtml).join('') || '<p class="muted cal-empty">—</p>'}</div>
           </div>
@@ -487,7 +525,7 @@ function monthViewHtml(events) {
     if (!day) continue;
     (byDay[day] = byDay[day] || []).push(e);
   }
-  for (const key of Object.keys(byDay)) byDay[key].sort((a, b) => (a.deadline || '').localeCompare(b.deadline || ''));
+  for (const key of Object.keys(byDay)) byDay[key].sort(compareEventsForDay);
 
   const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const gridStart = startOfWeek(monthStart);
@@ -505,10 +543,11 @@ function monthViewHtml(events) {
         const shown = items.slice(0, MAX_PER_CELL);
         const extra = items.length - shown.length;
         return `
-          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}">
+          <div class="cal-month-cell${inMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}" data-date="${key}">
             <div class="cal-month-daynum mono">${d.getDate()}</div>
             ${shown.map(eventChipHtml).join('')}
             ${extra > 0 ? `<p class="muted cal-more">+${extra} more</p>` : ''}
+            ${monthDotsHtml(items)}
           </div>
         `;
       }).join('')}
@@ -535,14 +574,14 @@ function highlightButtonHtml(kind, idleLabel) {
   const keyHint = isActive ? 'Enter' : HIGHLIGHT_KEYS[kind];
   const color = HIGHLIGHT_COLORS[kind];
   const style = isActive ? ` style="border-color:${color}; color:${color}; background:${hexToRgba(color, 0.14)};"` : '';
-  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${isOtherActive ? 'disabled' : ''}>[${keyHint}] ${label}</button>`;
+  return `<button data-highlight="${kind}" class="${isActive ? 'active' : ''}"${style} ${isOtherActive ? 'disabled' : ''}>${kbd(keyHint)}${label}</button>`;
 }
 
 function unlinkButtonHtml() {
   const disabled = unlinking || activeHighlight;
   const label = unlinking ? 'Unlinking…' : (unlinkMode ? 'Click a card to unlink' : 'Unlink');
   const style = unlinkMode ? ` style="border-color:${UNLINK_COLOR}; color:${UNLINK_COLOR}; background:${hexToRgba(UNLINK_COLOR, 0.14)};"` : '';
-  return `<button data-action="unlink-mode" class="${unlinkMode ? 'active' : ''}"${style} ${disabled ? 'disabled' : ''}>[L] ${label}</button>`;
+  return `<button data-action="unlink-mode" class="${unlinkMode ? 'active' : ''}"${style} ${disabled ? 'disabled' : ''}>${kbd('L')}${label}</button>`;
 }
 
 // Physical counterpart to cancelActiveMode() above — clicking a mode's own
@@ -719,8 +758,8 @@ function rebuild() {
     <section class="card">
       <div class="row-between">
         <h1 class="mono">Canvas</h1>
-        <div style="display:flex; gap:8px;">
-          <button data-action="hide-handled" class="${hideHandled ? 'active' : ''}">[H] ${hideHandled ? 'Showing unlinked only' : 'Hide completed/linked'}</button>
+        <div class="cal-head-actions" style="display:flex; gap:8px;">
+          <button data-action="hide-handled" class="${hideHandled ? 'active' : ''}">${kbd('H')}${hideHandled ? 'Showing unlinked only' : 'Hide completed/linked'}</button>
           ${highlightButtonHtml('completed', 'Mark completed')}
           ${highlightButtonHtml('urgent', 'Highlight urgent')}
           ${unlinkButtonHtml()}
@@ -729,24 +768,24 @@ function rebuild() {
       </div>
       ${saveError ? `<p class="muted" style="color:var(--red); margin-top:8px;">${escapeHtml(saveError)}</p>` : ''}
 
-      <div class="row-between" style="margin-top:12px;">
+      <div class="row-between cal-view-row" style="margin-top:12px;">
         <div class="range-toggle">
-          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">[I] Week</button>
-          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">[O] Month</button>
+          <button data-view="week" class="${viewMode === 'week' ? 'active' : ''}">${kbd('I')}Week</button>
+          <button data-view="month" class="${viewMode === 'month' ? 'active' : ''}">${kbd('O')}Month</button>
         </div>
         <div class="cal-nav">
-          <button data-action="prev">[Q]</button>
+          <button data-action="prev" aria-label="Previous"><span class="kbd-hint">[Q]</span><span class="phone-only">&#8249;</span></button>
           <span class="mono cal-range-label">${rangeLabel()}</span>
-          <button data-action="today">[T] Today</button>
-          <button data-action="next">[E]</button>
+          <button data-action="today">${kbd('T')}Today</button>
+          <button data-action="next" aria-label="Next"><span class="kbd-hint">[E]</span><span class="phone-only">&#8250;</span></button>
         </div>
       </div>
 
-      <div class="row-between" style="margin-top:12px; justify-content:flex-end;">
-        <input type="text" class="cal-search-input mono" data-action="search" placeholder="[/] Search assignments…" value="${escapeHtml(searchQuery)}">
+      <div class="row-between cal-search-row" style="margin-top:12px; justify-content:flex-end;">
+        <input type="text" class="cal-search-input mono" data-action="search" placeholder="${isPhoneMode() ? 'Search assignments…' : '[/] Search assignments…'}" value="${escapeHtml(searchQuery)}">
       </div>
 
-      <div class="range-toggle" style="margin-top:12px; flex-wrap: wrap;">
+      <div class="range-toggle cal-filters" style="margin-top:12px; flex-wrap: wrap;">
         <button data-course-filter="" class="${courseFilter === '' ? 'active' : ''}">All</button>
         ${primary.map(courseButtonHtml).join('')}
         ${other.length ? `
@@ -757,7 +796,7 @@ function rebuild() {
       </div>
     </section>
 
-    <section class="card cal-grid-card">
+    <section class="card cal-grid-card cal-page-grid">
       ${viewMode === 'week' ? weekViewHtml(events) : monthViewHtml(events)}
     </section>
   `;
@@ -766,6 +805,7 @@ function rebuild() {
   applyPendingHighlight();
   applyModeVisuals();
   applyKeyNavFocus();
+  if (isPhoneMode()) scrollToPendingDate();
 
   if (searchWasFocused) {
     const newSearchEl = container.querySelector('[data-action="search"]');
@@ -777,6 +817,19 @@ function rebuild() {
 }
 
 function attachEvents() {
+  // Phone mode, month view: tapping a day opens its week, scrolled to that day.
+  if (isPhoneMode() && viewMode === 'month') {
+    container.querySelectorAll('.cal-page-grid .cal-month-cell').forEach((cell) => {
+      cell.addEventListener('click', (e) => {
+        if (e.target.closest('button, .cal-chip')) return;
+        const [y, m, d] = cell.dataset.date.split('-').map(Number);
+        anchor = new Date(y, m - 1, d);
+        viewMode = 'week';
+        pendingScrollDate = cell.dataset.date;
+        rebuild();
+      });
+    });
+  }
   container.querySelector('[data-action="search"]')?.addEventListener('input', (e) => {
     searchQuery = e.target.value;
     rebuild();

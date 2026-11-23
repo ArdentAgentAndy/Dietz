@@ -1,5 +1,5 @@
-import { store } from '../store.js?v=71';
-import { timerState, startTimer, stopTimer } from '../timer.js?v=71';
+import { store } from '../store.js?v=72';
+import { timerState, startTimer, stopTimer } from '../timer.js?v=72';
 import {
   GRAPH_SERIES,
   GROUP_ALIASES,
@@ -11,7 +11,7 @@ import {
   compactedSessions,
   datesForRange,
   minutesByGroupForDates,
-} from '../sessions.js?v=71';
+} from '../sessions.js?v=72';
 import {
   formatDateISO,
   formatDisplayDate,
@@ -21,10 +21,10 @@ import {
   parseDurationToMinutes,
   escapeHtml,
   hexToRgba,
-} from '../format.js?v=71';
-import { archiveCourseById, deleteCourseById } from './courses.js?v=71';
-import { hexForCourse, hexForLabel, hexForNotionColor } from '../notionColors.js?v=71';
-import { fetchNotionSchema, getCachedNotionSchema, getCachedNotionTasks, editNotionSelectOption } from '../notion.js?v=71';
+} from '../format.js?v=72';
+import { archiveCourseById, deleteCourseById } from './courses.js?v=72';
+import { hexForCourse, hexForLabel, hexForNotionColor } from '../notionColors.js?v=72';
+import { fetchNotionSchema, getCachedNotionSchema, getCachedNotionTasks, editNotionSelectOption } from '../notion.js?v=72';
 
 let container = null;
 let tickIntervalId = null;

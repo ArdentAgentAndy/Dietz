@@ -7,13 +7,13 @@
 // `unmount`, mounted into its own sub-container, so mark/urgent/delete/
 // duration all work here exactly as they do on the Today page itself
 // (both write through to the same Notion cache either way).
-import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=71';
-import { escapeHtml, hexToRgba } from '../format.js?v=71';
-import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay } from '../taskDisplay.js?v=71';
-import { hoursChartConfig } from './logging.js?v=71';
-import { coursesAndGpaHtml } from './courses.js?v=71';
-import { trackViewHtml } from './roadmap.js?v=71';
-import { render as renderTodayPanel, unmount as unmountTodayPanel, requestJumpFlash } from './today.js?v=71';
+import { fetchNotionTasks, getCachedNotionTasks } from '../notion.js?v=72';
+import { escapeHtml, hexToRgba } from '../format.js?v=72';
+import { categoryColorForTask, categoryRank, shapeEmblemHtml, subValueForTask, startOfDay, isoDay, taskDay, compareTasksForDay } from '../taskDisplay.js?v=72';
+import { hoursChartConfig } from './logging.js?v=72';
+import { coursesAndGpaHtml } from './courses.js?v=72';
+import { trackViewHtml } from './roadmap.js?v=72';
+import { render as renderTodayPanel, unmount as unmountTodayPanel, requestJumpFlash } from './today.js?v=72';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RANGES = [
@@ -166,7 +166,7 @@ function weekMirrorHtml() {
     (byDay[day] = byDay[day] || []).push(t);
   }
   for (const key of Object.keys(byDay)) {
-    byDay[key].sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || (a.date.start || '').localeCompare(b.date.start || ''));
+    byDay[key].sort(compareTasksForDay);
   }
 
   const totalsHtml = days.map((d) => {

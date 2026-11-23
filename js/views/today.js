@@ -1,6 +1,6 @@
-import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=71';
-import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=71';
-import { categoryRank, categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay } from '../taskDisplay.js?v=71';
+import { fetchNotionTasks, getCachedNotionTasks, updateTask, deleteTask, patchCachedNotionTask, removeCachedNotionTask, addCachedNotionTask } from '../notion.js?v=72';
+import { escapeHtml, hexToRgba, formatDisplayDate, formatDuration, formatHMS, formatDateISO } from '../format.js?v=72';
+import { categoryColorForTask, shapeEmblemHtml, subValueForTask, isoDay, taskDay, compareTasksForDay } from '../taskDisplay.js?v=72';
 import {
   resolvableCategory,
   resolveCategoryForTask,
@@ -14,9 +14,9 @@ import {
   closeStaleTodayTimer,
   logCompletionTime,
   resetTodayTaskTime,
-} from '../todaySessions.js?v=71';
-import { store } from '../store.js?v=71';
-import { hexForNotionColor } from '../notionColors.js?v=71';
+} from '../todaySessions.js?v=72';
+import { store } from '../store.js?v=72';
+import { hexForNotionColor } from '../notionColors.js?v=72';
 
 // ---- break days (holidays): synced BreakDays table, one row per day.
 // On a break day, lessons are left out of the hour plan. ----
@@ -335,6 +335,8 @@ export function render(rootEl, opts = {}) {
     // Capture phase, so Esc cancels placing before any page-level Esc handler sees it.
     window.removeEventListener('keydown', onPlacingKeydown, true);
     window.addEventListener('keydown', onPlacingKeydown, true);
+    window.removeEventListener('phonemodechange', rebuild);
+    window.addEventListener('phonemodechange', rebuild); // re-lay out for the other mode
   }
 }
 
@@ -351,6 +353,7 @@ export function unmount() {
   closeWeekLessons(); // it lives on <body>, so it'd outlive the page otherwise
   window.removeEventListener('keydown', onSpacePause);
   window.removeEventListener('keydown', onPlacingKeydown, true);
+  window.removeEventListener('phonemodechange', rebuild);
   activeStopwatchTaskId = null;
   stopwatchError = null;
   container = null;
@@ -383,21 +386,12 @@ async function load() {
   rebuild();
 }
 
-// Secondary sort key: the task's own course/project/lead value (empty
-// string, and so sorting first, for categories with no sub-value config or
-// no value set) — groups same-subject/project/lead tasks together within a
-// category before falling back to start-time order.
-function subSortKey(task) {
-  return subValueForTask(task)?.value || '';
-}
 
 function todayTasks() {
   const today = isoDay(new Date());
   return allTasks
     .filter((t) => t.category !== 'Lesson' && taskDay(t) === today)
-    .sort((a, b) => categoryRank(a.category) - categoryRank(b.category)
-      || subSortKey(a).localeCompare(subSortKey(b))
-      || (a.date.start || '').localeCompare(b.date.start || ''));
+    .sort(compareTasksForDay);
 }
 
 // Blank (not a dash) for an all-day task with no start time.
@@ -799,8 +793,9 @@ function taskRowHtml(task) {
   const bg = hexToRgba(categoryColorForTask(task), 0.12);
   const rowClasses = ['today-row', task.mark ? 'is-done' : '', isCurrentTimer ? 'is-current-timer' : ''].filter(Boolean).join(' ');
   return `
-    <li class="${rowClasses}" data-task-id="${escapeHtml(task.id)}">
+    <li class="${rowClasses}" data-task-id="${escapeHtml(task.id)}" style="--cell-color:${categoryColorForTask(task)};">
       ${catCellsHtml(task)}
+      <span class="today-row-line2" style="background:${bg};">
       <span class="today-cell today-cell-time mono" style="background:${bg};">${escapeHtml(timeLabel(task))}</span>
       <span class="today-cell today-cell-duration" style="background:${bg};">
         <input type="number" min="0" step="1" value="${task.duration ?? ''}" placeholder="min" data-duration-input data-task-id="${escapeHtml(task.id)}">
@@ -810,8 +805,9 @@ function taskRowHtml(task) {
         <button data-action="toggle-urgent" data-task-id="${escapeHtml(task.id)}" class="${task.urgent ? 'active is-urgent-active' : ''}" title="Mark urgent">!</button>
         <button data-action="delete" data-task-id="${escapeHtml(task.id)}" class="btn-danger" title="Delete">&#10006;</button>
       </span>
-      ${!embedded ? `<span class="today-cell today-cell-timer" style="background:${bg};">${timerable ? `<button type="button" data-action="select-stopwatch" data-task-id="${escapeHtml(task.id)}" class="${isCurrentTimer ? 'active' : ''}" title="${isCurrentTimer ? 'Pause / resume timer (Space)' : 'Start timer'}" aria-label="Timer">${CLOCK_ICON}</button>` : ''}${!task.mark && !hasStartTime(task) ? `<button type="button" data-action="add-to-plan" data-task-id="${escapeHtml(task.id)}" class="${placingTaskId === task.id ? 'active' : ''}" title="${placingTaskId === task.id ? 'Cancel placing (Esc)' : "Place in today's plan"}">+</button>` : ''}</span>` : ''}
+      ${!embedded ? `<span class="today-cell today-cell-timer" style="background:${bg};">${!task.mark && !hasStartTime(task) ? `<button type="button" data-action="add-to-plan" data-task-id="${escapeHtml(task.id)}" class="${placingTaskId === task.id ? 'active' : ''}" title="${placingTaskId === task.id ? 'Cancel placing (Esc)' : "Place in today's plan"}">+</button>` : ''}${timerable ? `<button type="button" data-action="select-stopwatch" data-task-id="${escapeHtml(task.id)}" class="${isCurrentTimer ? 'active' : ''}" title="${isCurrentTimer ? 'Pause / resume timer (Space)' : 'Start timer'}" aria-label="Timer">${CLOCK_ICON}</button>` : ''}</span>` : ''}
       ${!embedded ? '<span class="today-cell today-cell-arrow"></span>' : ''}
+      </span>
     </li>
   `;
 }
@@ -1089,10 +1085,13 @@ function rebuild() {
     ? { start: notesEl.selectionStart, end: notesEl.selectionEnd, scroll: notesEl.scrollTop }
     : null;
 
+  // .today-page / .today-head / .today-tasks-card: hooks for phone mode's
+  // reordering (styles.css: header, hour plan, then the rest).
   container.innerHTML = `
-    <section class="card${!embedded && flashOnMount ? ' today-jump-flash' : ''}">
+    <div class="today-page">
+    <section class="card today-head${!embedded && flashOnMount ? ' today-jump-flash' : ''}">
       <div class="row-between" style="margin-bottom:0;">
-        <div style="display:flex; align-items:baseline; gap:10px;">
+        <div class="today-head-title" style="display:flex; align-items:baseline; gap:10px;">
           <h1 class="mono" style="margin:0;">Today</h1>
           <span class="muted">${formatDisplayDate()}</span>
           ${embedded ? `<a href="#/today" class="today-jump-link mono" title="Open the Today page (T)">Open →</a>` : ''}
@@ -1105,7 +1104,7 @@ function rebuild() {
       </div>
     </section>
 
-    <section class="card">
+    <section class="card today-tasks-card">
       ${saveError ? `<p class="muted" style="color:var(--red); margin-bottom:8px;">Couldn't save: ${escapeHtml(saveError)}</p>` : ''}
       <ul class="today-list ${!embedded ? 'has-timer-arrow' : ''}">${tasks.map(taskRowHtml).join('') || '<p class="muted" style="grid-column: 1 / -1;">No tasks today.</p>'}</ul>
     </section>
@@ -1120,6 +1119,7 @@ function rebuild() {
         ${planBoxHtml(tasks)}
       </div>
     ` : ''}
+    </div>
   `;
 
   const planScroll = container.querySelector('[data-plan-scroll]');
@@ -1157,6 +1157,12 @@ function syncStopwatchColumnWidths() {
   const list = container.querySelector('.today-list');
   const cells = container.querySelector('.stopwatch-task-cells');
   if (!list || !cells) return;
+  // Phone mode: the list is per-row cards, not one shared grid, so there
+  // are no table columns to match (styles.css sets the stopwatch's own).
+  if (document.documentElement.classList.contains('phone-mode')) {
+    cells.style.gridTemplateColumns = '';
+    return;
+  }
   const tracks = getComputedStyle(list).gridTemplateColumns.split(' ');
   if (tracks.length < 2) return;
   cells.style.gridTemplateColumns = `${tracks[0]} ${tracks[1]} 1fr`;

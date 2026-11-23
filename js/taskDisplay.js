@@ -1,4 +1,4 @@
-import { hexForNotionColor } from './notionColors.js?v=71';
+import { hexForNotionColor } from './notionColors.js?v=72';
 
 // Display/sort order for categories, grouped with visual gaps between
 // groups. Anything not listed here (shouldn't happen) sorts after all of it.
@@ -55,6 +55,18 @@ export function subValueForTask(task) {
   const value = task[config.prop];
   if (!value) return null;
   return { value, label: config.label, color: hexForNotionColor(task[config.colorProp]) };
+}
+
+// The one order for a day's tasks, everywhere they're listed by day (Agenda
+// week/month, the project page's week, Home, Today): category (CATEGORY_ORDER),
+// then the course/project/lead within it (so MATH 241's tasks sit together
+// instead of interleaving with MATH 257's), then start time, then name with
+// numbers compared as numbers ("2.2" before "2.10").
+export function compareTasksForDay(a, b) {
+  return categoryRank(a.category) - categoryRank(b.category)
+    || (subValueForTask(a)?.value || '').localeCompare(subValueForTask(b)?.value || '', undefined, { numeric: true })
+    || (a.date?.start || '').localeCompare(b.date?.start || '')
+    || (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
 }
 
 // The category-shaped emblem — a colored glyph for Research's "x" mark,

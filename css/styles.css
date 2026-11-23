@@ -246,6 +246,24 @@ a {
   border-color: var(--accent);
 }
 
+/* Phone-mode toggle (js/phoneMode.js): a <button>, so undo the generic
+   button styling and match the Settings cog's 32px box beside it. Lit
+   (accent) while phone mode is on for this device. */
+.icon-btn.phone-mode-btn {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 9px;
+  background: transparent;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.icon-btn.phone-mode-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
 #app {
   max-width: 860px;
   margin: 0 auto;
@@ -1042,72 +1060,8 @@ body.home-page .card {
   transform: translate(-50%, -50%) scale(0.82);
 }
 
-@media (max-width: 700px) {
-  .menu-node-channel {
-    width: 76px;
-    height: 76px;
-  }
-
-  .menu-node-sub {
-    width: 92px;
-    height: 28px;
-  }
-
-  .menu-node-solo {
-    width: 40px;
-    height: 40px;
-  }
-
-  .menu-node-label {
-    font-size: 10px;
-  }
-
-  .menu-node-sub-label {
-    font-size: 9px;
-  }
-
-  /* 70% of this breakpoint's own 76px .menu-node-channel, same ratio the
-     base .menu-node-channel .menu-node-letter rule uses at 96px. Doesn't
-     need a .menu-node-channel-zoomed counterpart here — that blob's own
-     size (ZOOM_BLOB_SIZE, js/views/menu.js) is a fixed JS constant, not
-     CSS-driven, so it doesn't shrink at this breakpoint. */
-  .menu-node-channel .menu-node-letter {
-    font-size: 53px;
-  }
-}
-
-@media (max-width: 480px) {
-  .menu-tree-stage {
-    width: min(96vmin, 480px);
-    height: min(96vmin, 480px);
-  }
-
-  .menu-node-channel {
-    width: 64px;
-    height: 64px;
-  }
-
-  .menu-node-sub {
-    width: 78px;
-    height: 24px;
-  }
-
-  .menu-node-home {
-    width: 92px;
-    height: 92px;
-  }
-
-  .menu-node-solo {
-    width: 36px;
-    height: 36px;
-  }
-
-  /* Same 70%-of-the-circle ratio as the other .menu-node-channel
-     .menu-node-letter rules, at this breakpoint's own smaller 64px size. */
-  .menu-node-channel .menu-node-letter {
-    font-size: 45px;
-  }
-}
+/* (The menu's phone layout lives in the Phone mode section at the end of
+   this file: .phone-mode, per device.) */
 
 h1, h2, h3 {
   margin: 0 0 8px;
@@ -2068,18 +2022,6 @@ dialog.today-lessons-dialog::backdrop {
   text-align: right;
 }
 
-@media (max-width: 700px) {
-  .wl-row {
-    grid-template-columns: 80px 48px 1fr;
-  }
-
-  .wl-dur,
-  .wl-where {
-    grid-column: 1 / -1;
-    text-align: left;
-  }
-}
-
 /* Lessons in the plan: read-only (no ✕), dashed edge to set them apart
    from tasks. */
 .plan-block.is-lesson {
@@ -2256,28 +2198,6 @@ dialog.today-lessons-dialog::backdrop {
 .today-notes:focus {
   outline: none;
   border-color: var(--accent);
-}
-
-@media (max-width: 700px) {
-  .today-bottom-row {
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-  }
-
-  .today-bottom-row > .stopwatch-card,
-  .today-bottom-row > .today-notes-card,
-  .today-bottom-row > .today-side-card {
-    grid-column: 1;
-    grid-row: auto;
-  }
-
-  .today-notes {
-    min-height: 220px;
-  }
-
-  .today-plan-card {
-    min-height: 420px;
-  }
 }
 
 .stopwatch-head {
@@ -2519,6 +2439,13 @@ dialog.today-lessons-dialog::backdrop {
   display: contents;
 }
 
+/* Wraps a row's time/duration/actions/timer cells. Invisible on the laptop
+   (its cells stay direct grid items of .today-list); in phone mode it
+   becomes the card's second line (see the Phone mode section). */
+.today-row-line2 {
+  display: contents;
+}
+
 .today-cell {
   padding: 10px 14px;
   box-sizing: border-box;
@@ -2618,7 +2545,7 @@ dialog.today-lessons-dialog::backdrop {
 
 .today-cell-timer {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end; /* + then clock; right-aligned so every clock lines up, with or without a + */
   align-items: center;
   gap: 4px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -2687,31 +2614,6 @@ dialog.today-lessons-dialog::backdrop {
   }
   50% {
     opacity: 0.35;
-  }
-}
-
-@media (max-width: 700px) {
-  .today-list {
-    grid-template-columns: 1fr;
-  }
-
-  .today-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    margin-bottom: 8px;
-  }
-
-  .today-cell-shape,
-  .today-cell-actions,
-  .today-cell-timer {
-    border-radius: 0;
-  }
-
-  .today-cell-name {
-    flex: 1 1 100%;
   }
 }
 
@@ -3336,39 +3238,8 @@ details summary {
   .field-row {
     flex-direction: column;
   }
-
-
-  .topnav {
-    padding: 12px;
-    flex-wrap: wrap;
-  }
-
-  .topnav-right {
-    gap: 8px;
-    width: 100%;
-  }
-
-  .sync-status {
-    font-size: 0;
-    gap: 0;
-  }
-
-  #top-nav {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .nav-channels {
-    overflow-x: auto;
-  }
-
-  .nav-channel,
-  .nav-subchannel {
-    padding: 6px 8px;
-    font-size: 11px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
+  /* The top bar's phone layout moved to the Phone mode section at the end
+     of this file (.phone-mode, per device, js/phoneMode.js). */
 }
 
 /* --- Roadmap (#/roadmap) ------------------------------------------------ */
@@ -6065,4 +5936,574 @@ a.btn {
     opacity: 1;
     pointer-events: auto;
   }
+}
+
+/* =========================================================================
+   Phone mode (v72). Per-device layout switch: <html class="phone-mode">,
+   set by js/phoneMode.js (button next to the Settings cog) and by the
+   inline script in index.html's <head>. Defaults to on for screens up to
+   700px until the button is used on that device. Pages moved here (v72):
+   top bar (every page), Today, the Menu, Agenda, Canvas. The rest (v75)
+   still use their own @media (max-width) rules above.
+   ========================================================================= */
+
+/* --- Top bar + page frame (every page) ------------------------------- */
+
+.phone-mode .topnav {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.phone-mode .topnav-right {
+  width: 100%;
+  gap: 8px;
+}
+
+/* First line: // and the version on the left, sync button + status dot on
+   the right. */
+.phone-mode .topnav-left {
+  width: 100%;
+}
+
+.phone-mode .sync-btn {
+  margin-left: auto;
+}
+
+.phone-mode .sync-status {
+  font-size: 0; /* dot only */
+  gap: 0;
+}
+
+.phone-mode #top-nav {
+  flex: 1;
+  min-width: 0;
+}
+
+.phone-mode .nav-channels {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.phone-mode .nav-channels::-webkit-scrollbar {
+  display: none;
+}
+
+/* nav.js puts the channel label after its subchannels (reads right on the
+   laptop, where the row sits at the right). On a phone the row starts at
+   the left, so the channel comes first: [RECORDS] [TODAY] [LOGGING]. */
+.phone-mode .nav-channels .nav-channel.is-current {
+  order: -1;
+}
+
+.phone-mode .nav-channel,
+.phone-mode .nav-subchannel {
+  padding: 6px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.phone-mode #app {
+  padding: 12px 12px 56px;
+}
+
+.phone-mode .card {
+  padding: 12px;
+}
+
+.phone-mode .card + .card {
+  margin-top: 12px;
+}
+
+/* --- Today (#/today) ---------------------------------------------------- */
+
+/* Order on a phone: header, hour plan, notes, then tasks and the stopwatch
+   (the plan is what's looked at most). .today-bottom-row dissolves
+   (display:contents) so its three cards become siblings of the header and
+   task list and can be reordered freely. */
+.phone-mode .today-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.phone-mode .today-page .card {
+  margin-top: 0; /* the column's gap does the spacing */
+}
+
+.phone-mode .today-page .today-bottom-row {
+  display: contents;
+}
+
+.phone-mode .today-page .today-head { order: 0; }
+.phone-mode .today-page .today-plan-card { order: 1; }
+.phone-mode .today-page .today-notes-card { order: 2; }
+.phone-mode .today-page .today-tasks-card { order: 3; }
+.phone-mode .today-page .stopwatch-card { order: 4; }
+
+/* Header: title + date on one line, total and the Break day / Lessons
+   buttons wrapping underneath. */
+.phone-mode .row-between {
+  flex-wrap: wrap;
+}
+
+/* Two full-width lines:
+     Today ................ Monday, November 23
+     Total duration: 15:00 ... [Break day] [Lessons] */
+.phone-mode .today-head-title,
+.phone-mode .today-head-right {
+  width: 100%;
+}
+
+.phone-mode .today-head-title {
+  justify-content: space-between;
+}
+
+.phone-mode .today-head-right {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.phone-mode .today-head-right > button:first-of-type {
+  margin-left: auto;
+}
+
+/* Task rows become two-line cards:
+     [shape] [pill] [name ...............]
+     [time] [duration] [✓ ! ✖]     [⏱ +]
+   Line 1 is the row's own 3-column grid; line 2 is .today-row-line2 as one
+   full-width flex line, so its widths don't follow line 1's columns. */
+.phone-mode .today-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.phone-mode .today-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.phone-mode .today-cell {
+  padding: 8px 10px;
+  border-radius: 0;
+}
+
+/* The category bar runs down the whole card (both lines), not just the
+   shape cell; --cell-color is set on the row by today.js. */
+.phone-mode .today-row {
+  border-left: 4px solid var(--cell-color, transparent);
+}
+
+.phone-mode .today-cell-shape {
+  align-self: stretch;
+  border-left: none;
+}
+
+.phone-mode .today-cell-name { min-width: 0; }
+
+.phone-mode .today-row-line2 {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+}
+
+.phone-mode .today-row-line2 .today-cell {
+  padding: 0;
+  background: none !important; /* the line itself carries the tint */
+}
+
+.phone-mode .today-cell-arrow {
+  display: none; /* the arrow column is laptop-only */
+}
+
+/* Fixed-width time slot (fits "08:00"), with a dash when the task has no
+   start time, so the duration box lines up on every card. */
+.phone-mode .today-cell-time {
+  flex: 0 0 5ch;
+  text-align: center;
+}
+
+.phone-mode .today-cell-time:empty::before {
+  content: '–';
+  color: var(--muted);
+}
+
+.phone-mode .today-cell-actions {
+  justify-content: flex-start;
+}
+
+.phone-mode .today-cell-timer {
+  margin-left: auto; /* clock / + sit at the right edge */
+}
+
+.phone-mode .today-list .today-cell-name {
+  font-size: 13px;
+}
+
+/* Thumb-sized buttons. */
+.phone-mode .today-cell-actions button,
+.phone-mode .today-cell-timer button {
+  min-width: 36px;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.phone-mode .today-cell-duration input[type="number"] {
+  width: 64px;
+  min-height: 34px;
+  font-size: 16px; /* under 16px, iOS Safari zooms the page in when the box is tapped */
+}
+
+/* (Stopwatch, Notes and the plan stack full width via .today-page above.) */
+.phone-mode .stopwatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* !important: beats the inline column widths today.js copies from the
+   laptop table (syncStopwatchColumnWidths skips that in phone mode, but a
+   stale inline value can linger from before the switch). */
+.phone-mode .stopwatch-task-cells {
+  grid-template-columns: auto auto 1fr !important;
+  gap: 0;
+}
+
+.phone-mode .stopwatch-elapsed {
+  font-size: 24px;
+}
+
+.phone-mode .today-notes {
+  min-height: 220px;
+  font-size: 16px; /* no iOS zoom-on-focus */
+}
+
+.phone-mode .today-plan-card {
+  min-height: 460px;
+}
+
+.phone-mode .plan-blocks {
+  right: 8px; /* the laptop's 48px right gutter is too much at phone width */
+}
+
+/* A block's ✕ / ↺ is always visible on a phone (no hover), and bigger. */
+.phone-mode .plan-block-remove {
+  opacity: 1;
+  padding: 2px 7px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Lessons-this-week popup. */
+.phone-mode dialog.today-lessons-dialog {
+  width: 94vw;
+  padding: 14px;
+}
+
+.phone-mode .wl-row {
+  grid-template-columns: 76px 46px 1fr;
+  gap: 4px 10px;
+}
+
+.phone-mode .wl-dur,
+.phone-mode .wl-where {
+  grid-column: 1 / -1;
+  text-align: left;
+}
+
+/* --- Menu (#/, every layer) -------------------------------------------------
+   Replaces the old @media (max-width: 700px / 480px) menu rules. Labels have
+   to fit inside their circle: 72px circles with no padding, labels at 9px
+   on one line with no letter-spacing ("APPLICATION", the longest, is ~59px
+   inside ~66px). The
+   selectors repeat the specific laptop ones (.menu-sector ...,
+   .menu-node-layer-pebble ...) so they actually win. */
+
+.phone-mode .menu-tree-stage {
+  width: min(96vmin, 480px);
+  height: min(96vmin, 480px);
+}
+
+/* Pull the whole node map (lines included) in from the stage edges so the
+   outer ring's circles aren't clipped. Moves the box, not its transform, so
+   the zoom animation (which scales this element) is unaffected. */
+.phone-mode .menu-tree-viewport {
+  inset: 7%;
+}
+
+.phone-mode .menu-node-channel {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+}
+
+.phone-mode .menu-node-channel .menu-node-letter {
+  font-size: 50px; /* ~70% of the circle, same ratio as the laptop */
+}
+
+.phone-mode .menu-node-label,
+.phone-mode .menu-sector .menu-node-label,
+.phone-mode .menu-node-layer-pebble .menu-node-label {
+  font-size: 9px;
+  letter-spacing: 0;
+  white-space: nowrap; /* never split a word across lines */
+  text-align: center;
+}
+
+/* The big center node of the Inner/Outer layers keeps a larger label. */
+.phone-mode .menu-node-layer .menu-node-label {
+  font-size: 15px;
+}
+
+/* Sized to sit inside the ring drawn around it, which shrank with the
+   inset viewport above. */
+.phone-mode .menu-node-home {
+  width: 70px;
+  height: 70px;
+}
+
+.phone-mode .menu-node-home-label {
+  font-size: 12px;
+}
+
+.phone-mode .menu-node-sub {
+  width: 78px;
+  height: 24px;
+}
+
+.phone-mode .menu-node-sub-label {
+  font-size: 9px;
+}
+
+.phone-mode .menu-node-solo {
+  width: 36px;
+  height: 36px;
+}
+/* Zoomed channel page (a channel with its subchannels fanned out): keeps
+   the laptop look (sizes, labels, letters, no edge inset); the phone rules
+   above are for the hub and the Inner/Outer layers only. The one phone
+   change here is a smaller main blob (menu.js sets 180px inline; the zoom
+   animation measures the real size, so it still lines up). */
+.phone-mode .menu-stage-zoomed .menu-tree-viewport {
+  inset: 0;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-channel {
+  padding: 8px;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-label {
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  white-space: normal;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-sub-zoomed .menu-node-label {
+  font-size: 15px;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-channel-zoomed .menu-node-label {
+  font-size: 18px;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-channel .menu-node-letter {
+  font-size: 67px;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-channel-zoomed {
+  width: 130px !important;
+  height: 130px !important;
+}
+
+.phone-mode .menu-stage-zoomed .menu-node-channel-zoomed .menu-node-letter {
+  font-size: 91px; /* ~70% of the 130px blob, same ratio as the laptop's 126 / 180 */
+}
+/* --- Shared helpers ---------------------------------------------------------
+   .kbd-hint: a keybind hint like "[H]" on a button; hidden in phone mode
+   (no keyboard). .phone-only: shown only in phone mode (e.g. Agenda's ‹ ›
+   in place of [Q]/[E]). */
+.phone-only {
+  display: none;
+}
+
+.phone-mode .phone-only {
+  display: inline;
+}
+
+.phone-mode .kbd-hint {
+  display: none;
+}
+
+/* Month cells' dots (Agenda, Canvas): phone mode only. */
+.cal-month-dots {
+  display: none;
+}
+
+/* --- Agenda (#/calendar) and Canvas (#/canvas) --------------------------------
+   Both pages share these hooks (.cal-head-actions, .cal-view-row,
+   .cal-search-row, .cal-filters, .cal-page-grid). Scoped to them, so the
+   project page's read-only week and Home (same grid markup) are untouched.
+   Week: days stacked top to bottom, two cards per row in each day, opens
+   scrolled to today. Month: dots instead of cards; tap a day for its week. */
+
+.phone-mode .cal-head-actions {
+  flex-wrap: wrap;
+}
+
+.phone-mode .cal-head-actions button {
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+.phone-mode .cal-view-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.phone-mode .cal-view-row .cal-nav {
+  width: 100%;
+}
+
+.phone-mode .cal-range-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.phone-mode .cal-nav button[data-action="prev"],
+.phone-mode .cal-nav button[data-action="next"] {
+  min-width: 40px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.phone-mode .cal-search-row .cal-search-input {
+  width: 100%;
+  font-size: 16px; /* no iOS zoom-on-focus */
+}
+
+/* Category / course filters: one row that scrolls sideways instead of
+   wrapping into several lines. !important beats the inline flex-wrap. */
+.phone-mode .cal-filters {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.phone-mode .cal-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.phone-mode .cal-filters button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Week view. */
+.phone-mode .cal-page-grid .cal-week-grid {
+  grid-template-columns: 1fr;
+  overflow-x: visible;
+  gap: 10px;
+}
+
+.phone-mode .cal-page-grid .cal-day-col {
+  min-height: 0;
+  scroll-margin-top: 110px; /* clear the sticky top bar when scrolled to */
+}
+
+.phone-mode .cal-page-grid .cal-day-head {
+  font-size: 13px;
+  padding: 2px 2px 6px;
+}
+
+.phone-mode .cal-page-grid .cal-day-items {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.phone-mode .cal-page-grid .cal-day-items .cal-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.phone-mode .cal-page-grid .cal-chip {
+  height: 104px;
+}
+
+/* No hover on a phone: the day's "+" is always there. */
+.phone-mode .cal-page-grid .cal-day-plus {
+  opacity: 1;
+  pointer-events: auto;
+  padding: 2px 10px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Month view: compact cells with dots; cards and "+N more" hidden. */
+.phone-mode .cal-page-grid .cal-month-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow-x: visible;
+  gap: 3px;
+}
+
+.phone-mode .cal-page-grid .cal-month-cell {
+  min-height: 54px;
+  padding: 3px;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.phone-mode .cal-page-grid .cal-month-cell .cal-chip,
+.phone-mode .cal-page-grid .cal-month-cell .cal-more,
+.phone-mode .cal-page-grid .cal-month-cell .cal-day-plus {
+  display: none;
+}
+
+.phone-mode .cal-page-grid .cal-month-daynum {
+  justify-content: center;
+  font-size: 12px;
+}
+
+.phone-mode .cal-page-grid .cal-month-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+}
+
+.cal-month-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.cal-month-dot.is-done {
+  opacity: 0.35;
+}
+
+.cal-month-dots-more {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 7px;
+}
+
+/* Agenda's dialogs (add/edit task, etc.). */
+.phone-mode dialog#modal-dialog,
+.phone-mode dialog#modal-dialog.is-wide {
+  width: 94vw;
+  padding: 14px;
+}
+
+.phone-mode .modal-form input,
+.phone-mode .modal-form select {
+  font-size: 16px; /* no iOS zoom-on-focus */
 }
